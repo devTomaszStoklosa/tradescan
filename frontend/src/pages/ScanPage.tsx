@@ -8,7 +8,7 @@ import { RegimeBanner } from "../components/RegimeBanner";
 import { TickerPanel } from "../components/TickerPanel";
 import { DirectionPicker, FamilyPicker, UniversePicker } from "../components/UniverseFilters";
 import { Button, EmptyState, ErrorBox, Field, Loading, Notice, NumberInput, PageHeader, Panel } from "../components/ui";
-import { defaultWatchlist } from "../lib/choices";
+import { defaultWatchlist, LARGE_UNIVERSE, universeSize } from "../lib/choices";
 import { downloadCsv, type CsvRow } from "../lib/csv";
 import { fmtNumber } from "../lib/format";
 import { readScanForm, scanBody, tickerList, writeScanForm, type ScanForm } from "../lib/params";
@@ -167,9 +167,11 @@ export function ScanPage() {
   if (config.isError || watchlists.isError) return <ErrorBox error={config.error ?? watchlists.error} onRetry={() => window.location.reload()} />;
   if (!config.data || !watchlists.data) return <Loading message="Connecting to the tradescan server…" />;
 
-  const universeSize = form.universe.watchlist
-    ? (watchlists.data.find((item) => item.name === form.universe.watchlist)?.tickers.length ?? 0)
-    : tickerList(form.universe.tickers).length;
+  const size = universeSize(form.universe, watchlists.data);
+  const loadingMessage =
+    size > LARGE_UNIVERSE
+      ? `Scanning ${size} tickers… The first run downloads every ticker and takes 1–2 minutes; cached runs take about 30 s.`
+      : `Downloading prices and scanning ${size} tickers… The first run can take 10–30 s; later runs use the cache.`;
 
   return (
     <>
@@ -183,9 +185,7 @@ export function ScanPage() {
         onSubmit={(next) => setParams(writeScanForm(next))}
       />
       {!body && <EmptyState title="Pick a universe and press Scan">The scan downloads daily bars, evaluates 30 signals and ranks the setups.</EmptyState>}
-      {scan.isLoading && (
-        <Loading message={`Downloading prices and scanning ${universeSize} tickers… The first run can take 10–30 s; later runs use the cache.`} />
-      )}
+      {scan.isLoading && <Loading message={loadingMessage} />}
       {scan.isError && <ErrorBox error={scan.error} onRetry={() => scan.refetch()} />}
       {scan.data && (
         <ScanResults

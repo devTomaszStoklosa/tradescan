@@ -1,3 +1,8 @@
+cd C:\Users\Tomasz\Desktop\Repo\Backtrader
+npm --prefix frontend install
+npm --prefix frontend run build
+tradescan serve
+
 # tradescan
 
 Trading signal scanner for daily bars: **vectorized pandas signals on yfinance data**, with
@@ -69,11 +74,13 @@ Run commands from the project folder, so `config/settings.toml` and `config/watc
 ```bash
 tradescan list-signals
 tradescan market -w us_large
+tradescan scan -w sp500 --min-score 4
 tradescan scan -w wig20 --direction long --top 10
 tradescan scan -t AAPL,MSFT,PKO.WA --fresh 1 --export exports/hits.csv
 tradescan edge -w etf --family breakout,trend --min-events 30
 tradescan backtest SPY donchian_breakout --engine both
 tradescan scan -w crypto --lot-size 0.0001
+tradescan update-universes
 ```
 
 | Command | What it does |
@@ -83,9 +90,24 @@ tradescan scan -w crypto --lot-size 0.0001
 | `edge` | For each signal, pooled across the watchlist: events, win rate, average and edge vs. baseline at several horizons. |
 | `backtest` | One signal on one ticker with the pandas engine, Cerebro, or `both` side by side. |
 | `list-signals` | All signals with family, direction, scoring weight and rule. |
+| `update-universes` | Refresh the `sp500` and `nasdaq100` watchlists from Wikipedia's constituent tables (`--only sp500`). |
+| `serve` | Web UI and HTTP API. |
 
 Watchlists are text files in `config/watchlists/` (tickers separated by spaces or commas, `#` comments).
-A line `# benchmark: SPY` sets the benchmark for that list. Bundled: `us_large`, `wig20`, `etf`, `crypto`.
+A line `# benchmark: SPY` sets the benchmark for that list. Bundled: `sp500` (503, benchmark SPY),
+`nasdaq100` (101, benchmark QQQ), `us_large`, `wig20`, `etf`, `crypto`.
+
+### Index universes
+
+`sp500` and `nasdaq100` are generated from Wikipedia's constituent tables; each file records the source
+and date in its header. Index members change every quarter, so refresh them now and then with
+`tradescan update-universes`. It prints added and removed tickers, converts share classes to Yahoo's
+format (`BRK.B` becomes `BRK-B`), and keeps the existing file if the download or the sanity check fails.
+
+Large universes are processed on all CPU cores (universes of 40 tickers or more). On a 4-core machine
+an S&P 500 scan takes about 30 s and the 10-year edge table about 35 s once the data is cached; the first
+run downloads every ticker and takes 1–2 minutes. Data is cached per ticker, so `nasdaq100` reuses
+what `sp500` already downloaded.
 
 ## How it works
 
@@ -164,7 +186,8 @@ The use cases in `services.py` (scan, market, edge, backtest, chart) hold the wo
 ## Limitations
 
 - During market hours the last daily bar is still forming; run scans after the close.
-- Bundled watchlists hold today's index members, so historical edge carries survivorship bias.
+- Bundled watchlists hold today's index members, so historical edge carries survivorship bias: stocks
+  that dropped out of the S&P 500 or Nasdaq-100 are missing from the statistics.
 - yfinance uses an unofficial Yahoo API (rate limits, format changes; personal use per Yahoo's terms).
   The Yahoo WIG20 index has no history, so `wig20` uses the `ETFBW20TR.WA` ETF as its benchmark.
 - backtrader is unmaintained (last release 2023). It works with Python 3.13, pandas 3 and numpy 2
