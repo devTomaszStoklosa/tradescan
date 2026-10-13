@@ -8,11 +8,10 @@ from dataclasses import asdict, fields
 
 import pandas as pd
 
-from tradescan.backtest.base import BacktestResult, Trade
-from tradescan.backtest.edge import EdgeStats
-from tradescan.backtest.metrics import Metrics
+from tradescan.backtest.base import Trade
 from tradescan.scanner import ScanHit
 from tradescan.scoring import Scorer
+from tradescan.services import EdgeRow, EngineRun
 from tradescan.signals.base import Signal
 
 SCAN_COLUMNS: tuple[str, ...] = (
@@ -75,11 +74,12 @@ def signals_to_frame(signals: Sequence[Signal], scorer: Scorer) -> pd.DataFrame:
     )
 
 
-def edge_to_frame(rows: Sequence[tuple[Signal, Sequence[EdgeStats]]]) -> pd.DataFrame:
+def edge_to_frame(rows: Sequence[EdgeRow]) -> pd.DataFrame:
     records = []
-    for signal, stats in rows:
+    for row in rows:
+        signal = row.signal
         record: dict[str, object] = {"signal": signal.name, "dir": signal.direction.value, "family": signal.family.value}
-        for item in stats:
+        for item in row.stats:
             suffix = f" {item.horizon}d"
             record.update(
                 {
@@ -93,9 +93,12 @@ def edge_to_frame(rows: Sequence[tuple[Signal, Sequence[EdgeStats]]]) -> pd.Data
     return pd.DataFrame(records)
 
 
-def metrics_to_frame(results: Sequence[tuple[BacktestResult, Metrics]]) -> pd.DataFrame:
+def metrics_to_frame(runs: Sequence[EngineRun]) -> pd.DataFrame:
     return pd.DataFrame(
-        {result.engine: {item.name: getattr(metrics, item.name) for item in fields(metrics)} for result, metrics in results}
+        {
+            run.result.engine: {item.name: getattr(run.metrics, item.name) for item in fields(run.metrics)}
+            for run in runs
+        }
     )
 
 
