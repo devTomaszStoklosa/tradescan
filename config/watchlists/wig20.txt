@@ -1,0 +1,6 @@
+# WIG20 (sample list on Yahoo .WA symbols; verify the current index composition)
+# Yahoo has no history for the WIG20.WA index itself, so the Beta WIG20TR ETF is the benchmark.
+# Santander Bank Polska trades as EBP.WA (Erste Bank Polska); CCC has no Yahoo data and is left out.
+# benchmark: ETFBW20TR.WA
+ALE.WA ALR.WA BDX.WA CDR.WA DNP.WA EBP.WA KGH.WA KRU.WA KTY.WA LPP.WA
+MBK.WA OPL.WA PCO.WA PEO.WA PGE.WA PKN.WA PKO.WA PZU.WA ZAB.WA

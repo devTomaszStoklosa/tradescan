@@ -1,0 +1,52 @@
+# tradescan settings. Every key is optional; missing keys fall back to built-in defaults.
+# Percent values are written as percents (1.0 means 1%).
+
+[data]
+period = "5y"            # yfinance period used by `scan` and `market`
+interval = "1d"
+cache_dir = ".cache"
+cache_ttl_hours = 12
+
+[account]
+equity = 100000
+risk_pct = 1.0           # capital risked per trade
+max_position_pct = 25.0  # cap on position value as % of equity
+lot_size = 1             # use e.g. 0.0001 for crypto
+
+[risk]
+atr_period = 14
+atr_mult = 2.0           # stop distance = atr_mult * ATR
+targets_r = [2.0, 3.0]   # profit targets as multiples of the risk
+
+[scan]
+fresh_bars = 3           # a signal counts if it fired within the last N bars
+min_score = 1.0
+benchmark = "SPY"        # used when the watchlist has no `# benchmark:` line
+edge_horizon = 10        # bars used for the historical edge column
+min_bars = 60            # tickers with less history are skipped
+
+[scoring]
+trend_bonus = 1.0        # +/- when the daily trend agrees/disagrees with the direction
+weekly_bonus = 1.0       # +/- for the weekly trend (30-week SMA)
+rs_bonus = 1.0           # + for relative strength in the top (long) / bottom (short) bucket
+rs_strong_pct = 80.0
+
+[scoring.family_weights]
+trend = 1.0
+momentum = 1.0
+breakout = 1.5
+mean_reversion = 1.0
+volume = 1.0
+pattern = 0.5
+
+[scoring.signal_weights]
+# Per-signal overrides, e.g.:
+# golden_cross = 2.0
+
+[backtest]
+period = "10y"           # history used by `backtest` and `edge`
+commission_pct = 0.1
+slippage_pct = 0.05
+target_r = 2.0
+max_hold_bars = 20
+bars_per_year = 252

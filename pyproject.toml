@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tradescan"
+version = "0.1.0"
+description = "Vectorized trading signal scanner (pandas + yfinance) with optional backtrader validation"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "pyarrow>=15",
+    "rich>=13",
+    "yfinance>=0.2.50",
+]
+
+[project.optional-dependencies]
+cerebro = ["backtrader>=1.9.78"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+tradescan = "tradescan.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

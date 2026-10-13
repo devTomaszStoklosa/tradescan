@@ -1,0 +1,4 @@
+# US large caps (sample list, edit freely)
+# benchmark: SPY
+AAPL MSFT NVDA AMZN GOOGL META TSLA AVGO JPM V
+MA UNH XOM LLY COST HD PG JNJ NFLX AMD
