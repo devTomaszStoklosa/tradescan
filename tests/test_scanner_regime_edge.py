@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 from synthetic import FixedSignal, make_ohlcv
 
-from tradescan.backtest.edge import EdgeAnalyzer, forward_returns
+from tradescan.backtest.edge import combine_samples, edge_samples, forward_returns
 from tradescan.context import ContextBuilder, Trend
 from tradescan.indicators import atr
 from tradescan.regime import MarketRegimeAnalyzer, Regime
@@ -26,7 +26,7 @@ def _scanner(signals):
         context_builder=ContextBuilder(),
         scorer=Scorer({"breakout": 1.5}, {}),
         risk_planner=RiskPlanner(100_000, 1.0, 25.0, 2.0, (2.0, 3.0)),
-        edge_analyzer=EdgeAnalyzer(5),
+        edge_horizon=5,
         fresh_bars=3,
         min_bars=60,
     )
@@ -77,19 +77,23 @@ def test_forward_returns_enter_next_open_exit_close():
     assert returns.iloc[2:].isna().all()
 
 
-def test_edge_analyzer_pools_events_in_signal_direction():
+def _pooled(frames, signal, horizon):
+    return combine_samples(signal.name, horizon, [edge_samples(df, signal, (horizon,))[0] for df in frames])
+
+
+def test_edge_samples_pool_events_in_signal_direction():
     close = [10.0, 11.0, 12.0, 11.0, 10.0, 12.0, 13.0, 14.0]
     df = make_ohlcv(close)
     outcome = forward_returns(df, 1)
-    long_stats = EdgeAnalyzer(1).analyze([df, df], FixedSignal(positions=(1, 3)))
+    long_stats = _pooled([df, df], FixedSignal(positions=(1, 3)), 1)
     assert long_stats.events == 4
     assert long_stats.mean_return == pytest.approx(outcome.iloc[[1, 3]].mean() * 100)
     assert long_stats.baseline_return == pytest.approx(outcome.dropna().mean() * 100)
     assert long_stats.edge == pytest.approx(long_stats.mean_return - long_stats.baseline_return)
 
-    short_stats = EdgeAnalyzer(1).analyze([df], FixedSignal(positions=(1, 3), side=Direction.SHORT))
+    short_stats = _pooled([df], FixedSignal(positions=(1, 3), side=Direction.SHORT), 1)
     assert short_stats.mean_return == pytest.approx(-outcome.iloc[[1, 3]].mean() * 100)
 
-    empty = EdgeAnalyzer(1).analyze([df], FixedSignal(positions=()))
+    empty = _pooled([df], FixedSignal(positions=()), 1)
     assert empty.events == 0 and math.isnan(empty.win_rate)
     assert isinstance(empty.baseline_return, float) and not pd.isna(empty.baseline_return)

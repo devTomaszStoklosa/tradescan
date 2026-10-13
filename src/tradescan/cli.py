@@ -12,6 +12,7 @@ from rich.console import Console
 
 from tradescan.config import Settings, load_settings
 from tradescan.data.provider import DataProvider
+from tradescan.parallel import ProcessRunner
 from tradescan.report.console import ConsoleReport
 from tradescan.report.export import export_frame
 from tradescan.report.tables import (
@@ -36,6 +37,7 @@ from tradescan.services import (
     default_provider,
 )
 from tradescan.signals import Direction, Family, default_registry
+from tradescan.universes import SOURCES, update_universe
 from tradescan.watchlist import Watchlist, from_tickers, load_watchlist
 
 Handler = Callable[[argparse.Namespace, Settings, ConsoleReport], int]
@@ -53,7 +55,7 @@ def _provider(settings: Settings, args: argparse.Namespace) -> DataProvider:
 
 
 def _use_cases(settings: Settings, args: argparse.Namespace) -> UseCases:
-    return build_use_cases(settings, _provider(settings, args))
+    return build_use_cases(settings, _provider(settings, args), runner=ProcessRunner())
 
 
 def _universe(args: argparse.Namespace) -> Watchlist:
@@ -206,6 +208,35 @@ def cmd_backtest(args: argparse.Namespace, settings: Settings, report: ConsoleRe
     return 0
 
 
+def cmd_update_universes(args: argparse.Namespace, settings: Settings, report: ConsoleReport) -> int:
+    wanted = set(_split(args.only))
+    unknown = wanted - {source.name for source in SOURCES}
+    if unknown:
+        raise ValueError(f"Unknown universe(s): {', '.join(sorted(unknown))}. Use: {', '.join(s.name for s in SOURCES)}")
+    failures = 0
+    for source in SOURCES:
+        if wanted and source.name not in wanted:
+            continue
+        try:
+            result = update_universe(source, Path(args.watchlists_dir))
+        except (OSError, ValueError) as error:
+            failures += 1
+            report.warning(f"{source.title}: not updated, the existing file is kept ({error})")
+            continue
+        if result.created:
+            changes = "created"
+        elif result.added or result.removed:
+            changes = f"+{len(result.added)} / -{len(result.removed)}"
+        else:
+            changes = "no changes"
+        report.note(f"{source.title}: {len(result.tickers)} tickers -> {result.path} ({changes})")
+        if result.added:
+            report.note(f"  added: {', '.join(result.added)}")
+        if result.removed:
+            report.note(f"  removed: {', '.join(result.removed)}")
+    return 1 if failures else 0
+
+
 def cmd_serve(args: argparse.Namespace, settings: Settings, report: ConsoleReport) -> int:
     try:
         import uvicorn
@@ -224,6 +255,7 @@ def cmd_serve(args: argparse.Namespace, settings: Settings, report: ConsoleRepor
         provider=_provider(settings, args),
         watchlists_dir=Path(args.watchlists_dir),
         static_dir=static if static.is_dir() else None,
+        runner=ProcessRunner(),
     )
     report.note(f"tradescan UI on http://{args.host}:{args.port}")
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
@@ -312,6 +344,10 @@ def build_parser() -> argparse.ArgumentParser:
     backtest.add_argument("--trades", type=int, default=10, help="recent trades to show")
     backtest.add_argument("--export", help="save trades to .csv or .json")
     backtest.set_defaults(handler=cmd_backtest)
+
+    universes = commands.add_parser("update-universes", help="refresh the S&P 500 and Nasdaq-100 watchlists from Wikipedia")
+    universes.add_argument("--only", help=f"comma separated: {', '.join(source.name for source in SOURCES)}")
+    universes.set_defaults(handler=cmd_update_universes)
 
     serve = commands.add_parser("serve", help="run the web UI and HTTP API (needs the api extra)")
     serve.add_argument("--host", default="127.0.0.1")

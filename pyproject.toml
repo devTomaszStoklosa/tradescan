@@ -9,6 +9,7 @@ description = "Vectorized trading signal scanner (pandas + yfinance) with option
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "lxml>=5",
     "numpy>=1.26",
     "pandas>=2.2",
     "pyarrow>=15",

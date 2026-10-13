@@ -17,6 +17,7 @@ from tradescan.api.context import ApiContext
 from tradescan.api.routes import backtest, chart, edge, market, meta, scan, signals, watchlists
 from tradescan.config import Settings
 from tradescan.data.provider import DataProvider
+from tradescan.parallel import TaskRunner
 from tradescan.services import EngineFactory, build_scorer, build_use_cases
 from tradescan.signals.registry import SignalRegistry, default_registry
 
@@ -45,10 +46,11 @@ def create_app(
     static_dir: Path | None = None,
     registry: SignalRegistry = default_registry,
     engines: dict[str, EngineFactory] | None = None,
+    runner: TaskRunner | None = None,
 ) -> FastAPI:
     context = ApiContext(
         settings=settings,
-        use_cases=build_use_cases(settings, provider, registry, engines),
+        use_cases=build_use_cases(settings, provider, registry, engines, runner),
         registry=registry,
         scorer=build_scorer(settings),
         watchlists_dir=watchlists_dir,

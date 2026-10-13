@@ -6,7 +6,7 @@ import { useConfig, useEdge, useWatchlists } from "../api/hooks";
 import { EdgeTable } from "../components/EdgeTable";
 import { DirectionPicker, FamilyPicker, UniversePicker } from "../components/UniverseFilters";
 import { Button, EmptyState, ErrorBox, Field, Input, Loading, Notice, NumberInput, PageHeader, Panel, Select } from "../components/ui";
-import { defaultWatchlist, PERIODS } from "../lib/choices";
+import { defaultWatchlist, LARGE_UNIVERSE, PERIODS, universeSize } from "../lib/choices";
 import { downloadCsv, type CsvRow } from "../lib/csv";
 import { edgeBody, parseHorizons, readEdgeForm, writeEdgeForm, type EdgeForm } from "../lib/params";
 
@@ -118,7 +118,15 @@ export function EdgePage() {
         onSubmit={(next) => setParams(writeEdgeForm(next))}
       />
       {!body && <EmptyState title="Pick a universe and press Compute edge" />}
-      {edge.isLoading && <Loading message="Downloading long history and evaluating every signal… this can take a while on large universes." />}
+      {edge.isLoading && (
+        <Loading
+          message={
+            universeSize(form.universe, watchlists.data) > LARGE_UNIVERSE
+              ? "Evaluating every signal on a large universe… The first run downloads 10 years per ticker and takes 1–2 minutes; cached runs take under a minute."
+              : "Downloading long history and evaluating every signal…"
+          }
+        />
+      )}
       {edge.isError && <ErrorBox error={edge.error} onRetry={() => edge.refetch()} />}
       {edge.data && (
         <div className="space-y-3">

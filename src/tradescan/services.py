@@ -14,7 +14,7 @@ from pathlib import Path
 import pandas as pd
 
 from tradescan.backtest.base import BacktestConfig, BacktestEngine, BacktestResult
-from tradescan.backtest.edge import EdgeAnalyzer, EdgeStats
+from tradescan.backtest.edge import EdgeSampler, EdgeStats, combine_samples
 from tradescan.backtest.metrics import Metrics, compute_metrics
 from tradescan.backtest.vectorized import VectorizedEngine
 from tradescan.config import Settings
@@ -23,6 +23,7 @@ from tradescan.data.cache import CachedProvider
 from tradescan.data.provider import DataProvider
 from tradescan.data.yfinance_provider import YFinanceProvider
 from tradescan.indicators import sma
+from tradescan.parallel import SequentialRunner, TaskRunner
 from tradescan.regime import MarketRegime, MarketRegimeAnalyzer
 from tradescan.risk import RiskPlanner
 from tradescan.scanner import ScanHit, Scanner, filter_hits
@@ -141,10 +142,11 @@ class ScanReport:
 
 
 class ScanUseCase:
-    def __init__(self, market_data: MarketData, settings: Settings, registry: SignalRegistry) -> None:
+    def __init__(self, market_data: MarketData, settings: Settings, registry: SignalRegistry, runner: TaskRunner) -> None:
         self._market_data = market_data
         self._settings = settings
         self._registry = registry
+        self._runner = runner
 
     def run(self, request: ScanRequest) -> ScanReport:
         settings = self._settings
@@ -159,9 +161,10 @@ class ScanUseCase:
             context_builder=ContextBuilder(atr_period=settings.risk.atr_period),
             scorer=build_scorer(settings),
             risk_planner=self._risk_planner(request.account),
-            edge_analyzer=EdgeAnalyzer(settings.scan.edge_horizon),
+            edge_horizon=settings.scan.edge_horizon,
             fresh_bars=fresh_bars,
             min_bars=settings.scan.min_bars,
+            runner=self._runner,
         )
         result = scanner.scan(universe_frames)
         min_score = settings.scan.min_score if request.min_score is None else request.min_score
@@ -253,21 +256,30 @@ class EdgeReport:
 
 
 class EdgeUseCase:
-    def __init__(self, market_data: MarketData, settings: Settings, registry: SignalRegistry) -> None:
+    def __init__(self, market_data: MarketData, settings: Settings, registry: SignalRegistry, runner: TaskRunner) -> None:
         self._market_data = market_data
         self._settings = settings
         self._registry = registry
+        self._runner = runner
 
     def run(self, request: EdgeRequest) -> EdgeReport:
         if not request.horizons or min(request.horizons) < 1:
             raise ValueError("horizons must be positive integers, e.g. 5,10,20")
         period = request.period or self._settings.backtest.period
         loaded = self._market_data.load(request.universe.tickers, period, request.interval)
-        histories = list(loaded.frames.values())
-        analyzers = [EdgeAnalyzer(horizon) for horizon in request.horizons]
+        signals = tuple(request.signals.select(self._registry))
+        horizons = tuple(request.horizons)
+        # per_ticker[t][s][h]: samples of signal s at horizon h on ticker t, one job per ticker.
+        per_ticker = self._runner.map(EdgeSampler(signals, horizons), list(loaded.frames.values()))
         rows = [
-            EdgeRow(signal=signal, stats=tuple(analyzer.analyze(histories, signal) for analyzer in analyzers))
-            for signal in request.signals.select(self._registry)
+            EdgeRow(
+                signal=signal,
+                stats=tuple(
+                    combine_samples(signal.name, horizon, [samples[s][h] for samples in per_ticker])
+                    for h, horizon in enumerate(horizons)
+                ),
+            )
+            for s, signal in enumerate(signals)
         ]
         rows = [row for row in rows if row.stats[0].events >= request.min_events]
         middle = len(request.horizons) // 2
@@ -453,12 +465,15 @@ def build_use_cases(
     provider: DataProvider,
     registry: SignalRegistry = default_registry,
     engines: Mapping[str, EngineFactory] | None = None,
+    runner: TaskRunner | None = None,
 ) -> UseCases:
+    """`runner` runs per-ticker work; pass a `ProcessRunner` to use every core on large universes."""
     market_data = MarketData(provider, settings)
+    task_runner = runner or SequentialRunner()
     return UseCases(
-        scan=ScanUseCase(market_data, settings, registry),
+        scan=ScanUseCase(market_data, settings, registry, task_runner),
         market=MarketUseCase(market_data, settings),
-        edge=EdgeUseCase(market_data, settings, registry),
+        edge=EdgeUseCase(market_data, settings, registry, task_runner),
         backtest=BacktestUseCase(market_data, settings, registry, engines or default_engines()),
         chart=ChartUseCase(market_data, registry),
     )
