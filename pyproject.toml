@@ -9,6 +9,7 @@ description = "Vectorized trading signal scanner (pandas + yfinance) with option
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "lxml>=5",
     "numpy>=1.26",
     "pandas>=2.2",
     "pyarrow>=15",
@@ -18,7 +19,8 @@ dependencies = [
 
 [project.optional-dependencies]
 cerebro = ["backtrader>=1.9.78"]
-dev = ["pytest>=8"]
+api = ["fastapi>=0.115", "uvicorn>=0.30"]
+dev = ["pytest>=8", "httpx2"]
 
 [project.scripts]
 tradescan = "tradescan.cli:main"

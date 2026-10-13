@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 
 from tradescan.signals.base import Signal
@@ -37,35 +38,63 @@ class EdgeStats:
         return self.mean_return - self.baseline_return
 
 
-class EdgeAnalyzer:
-    def __init__(self, horizon: int) -> None:
-        self._horizon = horizon
+@dataclass(frozen=True)
+class EdgeSample:
+    """Outcomes of one signal on one ticker at one horizon, in the signal's direction.
 
-    @property
-    def horizon(self) -> int:
-        return self._horizon
+    Samples from many tickers combine into one `EdgeStats` without keeping the price frames.
+    """
 
-    def analyze(self, frames: Sequence[pd.DataFrame], signal: Signal) -> EdgeStats:
-        """Pool the events of `signal` across `frames` (one ticker, or a whole watchlist).
+    returns: np.ndarray
+    baseline_sum: float
+    baseline_count: int
 
-        Returns are in the signal's direction, so a profitable short counts as a positive return.
-        """
-        samples: list[pd.Series] = []
-        baselines: list[pd.Series] = []
-        for df in frames:
-            outcome = forward_returns(df, self._horizon) * signal.direction.sign
-            samples.append(outcome[signal.events(df)].dropna())
-            baselines.append(outcome.dropna())
 
-        sample = pd.concat(samples) if samples else pd.Series(dtype=float)
-        baseline = pd.concat(baselines) if baselines else pd.Series(dtype=float)
-        has_events = not sample.empty
-        return EdgeStats(
-            signal=signal.name,
-            horizon=self._horizon,
-            events=len(sample),
-            win_rate=float((sample > 0).mean() * 100.0) if has_events else math.nan,
-            mean_return=float(sample.mean() * 100.0) if has_events else math.nan,
-            median_return=float(sample.median() * 100.0) if has_events else math.nan,
-            baseline_return=float(baseline.mean() * 100.0) if not baseline.empty else math.nan,
+def edge_samples(
+    df: pd.DataFrame,
+    signal: Signal,
+    horizons: Sequence[int],
+    events: pd.Series | None = None,
+) -> tuple[EdgeSample, ...]:
+    """Samples for every horizon; the signal's events are computed once (or passed in if already known)."""
+    flags = (signal.events(df) if events is None else events).to_numpy(dtype=bool)
+    samples = []
+    for horizon in horizons:
+        outcome = (forward_returns(df, horizon) * signal.direction.sign).to_numpy()
+        valid = ~np.isnan(outcome)
+        samples.append(
+            EdgeSample(
+                returns=outcome[flags & valid],
+                baseline_sum=float(outcome[valid].sum()),
+                baseline_count=int(valid.sum()),
+            )
         )
+    return tuple(samples)
+
+
+def combine_samples(signal: str, horizon: int, samples: Iterable[EdgeSample]) -> EdgeStats:
+    """Pool samples from one or many tickers into win rate, mean, median and the all-bars baseline."""
+    parts = list(samples)
+    returns = np.concatenate([part.returns for part in parts]) if parts else np.array([])
+    baseline_count = sum(part.baseline_count for part in parts)
+    has_events = returns.size > 0
+    return EdgeStats(
+        signal=signal,
+        horizon=horizon,
+        events=int(returns.size),
+        win_rate=float((returns > 0).mean() * 100.0) if has_events else math.nan,
+        mean_return=float(returns.mean() * 100.0) if has_events else math.nan,
+        median_return=float(np.median(returns) * 100.0) if has_events else math.nan,
+        baseline_return=sum(part.baseline_sum for part in parts) / baseline_count * 100.0 if baseline_count else math.nan,
+    )
+
+
+@dataclass(frozen=True)
+class EdgeSampler:
+    """Per-ticker job for task runners: samples indexed [signal][horizon]. Module-level, so picklable."""
+
+    signals: tuple[Signal, ...]
+    horizons: tuple[int, ...]
+
+    def __call__(self, df: pd.DataFrame) -> tuple[tuple[EdgeSample, ...], ...]:
+        return tuple(edge_samples(df, signal, self.horizons) for signal in self.signals)

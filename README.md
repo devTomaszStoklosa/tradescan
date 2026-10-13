@@ -1,3 +1,8 @@
+cd C:\Users\Tomasz\Desktop\Repo\Backtrader
+npm --prefix frontend install
+npm --prefix frontend run build
+tradescan serve
+
 # tradescan
 
 Trading signal scanner for daily bars: **vectorized pandas signals on yfinance data**, with
@@ -9,6 +14,7 @@ Trading signal scanner for daily bars: **vectorized pandas signals on yfinance d
 - historical edge of each signal: win rate and forward return vs. the average bar
 - market regime: benchmark vs. SMA200, breadth, new highs/lows
 - two backtest engines that produce identical trades (pandas for speed, Cerebro as reference)
+- a React web UI on top of a small FastAPI server (`tradescan serve`)
 
 > Not investment advice. This is a research tool; every number it prints is a historical statistic.
 
@@ -16,10 +22,49 @@ Trading signal scanner for daily bars: **vectorized pandas signals on yfinance d
 
 ```bash
 python -m venv .venv
-.venv\Scripts\python -m pip install -e ".[cerebro,dev]"
+.venv\Scripts\python -m pip install -e ".[cerebro,api,dev]"
 ```
 
 `cerebro` (backtrader) is optional; without it everything except `--engine cerebro` works.
+`api` (FastAPI, uvicorn) is only needed for the web UI.
+
+## Web UI
+
+```bash
+npm --prefix frontend install
+npm --prefix frontend run build
+tradescan serve
+```
+
+Open http://127.0.0.1:8000. One server delivers both the API (`/api/...`, docs at `/docs`) and
+the built UI. The screens:
+
+- **Scanner**: market regime, ranked setups, CSV export; click a row for a candlestick chart with
+  signal markers and stop/target lines, the risk plan, the score breakdown and each fired signal's
+  history on that ticker.
+- **Backtest**: one signal on one ticker with either or both engines; key metrics, equity vs. buy &
+  hold, trades on the chart and in a sortable table.
+- **Edge**: signal statistics across a watchlist at several horizons, coloured by edge.
+- **Signals**: the signal library with families, weights and rules.
+
+Account size, risk per trade and lot size are set from the header and stored in the browser.
+Forms live in the URL, so a scan or backtest can be bookmarked or shared.
+
+> The API has no authentication. `serve` binds to 127.0.0.1; do not expose it to a network.
+
+For frontend development run the API and Vite's dev server side by side (Vite proxies `/api`):
+
+```bash
+tradescan serve
+npm --prefix frontend run dev
+```
+
+After changing API models, regenerate the TypeScript types:
+
+```bash
+python scripts/export_openapi.py frontend/openapi.json
+npm --prefix frontend run gen:api
+```
 
 ## Usage
 
@@ -29,11 +74,13 @@ Run commands from the project folder, so `config/settings.toml` and `config/watc
 ```bash
 tradescan list-signals
 tradescan market -w us_large
+tradescan scan -w sp500 --min-score 4
 tradescan scan -w wig20 --direction long --top 10
 tradescan scan -t AAPL,MSFT,PKO.WA --fresh 1 --export exports/hits.csv
 tradescan edge -w etf --family breakout,trend --min-events 30
 tradescan backtest SPY donchian_breakout --engine both
 tradescan scan -w crypto --lot-size 0.0001
+tradescan update-universes
 ```
 
 | Command | What it does |
@@ -43,9 +90,24 @@ tradescan scan -w crypto --lot-size 0.0001
 | `edge` | For each signal, pooled across the watchlist: events, win rate, average and edge vs. baseline at several horizons. |
 | `backtest` | One signal on one ticker with the pandas engine, Cerebro, or `both` side by side. |
 | `list-signals` | All signals with family, direction, scoring weight and rule. |
+| `update-universes` | Refresh the `sp500` and `nasdaq100` watchlists from Wikipedia's constituent tables (`--only sp500`). |
+| `serve` | Web UI and HTTP API. |
 
 Watchlists are text files in `config/watchlists/` (tickers separated by spaces or commas, `#` comments).
-A line `# benchmark: SPY` sets the benchmark for that list. Bundled: `us_large`, `wig20`, `etf`, `crypto`.
+A line `# benchmark: SPY` sets the benchmark for that list. Bundled: `sp500` (503, benchmark SPY),
+`nasdaq100` (101, benchmark QQQ), `us_large`, `wig20`, `etf`, `crypto`.
+
+### Index universes
+
+`sp500` and `nasdaq100` are generated from Wikipedia's constituent tables; each file records the source
+and date in its header. Index members change every quarter, so refresh them now and then with
+`tradescan update-universes`. It prints added and removed tickers, converts share classes to Yahoo's
+format (`BRK.B` becomes `BRK-B`), and keeps the existing file if the download or the sanity check fails.
+
+Large universes are processed on all CPU cores (universes of 40 tickers or more). On a 4-core machine
+an S&P 500 scan takes about 30 s and the 10-year edge table about 35 s once the data is cached; the first
+run downloads every ticker and takes 1–2 minutes. Data is cached per ticker, so `nasdaq100` reuses
+what `sp500` already downloaded.
 
 ## How it works
 
@@ -112,15 +174,20 @@ The code follows SOLID; each extension point is a new class, not an edit to exis
 
 - **New data source:** implement the `DataProvider` protocol (`history(tickers, period, interval)`);
   `CachedProvider` wraps any provider.
-- **New backtest engine:** implement `BacktestEngine.run` and add it to `ENGINES` in `cli.py`.
+- **New backtest engine:** implement `BacktestEngine.run` and add it to `default_engines()` in
+  `services.py`; the CLI, the API and the UI's engine picker pick it up.
 - **New export format:** add a writer to `_WRITERS` in `report/export.py`.
+- **New API endpoint:** add a router module under `api/routes/` with `build_router(context)` and list
+  it in `ROUTERS` in `api/app.py`.
 
-`cli.py` is the composition root: it is the only module that creates concrete classes.
+The use cases in `services.py` (scan, market, edge, backtest, chart) hold the workflow; `cli.py` and
+`api/` only translate input and output. `build_use_cases` and `create_app` wire concrete classes.
 
 ## Limitations
 
 - During market hours the last daily bar is still forming; run scans after the close.
-- Bundled watchlists hold today's index members, so historical edge carries survivorship bias.
+- Bundled watchlists hold today's index members, so historical edge carries survivorship bias: stocks
+  that dropped out of the S&P 500 or Nasdaq-100 are missing from the statistics.
 - yfinance uses an unofficial Yahoo API (rate limits, format changes; personal use per Yahoo's terms).
   The Yahoo WIG20 index has no history, so `wig20` uses the `ETFBW20TR.WA` ETF as its benchmark.
 - backtrader is unmaintained (last release 2023). It works with Python 3.13, pandas 3 and numpy 2
@@ -131,6 +198,9 @@ The code follows SOLID; each extension point is a new class, not an edit to exis
 
 ```bash
 .venv\Scripts\python -m pytest
+npm --prefix frontend test
+npm --prefix frontend run typecheck
 ```
 
-Tests run on deterministic synthetic data and never touch the network.
+Python tests run on deterministic synthetic data and never touch the network; frontend tests mock
+the API.
