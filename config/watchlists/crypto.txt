@@ -1,0 +1,3 @@
+# Large crypto pairs; run with --lot-size 0.0001 for fractional sizes
+# benchmark: BTC-USD
+BTC-USD ETH-USD SOL-USD BNB-USD XRP-USD ADA-USD DOGE-USD AVAX-USD LINK-USD DOT-USD

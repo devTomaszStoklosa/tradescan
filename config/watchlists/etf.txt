@@ -1,0 +1,4 @@
+# Broad market, asset class and US sector ETFs
+# benchmark: SPY
+SPY QQQ IWM DIA EFA EEM GLD SLV TLT HYG
+XLE XLF XLK XLV XLI XLY XLP XLU XLB XLRE
