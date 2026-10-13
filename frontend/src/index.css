@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+/* Semantic colour tokens; components only use these, so both themes stay consistent. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-up: var(--up);
+  --color-down: var(--down);
+  --color-warn: var(--warn);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+}
+
+:root {
+  color-scheme: light;
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --panel-2: #f0f2f5;
+  --fg: #0f172a;
+  --muted: #64748b;
+  --line: #e2e8f0;
+  --accent: #2563eb;
+  --accent-fg: #ffffff;
+  --up: #059669;
+  --down: #dc2626;
+  --warn: #b45309;
+  --chart-grid: #eef1f5;
+  --chart-sma-fast: #d97706;
+  --chart-sma-slow: #7c3aed;
+  --chart-benchmark: #94a3b8;
+  --fam-trend: #2563eb;
+  --fam-momentum: #7c3aed;
+  --fam-breakout: #c2410c;
+  --fam-mean_reversion: #0e7490;
+  --fam-volume: #be185d;
+  --fam-pattern: #475569;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b0f14;
+  --panel: #121821;
+  --panel-2: #19212c;
+  --fg: #e6edf3;
+  --muted: #8b98a8;
+  --line: #243040;
+  --accent: #4c8dff;
+  --accent-fg: #0b0f14;
+  --up: #22c55e;
+  --down: #f05252;
+  --warn: #f59e0b;
+  --chart-grid: #1a2230;
+  --chart-sma-fast: #fbbf24;
+  --chart-sma-slow: #a78bfa;
+  --chart-benchmark: #64748b;
+  --fam-trend: #60a5fa;
+  --fam-momentum: #a78bfa;
+  --fam-breakout: #fb923c;
+  --fam-mean_reversion: #22d3ee;
+  --fam-volume: #f472b6;
+  --fam-pattern: #94a3b8;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.chip {
+  color: var(--chip);
+  background: color-mix(in oklab, var(--chip) 13%, transparent);
+  border: 1px solid color-mix(in oklab, var(--chip) 30%, transparent);
+}
+
+.heat {
+  background: color-mix(in oklab, var(--heat-color) calc(var(--heat) * 1%), transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

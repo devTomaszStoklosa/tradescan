@@ -9,6 +9,7 @@ Trading signal scanner for daily bars: **vectorized pandas signals on yfinance d
 - historical edge of each signal: win rate and forward return vs. the average bar
 - market regime: benchmark vs. SMA200, breadth, new highs/lows
 - two backtest engines that produce identical trades (pandas for speed, Cerebro as reference)
+- a React web UI on top of a small FastAPI server (`tradescan serve`)
 
 > Not investment advice. This is a research tool; every number it prints is a historical statistic.
 
@@ -16,10 +17,49 @@ Trading signal scanner for daily bars: **vectorized pandas signals on yfinance d
 
 ```bash
 python -m venv .venv
-.venv\Scripts\python -m pip install -e ".[cerebro,dev]"
+.venv\Scripts\python -m pip install -e ".[cerebro,api,dev]"
 ```
 
 `cerebro` (backtrader) is optional; without it everything except `--engine cerebro` works.
+`api` (FastAPI, uvicorn) is only needed for the web UI.
+
+## Web UI
+
+```bash
+npm --prefix frontend install
+npm --prefix frontend run build
+tradescan serve
+```
+
+Open http://127.0.0.1:8000. One server delivers both the API (`/api/...`, docs at `/docs`) and
+the built UI. The screens:
+
+- **Scanner**: market regime, ranked setups, CSV export; click a row for a candlestick chart with
+  signal markers and stop/target lines, the risk plan, the score breakdown and each fired signal's
+  history on that ticker.
+- **Backtest**: one signal on one ticker with either or both engines; key metrics, equity vs. buy &
+  hold, trades on the chart and in a sortable table.
+- **Edge**: signal statistics across a watchlist at several horizons, coloured by edge.
+- **Signals**: the signal library with families, weights and rules.
+
+Account size, risk per trade and lot size are set from the header and stored in the browser.
+Forms live in the URL, so a scan or backtest can be bookmarked or shared.
+
+> The API has no authentication. `serve` binds to 127.0.0.1; do not expose it to a network.
+
+For frontend development run the API and Vite's dev server side by side (Vite proxies `/api`):
+
+```bash
+tradescan serve
+npm --prefix frontend run dev
+```
+
+After changing API models, regenerate the TypeScript types:
+
+```bash
+python scripts/export_openapi.py frontend/openapi.json
+npm --prefix frontend run gen:api
+```
 
 ## Usage
 
@@ -112,10 +152,14 @@ The code follows SOLID; each extension point is a new class, not an edit to exis
 
 - **New data source:** implement the `DataProvider` protocol (`history(tickers, period, interval)`);
   `CachedProvider` wraps any provider.
-- **New backtest engine:** implement `BacktestEngine.run` and add it to `ENGINES` in `cli.py`.
+- **New backtest engine:** implement `BacktestEngine.run` and add it to `default_engines()` in
+  `services.py`; the CLI, the API and the UI's engine picker pick it up.
 - **New export format:** add a writer to `_WRITERS` in `report/export.py`.
+- **New API endpoint:** add a router module under `api/routes/` with `build_router(context)` and list
+  it in `ROUTERS` in `api/app.py`.
 
-`cli.py` is the composition root: it is the only module that creates concrete classes.
+The use cases in `services.py` (scan, market, edge, backtest, chart) hold the workflow; `cli.py` and
+`api/` only translate input and output. `build_use_cases` and `create_app` wire concrete classes.
 
 ## Limitations
 
@@ -131,6 +175,9 @@ The code follows SOLID; each extension point is a new class, not an edit to exis
 
 ```bash
 .venv\Scripts\python -m pytest
+npm --prefix frontend test
+npm --prefix frontend run typecheck
 ```
 
-Tests run on deterministic synthetic data and never touch the network.
+Python tests run on deterministic synthetic data and never touch the network; frontend tests mock
+the API.
