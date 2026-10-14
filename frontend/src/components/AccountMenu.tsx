@@ -1,9 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 
+import type { ParamSpecOut } from "../api/client";
 import { useConfig } from "../api/hooks";
 import { fmtCompact, fmtNumber } from "../lib/format";
+import { problemOf } from "../lib/overrides";
 import { useAccount, type Account } from "../state/account";
 import { Button, Field, NumberInput } from "./ui";
+
+/** Account fields and the parameter each one overrides in the `account` settings section. */
+const FIELDS: { key: keyof Account; param: string }[] = [
+  { key: "equity", param: "equity" },
+  { key: "riskPct", param: "risk_pct" },
+  { key: "maxPositionPct", param: "max_position_pct" },
+  { key: "lotSize", param: "lot_size" },
+];
+
+const labelOf = (spec: ParamSpecOut) => (spec.unit ? `${spec.label} (${spec.unit})` : spec.label);
 
 /** Account size and risk used for position sizing; stored in this browser only. */
 export function AccountMenu() {
@@ -28,9 +40,16 @@ export function AccountMenu() {
     };
   }, [open, account]);
 
-  const defaults = config.data?.account;
-  const equity = account.equity ?? defaults?.equity;
-  const riskPct = account.riskPct ?? defaults?.risk_pct;
+  const specs = config.data?.sections.find((section) => section.name === "account")?.params ?? [];
+  const spec = (param: string) => specs.find((item) => item.name === param);
+  const defaultOf = (param: string) => spec(param)?.default as number | undefined;
+  const equity = account.equity ?? defaultOf("equity");
+  const riskPct = account.riskPct ?? defaultOf("risk_pct");
+  const invalid = FIELDS.some(({ key, param }) => {
+    const fieldSpec = spec(param);
+    const value = draft[key];
+    return fieldSpec !== undefined && typeof value === "number" && problemOf(fieldSpec, value) !== null;
+  });
 
   return (
     <div className="relative" ref={panel}>
@@ -46,15 +65,25 @@ export function AccountMenu() {
           className="absolute right-0 z-40 mt-2 w-72 max-w-[calc(100vw-2rem)] space-y-3 rounded-xl border border-line bg-panel p-4 shadow-xl"
         >
           <p className="text-xs text-muted">Used for position sizing in scans and backtests. Empty fields use the server defaults.</p>
-          <Field label="Account equity">
-            <NumberInput value={draft.equity} min={0} placeholder={fmtNumber(defaults?.equity, 0)} onChange={(equity) => setDraft({ ...draft, equity })} />
-          </Field>
-          <Field label="Risk per trade (%)">
-            <NumberInput value={draft.riskPct} min={0} step="0.1" placeholder={fmtNumber(defaults?.risk_pct, 1)} onChange={(riskPct) => setDraft({ ...draft, riskPct })} />
-          </Field>
-          <Field label="Lot size" hint="1 for stocks, e.g. 0.0001 for crypto">
-            <NumberInput value={draft.lotSize} min={0} placeholder={fmtNumber(defaults?.lot_size, 0)} onChange={(lotSize) => setDraft({ ...draft, lotSize })} />
-          </Field>
+          {FIELDS.map(({ key, param }) => {
+            const fieldSpec = spec(param);
+            if (!fieldSpec) return null;
+            const value = draft[key] ?? null;
+            const problem = typeof value === "number" ? problemOf(fieldSpec, value) : null;
+            return (
+              <Field key={param} label={labelOf(fieldSpec)} hint={problem ?? (fieldSpec.help || undefined)}>
+                <NumberInput
+                  value={value}
+                  min={fieldSpec.minimum}
+                  max={fieldSpec.maximum}
+                  step={String(fieldSpec.step)}
+                  placeholder={String(fieldSpec.default)}
+                  invalid={problem !== null}
+                  onChange={(next) => setDraft({ ...draft, [key]: next })}
+                />
+              </Field>
+            );
+          })}
           <div className="flex justify-between gap-2">
             <Button
               variant="ghost"
@@ -67,6 +96,7 @@ export function AccountMenu() {
             </Button>
             <Button
               variant="primary"
+              disabled={invalid}
               onClick={() => {
                 setAccount(draft);
                 setOpen(false);

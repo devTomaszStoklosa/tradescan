@@ -67,7 +67,7 @@ def signals_to_frame(signals: Sequence[Signal], scorer: Scorer) -> pd.DataFrame:
                 "family": signal.family.value,
                 "dir": signal.direction.value,
                 "weight": scorer.weight(signal),
-                "description": signal.description,
+                "description": signal.describe(),
             }
             for signal in signals
         ]

@@ -1,18 +1,25 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router";
 
-import type { Family, HitOut, ScanOut, WatchlistOut } from "../api/client";
-import { useConfig, useScan, useWatchlists } from "../api/hooks";
+import type { ConfigOut, HitOut, ScanOut, SignalOut, WatchlistOut } from "../api/client";
+import { useConfig, useScan, useSignals, useWatchlists } from "../api/hooks";
+import { AdvancedSettings } from "../components/AdvancedSettings";
 import { HitsTable, hitKey } from "../components/HitsTable";
+import { SectionFields } from "../components/ParamFields";
 import { RegimeBanner } from "../components/RegimeBanner";
 import { TickerPanel } from "../components/TickerPanel";
 import { DirectionPicker, FamilyPicker, UniversePicker } from "../components/UniverseFilters";
-import { Button, EmptyState, ErrorBox, Field, Loading, Notice, NumberInput, PageHeader, Panel } from "../components/ui";
-import { defaultWatchlist, LARGE_UNIVERSE, universeSize } from "../lib/choices";
+import { Button, EmptyState, ErrorBox, Field, Input, Loading, Notice, PageHeader, Panel, Select } from "../components/ui";
+import { defaultWatchlist, LARGE_UNIVERSE, PERIODS, universeSize } from "../lib/choices";
 import { downloadCsv, type CsvRow } from "../lib/csv";
 import { fmtNumber } from "../lib/format";
+import { hasProblems, pickSections, sectionSpecs, signalSpecs, visibleSignals, type Overrides } from "../lib/overrides";
 import { readScanForm, scanBody, tickerList, writeScanForm, type ScanForm } from "../lib/params";
-import { toAccountIn, useAccount } from "../state/account";
+import { useAccount, withAccount } from "../state/account";
+
+/** Settings sections that shape a scan; `scan` first because its two main fields sit in the form row. */
+const SCAN_SECTIONS = ["scan", "risk", "scoring", "trend", "regime"] as const;
+const MAIN_FIELDS = ["fresh_bars", "min_score"] as const;
 
 function withDefaultUniverse(form: ScanForm, watchlists: WatchlistOut[]): ScanForm {
   if (form.universe.watchlist || form.universe.tickers) return form;
@@ -47,21 +54,28 @@ function hitsToCsv(hits: HitOut[]): CsvRow[] {
 function ScanFormPanel({
   initial,
   watchlists,
-  families,
-  defaults,
+  config,
+  signals,
   busy,
   onSubmit,
 }: {
   initial: ScanForm;
   watchlists: WatchlistOut[];
-  families: Family[];
-  defaults: { freshBars: number; minScore: number };
+  config: ConfigOut;
+  signals: SignalOut[];
   busy: boolean;
   onSubmit: (form: ScanForm) => void;
 }) {
   const [draft, setDraft] = useState(() => withDefaultUniverse(initial, watchlists));
   useEffect(() => setDraft(withDefaultUniverse(initial, watchlists)), [initial, watchlists]);
-  const invalid = !draft.universe.watchlist && tickerList(draft.universe.tickers).length === 0;
+  const sections = pickSections(config.sections, SCAN_SECTIONS);
+  const scanSection = sections.find((section) => section.name === "scan");
+  const setSettings = (settings: Overrides) => setDraft({ ...draft, settings });
+  const benchmark = watchlists.find((item) => item.name === draft.universe.watchlist)?.benchmark ?? config.benchmark;
+  const invalid =
+    (!draft.universe.watchlist && tickerList(draft.universe.tickers).length === 0) ||
+    hasProblems(draft.settings, sectionSpecs(sections)) ||
+    hasProblems(draft.signalParams, signalSpecs(signals));
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -69,43 +83,52 @@ function ScanFormPanel({
   };
 
   return (
-    <Panel>
-      <form onSubmit={submit} className="space-y-3">
+    <form onSubmit={submit} noValidate className="space-y-3">
+      <Panel className="space-y-3">
         <UniversePicker value={draft.universe} onChange={(universe) => setDraft({ ...draft, universe })} watchlists={watchlists} />
         <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
           <DirectionPicker value={draft.direction} onChange={(direction) => setDraft({ ...draft, direction })} />
-          <div className="w-28">
-            <Field label="Fresh (bars)">
-              <NumberInput
-                label="Fresh bars"
-                value={draft.freshBars}
-                min={1}
-                step="1"
-                placeholder={String(defaults.freshBars)}
-                onChange={(freshBars) => setDraft({ ...draft, freshBars })}
-              />
+          {scanSection && (
+            <SectionFields section={scanSection} overrides={draft.settings} onChange={setSettings} only={MAIN_FIELDS} className="grid w-60 grid-cols-2 gap-3" />
+          )}
+          <div className="w-32">
+            <Field label="History">
+              <Select value={draft.period} onChange={(event) => setDraft({ ...draft, period: event.target.value })}>
+                <option value="">default ({config.scan_period})</option>
+                {PERIODS.map((period) => (
+                  <option key={period} value={period}>
+                    {period}
+                  </option>
+                ))}
+              </Select>
             </Field>
           </div>
-          <div className="w-28">
-            <Field label="Min score">
-              <NumberInput
-                label="Minimum score"
-                value={draft.minScore}
-                step="0.5"
-                placeholder={fmtNumber(defaults.minScore, 1)}
-                onChange={(minScore) => setDraft({ ...draft, minScore })}
-              />
+          <div className="w-32">
+            <Field label="Benchmark">
+              <Input value={draft.benchmark} placeholder={benchmark} onChange={(event) => setDraft({ ...draft, benchmark: event.target.value.toUpperCase() })} />
             </Field>
           </div>
-          <div className="w-full min-w-0 sm:w-auto sm:flex-1">
-            <FamilyPicker value={draft.families} onChange={(value) => setDraft({ ...draft, families: value })} families={families} />
+        </div>
+        <div className="flex flex-wrap items-end justify-between gap-x-5 gap-y-3">
+          <div className="min-w-0 flex-1">
+            <FamilyPicker value={draft.families} onChange={(value) => setDraft({ ...draft, families: value })} families={config.families} />
           </div>
           <Button type="submit" variant="primary" disabled={busy || invalid} className="h-9 px-5">
             {busy ? "Scanning…" : "Scan"}
           </Button>
         </div>
-      </form>
-    </Panel>
+      </Panel>
+      <AdvancedSettings
+        sections={sections}
+        settings={draft.settings}
+        onSettingsChange={setSettings}
+        exclude={{ scan: MAIN_FIELDS }}
+        signals={visibleSignals(signals, draft.families, draft.direction)}
+        signalParams={draft.signalParams}
+        onSignalParamsChange={(signalParams) => setDraft({ ...draft, signalParams })}
+        signalWeights
+      />
+    </form>
   );
 }
 
@@ -154,18 +177,20 @@ function ScanResults({
 export function ScanPage() {
   const [params, setParams] = useSearchParams();
   const config = useConfig();
+  const signals = useSignals();
   const watchlists = useWatchlists();
   const { account } = useAccount();
   const form = useMemo(() => readScanForm(params), [params]);
   const body = useMemo(() => {
     const request = scanBody(form);
-    return request ? { ...request, account: toAccountIn(account) } : null;
+    return request ? { ...request, settings: withAccount(form.settings, account) } : null;
   }, [form, account]);
   const scan = useScan(body);
   const [selected, setSelected] = useState<HitOut | null>(null);
 
-  if (config.isError || watchlists.isError) return <ErrorBox error={config.error ?? watchlists.error} onRetry={() => window.location.reload()} />;
-  if (!config.data || !watchlists.data) return <Loading message="Connecting to the tradescan server…" />;
+  const failed = config.error ?? signals.error ?? watchlists.error;
+  if (failed) return <ErrorBox error={failed} onRetry={() => window.location.reload()} />;
+  if (!config.data || !signals.data || !watchlists.data) return <Loading message="Connecting to the tradescan server…" />;
 
   const size = universeSize(form.universe, watchlists.data);
   const loadingMessage =
@@ -179,8 +204,8 @@ export function ScanPage() {
       <ScanFormPanel
         initial={form}
         watchlists={watchlists.data}
-        families={config.data.families}
-        defaults={{ freshBars: config.data.scan.fresh_bars, minScore: config.data.scan.min_score }}
+        config={config.data}
+        signals={signals.data}
         busy={scan.isFetching}
         onSubmit={(next) => setParams(writeScanForm(next))}
       />
@@ -196,7 +221,9 @@ export function ScanPage() {
           selectedKey={selected ? hitKey(selected) : null}
         />
       )}
-      {selected && <TickerPanel hit={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <TickerPanel hit={selected} settings={form.settings} signalParams={form.signalParams} period={form.period} onClose={() => setSelected(null)} />
+      )}
     </>
   );
 }

@@ -7,13 +7,14 @@ from dataclasses import dataclass
 import pandas as pd
 
 from tradescan.indicators import bollinger, donchian, keltner, relative_volume
+from tradescan.params import param
 from tradescan.signals.base import Direction, Family, Signal
 from tradescan.signals.registry import register
 
 
 @dataclass(frozen=True)
 class _DonchianBreak(Signal):
-    period: int = 20
+    period: int = param(20, minimum=2, maximum=300, step=1, label="Channel length", unit="bars")
     family = Family.BREAKOUT
 
     def condition(self, df: pd.DataFrame) -> pd.Series:
@@ -27,26 +28,26 @@ class _DonchianBreak(Signal):
 class DonchianBreakout(_DonchianBreak):
     name = "donchian_breakout"
     direction = Direction.LONG
-    description = "Close above the highest high of the previous 20 bars (Turtle entry)"
+    description = "Close above the highest high of the previous {period} bars (Turtle entry)"
 
 
 @register
 class DonchianBreakdown(_DonchianBreak):
     name = "donchian_breakdown"
     direction = Direction.SHORT
-    description = "Close below the lowest low of the previous 20 bars"
+    description = "Close below the lowest low of the previous {period} bars"
 
 
 @register
 @dataclass(frozen=True)
 class High52wBreakout(Signal):
-    period: int = 252
-    volume_period: int = 50
-    min_rvol: float = 1.5
+    period: int = param(252, minimum=20, maximum=1000, step=1, label="High lookback", unit="bars")
+    volume_period: int = param(50, minimum=5, maximum=200, step=1, label="Volume average", unit="bars")
+    min_rvol: float = param(1.5, minimum=0.0, maximum=10.0, step=0.1, label="Minimum relative volume", unit="x")
     name = "high_52w_breakout"
     family = Family.BREAKOUT
     direction = Direction.LONG
-    description = "Close at a new 52-week high on volume >= 1.5x the 50-day average"
+    description = "Close at a new {period}-bar high on volume >= {min_rvol:g}x the {volume_period}-day average"
 
     def condition(self, df: pd.DataFrame) -> pd.Series:
         prior_high = df["high"].rolling(self.period, min_periods=self.period).max().shift(1)
@@ -56,10 +57,10 @@ class High52wBreakout(Signal):
 
 @dataclass(frozen=True)
 class _SqueezeRelease(Signal):
-    period: int = 20
-    bb_mult: float = 2.0
-    kc_mult: float = 1.5
-    min_squeeze_bars: int = 5
+    period: int = param(20, minimum=5, maximum=100, step=1, label="Band length", unit="bars")
+    bb_mult: float = param(2.0, minimum=0.5, maximum=5.0, step=0.1, label="Bollinger width", unit="std")
+    kc_mult: float = param(1.5, minimum=0.5, maximum=5.0, step=0.1, label="Keltner width", unit="ATR")
+    min_squeeze_bars: int = param(5, minimum=1, maximum=50, step=1, label="Minimum squeeze", unit="bars")
     family = Family.BREAKOUT
 
     def condition(self, df: pd.DataFrame) -> pd.Series:
@@ -77,19 +78,25 @@ class _SqueezeRelease(Signal):
 class SqueezeReleaseUp(_SqueezeRelease):
     name = "squeeze_release_up"
     direction = Direction.LONG
-    description = "Bollinger Bands leave a 5+ bar Keltner squeeze with price above the midline (TTM squeeze)"
+    description = (
+        "Bollinger Bands({period}, {bb_mult:g}) leave a {min_squeeze_bars}+ bar Keltner({kc_mult:g} ATR) squeeze "
+        "with price above the midline (TTM squeeze)"
+    )
 
 
 @register
 class SqueezeReleaseDown(_SqueezeRelease):
     name = "squeeze_release_down"
     direction = Direction.SHORT
-    description = "Bollinger Bands leave a 5+ bar Keltner squeeze with price below the midline"
+    description = (
+        "Bollinger Bands({period}, {bb_mult:g}) leave a {min_squeeze_bars}+ bar Keltner({kc_mult:g} ATR) squeeze "
+        "with price below the midline"
+    )
 
 
 @dataclass(frozen=True)
 class _Nr7Break(Signal):
-    lookback: int = 7
+    lookback: int = param(7, minimum=2, maximum=50, step=1, label="Narrowest-range lookback", unit="bars")
     family = Family.BREAKOUT
 
     def condition(self, df: pd.DataFrame) -> pd.Series:
@@ -105,11 +112,11 @@ class _Nr7Break(Signal):
 class Nr7Breakout(_Nr7Break):
     name = "nr7_breakout"
     direction = Direction.LONG
-    description = "Close above the high of an NR7 bar (narrowest range of 7)"
+    description = "Close above the high of an NR{lookback} bar (narrowest range of {lookback})"
 
 
 @register
 class Nr7Breakdown(_Nr7Break):
     name = "nr7_breakdown"
     direction = Direction.SHORT
-    description = "Close below the low of an NR7 bar"
+    description = "Close below the low of an NR{lookback} bar"

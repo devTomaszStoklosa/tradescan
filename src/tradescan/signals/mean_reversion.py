@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from dataclasses import dataclass
 
 import pandas as pd
 
 from tradescan.indicators import bollinger, rsi, sma
+from tradescan.params import param
 from tradescan.signals.base import Direction, Family, Signal
 from tradescan.signals.conditions import crossed_above, crossed_below
 from tradescan.signals.registry import register
@@ -14,38 +16,45 @@ from tradescan.signals.registry import register
 
 @dataclass(frozen=True)
 class _ConnorsRsi2(Signal):
-    rsi_period: int = 2
-    trend_period: int = 200
-    oversold: float = 10.0
-    overbought: float = 90.0
+    rsi_period: int = param(2, minimum=2, maximum=30, step=1, label="RSI period", unit="bars")
+    trend_period: int = param(200, minimum=10, maximum=400, step=1, label="Trend SMA", unit="bars")
     family = Family.MEAN_REVERSION
 
     def condition(self, df: pd.DataFrame) -> pd.Series:
-        values = rsi(df["close"], self.rsi_period)
-        trend = sma(df["close"], self.trend_period)
-        if self.direction is Direction.LONG:
-            return (values < self.oversold) & (df["close"] > trend)
-        return (values > self.overbought) & (df["close"] < trend)
+        return self._fires(rsi(df["close"], self.rsi_period), df["close"], sma(df["close"], self.trend_period))
+
+    @abstractmethod
+    def _fires(self, values: pd.Series, close: pd.Series, trend: pd.Series) -> pd.Series: ...
 
 
 @register
+@dataclass(frozen=True)
 class ConnorsRsi2Long(_ConnorsRsi2):
+    oversold: float = param(10.0, minimum=1.0, maximum=50.0, step=1.0, label="Oversold level")
     name = "connors_rsi2_long"
     direction = Direction.LONG
-    description = "RSI(2) < 10 while price is above SMA(200): dip in an uptrend"
+    description = "RSI({rsi_period}) < {oversold:g} while price is above SMA({trend_period}): dip in an uptrend"
+
+    def _fires(self, values: pd.Series, close: pd.Series, trend: pd.Series) -> pd.Series:
+        return (values < self.oversold) & (close > trend)
 
 
 @register
+@dataclass(frozen=True)
 class ConnorsRsi2Short(_ConnorsRsi2):
+    overbought: float = param(90.0, minimum=50.0, maximum=99.0, step=1.0, label="Overbought level")
     name = "connors_rsi2_short"
     direction = Direction.SHORT
-    description = "RSI(2) > 90 while price is below SMA(200): bounce in a downtrend"
+    description = "RSI({rsi_period}) > {overbought:g} while price is below SMA({trend_period}): bounce in a downtrend"
+
+    def _fires(self, values: pd.Series, close: pd.Series, trend: pd.Series) -> pd.Series:
+        return (values > self.overbought) & (close < trend)
 
 
 @dataclass(frozen=True)
 class _BollingerReentry(Signal):
-    period: int = 20
-    mult: float = 2.0
+    period: int = param(20, minimum=5, maximum=100, step=1, label="Band length", unit="bars")
+    mult: float = param(2.0, minimum=0.5, maximum=5.0, step=0.1, label="Band width", unit="std")
     family = Family.MEAN_REVERSION
 
     def condition(self, df: pd.DataFrame) -> pd.Series:
@@ -59,11 +68,11 @@ class _BollingerReentry(Signal):
 class BollingerReentryUp(_BollingerReentry):
     name = "bb_reentry_up"
     direction = Direction.LONG
-    description = "Close returns above the lower Bollinger Band(20, 2)"
+    description = "Close returns above the lower Bollinger Band({period}, {mult:g})"
 
 
 @register
 class BollingerReentryDown(_BollingerReentry):
     name = "bb_reentry_down"
     direction = Direction.SHORT
-    description = "Close returns below the upper Bollinger Band(20, 2)"
+    description = "Close returns below the upper Bollinger Band({period}, {mult:g})"

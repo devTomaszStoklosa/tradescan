@@ -6,13 +6,15 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AccountProvider } from "../state/account";
 import { ThemeProvider } from "../state/theme";
-import { config, scanResult, watchlists } from "../test/fixtures";
+import { config, scanResult, signals, watchlists } from "../test/fixtures";
 import { ScanPage } from "./ScanPage";
+
+const RESPONSES: Record<string, unknown> = { "/config": config, "/signals": signals, "/watchlists": watchlists, "/scan": scanResult };
 
 function mockServer() {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);
-    const body = url.endsWith("/config") ? config : url.endsWith("/watchlists") ? watchlists : url.endsWith("/scan") ? scanResult : null;
+    const body = Object.entries(RESPONSES).find(([path]) => url.endsWith(path))?.[1] ?? null;
     return new Response(JSON.stringify(body), { status: body ? 200 : 404, headers: { "Content-Type": "application/json" } });
   });
 }
@@ -32,22 +34,33 @@ function renderPage(path = "/") {
   return router;
 }
 
+const scanRequest = (fetch: ReturnType<typeof mockServer>) => {
+  const calls = fetch.mock.calls.filter(([url]) => String(url).endsWith("/scan"));
+  return JSON.parse(String(calls.at(-1)?.[1]?.body));
+};
+
 describe("ScanPage", () => {
   it("runs a scan from the form and shows regime and results", async () => {
     const fetch = mockServer();
     const router = renderPage();
 
     const scanButton = await screen.findByRole("button", { name: "Scan" });
-    expect(screen.getByRole("combobox")).toHaveValue("us_large");
+    expect(screen.getByRole("combobox", { name: /^Universe/ })).toHaveValue("us_large");
     await userEvent.click(screen.getByRole("radio", { name: "Long" }));
     await userEvent.click(scanButton);
 
     expect(await screen.findByText("risk-on")).toBeInTheDocument();
     expect(screen.getByText("AAPL")).toBeInTheDocument();
     expect(router.state.location.search).toBe("?w=us_large&dir=long");
-
-    const scanCall = fetch.mock.calls.find(([url]) => String(url).endsWith("/scan"));
-    expect(JSON.parse(String(scanCall?.[1]?.body))).toMatchObject({ watchlist: "us_large", direction: "long", account: { equity: null } });
+    expect(scanRequest(fetch)).toEqual({
+      watchlist: "us_large",
+      families: [],
+      direction: "long",
+      period: null,
+      benchmark: null,
+      settings: {},
+      signal_params: {},
+    });
   });
 
   it("sends the saved account settings with the scan", async () => {
@@ -56,10 +69,42 @@ describe("ScanPage", () => {
     renderPage("/?t=AAPL,MSFT");
 
     expect(await screen.findByText("MSFT")).toBeInTheDocument();
-    const scanCall = fetch.mock.calls.find(([url]) => String(url).endsWith("/scan"));
-    expect(JSON.parse(String(scanCall?.[1]?.body))).toMatchObject({
-      tickers: ["AAPL", "MSFT"],
-      account: { equity: 50000, risk_pct: 0.5, lot_size: null },
-    });
+    expect(scanRequest(fetch)).toMatchObject({ tickers: ["AAPL", "MSFT"], settings: { account: { equity: 50000, risk_pct: 0.5 } } });
+  });
+
+  it("puts changed parameters in the URL and the request", async () => {
+    const fetch = mockServer();
+    const router = renderPage("/?w=us_large");
+    await screen.findByText("AAPL");
+
+    await userEvent.type(screen.getByLabelText("Fresh within (bars)"), "5");
+    await userEvent.click(screen.getByText("Advanced settings"));
+    await userEvent.type(screen.getByLabelText("Stop distance (ATR)"), "3");
+    await userEvent.click(screen.getByText("connors_rsi2_long"));
+    await userEvent.type(screen.getByLabelText("Oversold level"), "15");
+    expect(screen.getByText("RSI(2) < 15 while price is above SMA(200): dip in an uptrend")).toBeInTheDocument();
+    expect(screen.getByText("3 changed")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Scan" }));
+
+    await vi.waitFor(() =>
+      expect(router.state.location.search).toBe(
+        "?w=us_large&set.scan.fresh_bars=5&set.risk.atr_mult=3&sig.connors_rsi2_long.oversold=15",
+      ),
+    );
+    await vi.waitFor(() =>
+      expect(scanRequest(fetch)).toMatchObject({
+        settings: { scan: { fresh_bars: 5 }, risk: { atr_mult: 3 } },
+        signal_params: { connors_rsi2_long: { oversold: 15 } },
+      }),
+    );
+  });
+
+  it("blocks a scan with an out-of-range value", async () => {
+    mockServer();
+    renderPage("/?w=us_large");
+    await screen.findByText("AAPL");
+    await userEvent.type(screen.getByLabelText("Fresh within (bars)"), "99");
+    expect(screen.getByText("Allowed: 1–60")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Scan" })).toBeDisabled();
   });
 });

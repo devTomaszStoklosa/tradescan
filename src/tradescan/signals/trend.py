@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from tradescan.indicators import adx, ema, sma, supertrend
+from tradescan.params import param
 from tradescan.signals.base import Direction, Family, Signal
 from tradescan.signals.conditions import crossed_above, crossed_below
 from tradescan.signals.registry import register
@@ -18,6 +19,10 @@ class _MovingAverageCross(Signal):
     fast: int
     slow: int
     family = Family.TREND
+
+    def __post_init__(self) -> None:
+        if self.fast >= self.slow:
+            raise ValueError(f"{self.name}: the fast average ({self.fast}) must be shorter than the slow one ({self.slow})")
 
     @abstractmethod
     def _average(self, close: pd.Series, period: int) -> pd.Series: ...
@@ -31,8 +36,8 @@ class _MovingAverageCross(Signal):
 
 @dataclass(frozen=True)
 class _SmaCross(_MovingAverageCross):
-    fast: int = 50
-    slow: int = 200
+    fast: int = param(50, minimum=2, maximum=400, step=1, label="Fast SMA", unit="bars")
+    slow: int = param(200, minimum=3, maximum=500, step=1, label="Slow SMA", unit="bars")
 
     def _average(self, close: pd.Series, period: int) -> pd.Series:
         return sma(close, period)
@@ -40,8 +45,8 @@ class _SmaCross(_MovingAverageCross):
 
 @dataclass(frozen=True)
 class _EmaCross(_MovingAverageCross):
-    fast: int = 9
-    slow: int = 21
+    fast: int = param(9, minimum=2, maximum=200, step=1, label="Fast EMA", unit="bars")
+    slow: int = param(21, minimum=3, maximum=400, step=1, label="Slow EMA", unit="bars")
 
     def _average(self, close: pd.Series, period: int) -> pd.Series:
         return ema(close, period)
@@ -51,34 +56,34 @@ class _EmaCross(_MovingAverageCross):
 class GoldenCross(_SmaCross):
     name = "golden_cross"
     direction = Direction.LONG
-    description = "SMA(50) crosses above SMA(200)"
+    description = "SMA({fast}) crosses above SMA({slow})"
 
 
 @register
 class DeathCross(_SmaCross):
     name = "death_cross"
     direction = Direction.SHORT
-    description = "SMA(50) crosses below SMA(200)"
+    description = "SMA({fast}) crosses below SMA({slow})"
 
 
 @register
 class EmaCrossUp(_EmaCross):
     name = "ema_cross_up"
     direction = Direction.LONG
-    description = "EMA(9) crosses above EMA(21)"
+    description = "EMA({fast}) crosses above EMA({slow})"
 
 
 @register
 class EmaCrossDown(_EmaCross):
     name = "ema_cross_down"
     direction = Direction.SHORT
-    description = "EMA(9) crosses below EMA(21)"
+    description = "EMA({fast}) crosses below EMA({slow})"
 
 
 @dataclass(frozen=True)
 class _SupertrendFlip(Signal):
-    period: int = 10
-    mult: float = 3.0
+    period: int = param(10, minimum=2, maximum=100, step=1, label="ATR period", unit="bars")
+    mult: float = param(3.0, minimum=0.5, maximum=10.0, step=0.1, label="ATR multiple")
     family = Family.TREND
 
     def condition(self, df: pd.DataFrame) -> pd.Series:
@@ -91,20 +96,20 @@ class _SupertrendFlip(Signal):
 class SupertrendUp(_SupertrendFlip):
     name = "supertrend_up"
     direction = Direction.LONG
-    description = "Supertrend(10, 3) flips from down to up"
+    description = "Supertrend({period}, {mult:g}) flips from down to up"
 
 
 @register
 class SupertrendDown(_SupertrendFlip):
     name = "supertrend_down"
     direction = Direction.SHORT
-    description = "Supertrend(10, 3) flips from up to down"
+    description = "Supertrend({period}, {mult:g}) flips from up to down"
 
 
 @dataclass(frozen=True)
 class _AdxDiCross(Signal):
-    period: int = 14
-    min_adx: float = 20.0
+    period: int = param(14, minimum=2, maximum=100, step=1, label="ADX period", unit="bars")
+    min_adx: float = param(20.0, minimum=0.0, maximum=100.0, step=1.0, label="Minimum ADX")
     family = Family.TREND
 
     def condition(self, df: pd.DataFrame) -> pd.Series:
@@ -121,11 +126,11 @@ class _AdxDiCross(Signal):
 class AdxDiUp(_AdxDiCross):
     name = "adx_di_up"
     direction = Direction.LONG
-    description = "+DI crosses above -DI while ADX(14) >= 20"
+    description = "+DI crosses above -DI while ADX({period}) >= {min_adx:g}"
 
 
 @register
 class AdxDiDown(_AdxDiCross):
     name = "adx_di_down"
     direction = Direction.SHORT
-    description = "-DI crosses above +DI while ADX(14) >= 20"
+    description = "-DI crosses above +DI while ADX({period}) >= {min_adx:g}"

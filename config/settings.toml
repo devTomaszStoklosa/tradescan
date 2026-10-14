@@ -43,6 +43,20 @@ pattern = 0.5
 # Per-signal overrides, e.g.:
 # golden_cross = 2.0
 
+[trend]
+fast_period = 50         # daily trend: close and SMA(fast) vs SMA(slow)
+slow_period = 200
+weekly_period = 30       # weekly trend: close vs a rising/falling 30-week SMA
+rs_periods = [63, 126, 189, 252]   # relative strength: returns over these lookbacks...
+rs_weights = [0.4, 0.2, 0.2, 0.2]  # ...weighted like this (IBD style), then ranked within the universe
+
+[regime]
+fast_period = 50         # breadth: % of the universe above SMA(fast)
+slow_period = 200        # benchmark trend: close vs SMA(slow)
+high_low_period = 252    # window for new highs / new lows
+risk_on_breadth = 60.0   # risk-on needs the benchmark above SMA(slow) and breadth at or above this
+risk_off_breadth = 40.0  # risk-off needs the benchmark below SMA(slow) and breadth at or below this
+
 [backtest]
 period = "10y"           # history used by `backtest` and `edge`
 commission_pct = 0.1

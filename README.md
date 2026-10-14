@@ -42,13 +42,15 @@ the built UI. The screens:
 - **Scanner**: market regime, ranked setups, CSV export; click a row for a candlestick chart with
   signal markers and stop/target lines, the risk plan, the score breakdown and each fired signal's
   history on that ticker.
-- **Backtest**: one signal on one ticker with either or both engines; key metrics, equity vs. buy &
-  hold, trades on the chart and in a sortable table.
+- **Backtest**: one signal on one ticker with either or both engines; the signal's parameters and all
+  trade rules are editable; key metrics, equity vs. buy & hold, trades on the chart and in a sortable table.
 - **Edge**: signal statistics across a watchlist at several horizons, coloured by edge.
-- **Signals**: the signal library with families, weights and rules.
+- **Signals**: the signal library with families, weights, rules and each parameter's default and range.
 
-Account size, risk per trade and lot size are set from the header and stored in the browser.
-Forms live in the URL, so a scan or backtest can be bookmarked or shared.
+Scanner and Edge have an **Advanced settings** panel with every other parameter (see
+[Parameters](#parameters)). Account size, risk per trade, max position and lot size are set from the
+header and stored in the browser. Forms, including changed parameters, live in the URL, so a scan or
+backtest can be bookmarked, shared or opened in two tabs to compare.
 
 > The API has no authentication. `serve` binds to 127.0.0.1; do not expose it to a network.
 
@@ -148,28 +150,53 @@ SQN, exposure, buy & hold.
 ## Configuration
 
 `config/settings.toml` holds account size, risk per trade, ATR stop multiple, targets, freshness,
-benchmark, scoring weights and backtest costs. Every key is optional and unknown keys are rejected.
+benchmark, scoring weights, trend and relative-strength lookbacks, market regime thresholds and
+backtest costs. Every key is optional; unknown keys and values outside a parameter's range are rejected.
 Data is cached as Parquet in `.cache/` for `cache_ttl_hours`; use `--no-cache` to force a download.
+
+## Parameters
+
+Every number that changes a result is a declared parameter with a default, an allowed range and a
+label: the settings of all 30 signals (periods, thresholds, multipliers) and the settings sections
+`account`, `risk`, `scan`, `scoring`, `trend`, `regime` and `backtest`. `settings.toml` holds the
+defaults; a single run can override any of them without touching the file:
+
+- in the web UI, where changed values are highlighted, kept in the URL and checked against their range;
+- through the API: `"settings": {"risk": {"atr_mult": 3}}` and
+  `"signal_params": {"connors_rsi2_long": {"oversold": 15}}` (a backtest takes its signal's values as
+  `"params"`); `/api/config` and `/api/signals` list every parameter with its range;
+- on the CLI, through the existing flags (`--atr-mult`, `--fresh`, `--equity`, ...).
+
+Values outside the range, unknown names and anything that is not a parameter (paths, cache settings)
+are refused. Signal descriptions are filled in from the values in use, so "RSI(3) < 15" always
+describes the rule that ran.
+
+> Every adjustable setting is also a way to fit the past. Compare variations over a long history and
+> several tickers, and distrust a setting that only works within a narrow range.
 
 ## Extending
 
 The code follows SOLID; each extension point is a new class, not an edit to existing logic.
 
 - **New signal:** subclass `Signal`, implement `condition`, decorate with `@register`, and import its
-  module in `signals/__init__.py`. Scanner, scoring, edge, both engines and the CLI pick it up.
+  module in `signals/__init__.py`. Scanner, scoring, edge, both engines, the CLI and the UI pick it up.
+  Declare every number as a field with `param(...)` and use it in the `description` template; a test
+  fails otherwise, so the UI can always offer it.
 
   ```python
   @register
   @dataclass(frozen=True)
   class InsideDayBreakout(Signal):
+      buffer_pct: float = param(0.0, minimum=0.0, maximum=5.0, step=0.1, label="Breakout buffer", unit="%")
       name = "inside_day_breakout"
       family = Family.BREAKOUT
       direction = Direction.LONG
-      description = "Close above the high of an inside day"
+      description = "Close at least {buffer_pct:g}% above the high of an inside day"
 
       def condition(self, df: pd.DataFrame) -> pd.Series:
           inside = (df["high"] < df["high"].shift(1)) & (df["low"] > df["low"].shift(1))
-          return inside.shift(1, fill_value=False) & (df["close"] > df["high"].shift(1))
+          level = df["high"].shift(1) * (1 + self.buffer_pct / 100)
+          return inside.shift(1, fill_value=False) & (df["close"] > level)
   ```
 
 - **New data source:** implement the `DataProvider` protocol (`history(tickers, period, interval)`);

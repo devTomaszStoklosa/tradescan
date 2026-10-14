@@ -74,22 +74,34 @@ export function NumberInput({
   placeholder,
   step = "any",
   min,
+  max,
   label,
+  id,
+  invalid,
+  className,
 }: {
   value: number | null;
   onChange: (value: number | null) => void;
   placeholder?: string;
   step?: string;
   min?: number;
+  max?: number;
   label?: string;
+  id?: string;
+  invalid?: boolean;
+  className?: string;
 }) {
   return (
     <Input
       type="number"
       inputMode="decimal"
+      id={id}
       step={step}
       min={min}
+      max={max}
       aria-label={label}
+      aria-invalid={invalid || undefined}
+      className={cx(invalid && "ring-2 ring-down/60", className)}
       placeholder={placeholder}
       value={value ?? ""}
       onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))}

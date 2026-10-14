@@ -92,20 +92,38 @@ def test_metrics_on_known_values():
     assert metrics.exposure_pct == pytest.approx(100.0 / 30)
 
 
-def test_cerebro_matches_vectorized_engine():
-    pytest.importorskip("backtrader")
+def _assert_engines_match(df, signal, config):
     from tradescan.backtest.cerebro import CerebroEngine
 
+    fast = VectorizedEngine().run("RW", df, signal, config)
+    slow = CerebroEngine().run("RW", df, signal, config)
+    assert len(fast.trades) == len(slow.trades) > 0, signal
+    for left, right in zip(fast.trades, slow.trades):
+        assert (left.entry_date, left.exit_date, left.exit_reason) == (right.entry_date, right.exit_date, right.exit_reason), signal
+        assert left.entry_price == pytest.approx(right.entry_price, rel=1e-9)
+        assert left.exit_price == pytest.approx(right.exit_price, rel=1e-9)
+        assert left.pnl == pytest.approx(right.pnl, rel=1e-6, abs=1e-6)
+    np.testing.assert_allclose(fast.equity.to_numpy(), slow.equity.to_numpy(), rtol=1e-9)
+
+
+def test_cerebro_matches_vectorized_engine():
+    pytest.importorskip("backtrader")
     df = random_walk(1500, seed=11)
     config = BacktestConfig(commission_pct=0.1, slippage_pct=0.05, max_hold_bars=15)
     for name in ("donchian_breakout", "ema_cross_down", "connors_rsi2_long", "gap_and_go_up", "supertrend_down"):
-        signal = default_registry.create(name)
-        fast = VectorizedEngine().run("RW", df, signal, config)
-        slow = CerebroEngine().run("RW", df, signal, config)
-        assert len(fast.trades) == len(slow.trades) > 0, name
-        for left, right in zip(fast.trades, slow.trades):
-            assert (left.entry_date, left.exit_date, left.exit_reason) == (right.entry_date, right.exit_date, right.exit_reason), name
-            assert left.entry_price == pytest.approx(right.entry_price, rel=1e-9)
-            assert left.exit_price == pytest.approx(right.exit_price, rel=1e-9)
-            assert left.pnl == pytest.approx(right.pnl, rel=1e-6, abs=1e-6)
-        np.testing.assert_allclose(fast.equity.to_numpy(), slow.equity.to_numpy(), rtol=1e-9)
+        _assert_engines_match(df, default_registry.create(name), config)
+
+
+def test_engines_match_with_non_default_parameters():
+    pytest.importorskip("backtrader")
+    df = random_walk(1500, seed=12)
+    config = BacktestConfig(
+        risk_pct=2.0, max_position_pct=50.0, atr_period=20, atr_mult=3.0, target_r=1.5, max_hold_bars=8,
+        commission_pct=0.2, slippage_pct=0.1,
+    )  # fmt: skip
+    for name, params in (
+        ("donchian_breakout", {"period": 35}),
+        ("connors_rsi2_long", {"rsi_period": 3, "oversold": 20, "trend_period": 100}),
+        ("macd_cross_down", {"fast": 8, "slow": 30, "signal": 5}),
+    ):
+        _assert_engines_match(df, default_registry.create(name, params), config)

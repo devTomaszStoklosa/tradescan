@@ -16,7 +16,9 @@ def build_router(context: ApiContext) -> APIRouter:
     @router.post("/market", response_model=schemas.MarketOut)
     def market(body: schemas.MarketIn) -> schemas.MarketOut:
         report = context.use_cases.market.run(
-            MarketRequest(universe=context.universe(body), benchmark=body.benchmark, period=body.period)
+            MarketRequest(
+                universe=context.universe(body), settings=body.settings, benchmark=body.benchmark, period=body.period
+            )
         )
         return market_out(report)
 

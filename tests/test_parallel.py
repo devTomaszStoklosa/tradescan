@@ -44,8 +44,11 @@ def test_parallel_scan_and_edge_match_sequential():
     sequential = build_use_cases(Settings(), FakeProvider(FRAMES))
     parallel = build_use_cases(Settings(), FakeProvider(FRAMES), runner=ProcessRunner(workers=2, min_items=1))
 
-    request = ScanRequest(universe=UNIVERSE, fresh_bars=20, min_score=-10)
+    # Non-default parameters must reach the worker processes too.
+    signal_params = {"donchian_breakout": {"period": 30}, "connors_rsi2_long": {"oversold": 20}}
+    settings = {"scan": {"fresh_bars": 20, "min_score": -10}, "trend": {"rs_weights": [0.25, 0.25, 0.25, 0.25]}}
+    request = ScanRequest(universe=UNIVERSE, settings=settings, signal_params=signal_params)
     assert _hits(parallel.scan.run(request)) == _hits(sequential.scan.run(request))
 
-    edge_request = EdgeRequest(universe=UNIVERSE)
+    edge_request = EdgeRequest(universe=UNIVERSE, signal_params=signal_params)
     assert parallel.edge.run(edge_request).rows == sequential.edge.run(edge_request).rows

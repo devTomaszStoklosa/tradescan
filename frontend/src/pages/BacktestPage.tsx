@@ -6,13 +6,15 @@ import { useBacktest, useChart, useConfig, useSignals } from "../api/hooks";
 import { KeyMetrics, MetricsComparison, TradesTable } from "../components/BacktestResults";
 import { EquityChart, type EquitySeries } from "../components/charts/EquityChart";
 import { PriceChart, type ChartMarker } from "../components/charts/PriceChart";
+import { ParamFields, SectionFields } from "../components/ParamFields";
 import { FAMILY_LABELS } from "../components/SignalChip";
-import { Button, DirectionBadge, EmptyState, ErrorBox, Field, Input, Loading, NumberInput, PageHeader, Panel, Segmented, Select, ToggleChip } from "../components/ui";
-import { PERIODS } from "../lib/choices";
+import { Button, DirectionBadge, EmptyState, ErrorBox, Field, Input, Loading, PageHeader, Panel, Segmented, Select, ToggleChip } from "../components/ui";
+import { BACKTEST_FIELDS, BACKTEST_SECTIONS, PERIODS } from "../lib/choices";
 import { downloadCsv } from "../lib/csv";
 import { fmtNumber } from "../lib/format";
+import { countChanges, describeSignal, hasProblems, pickSections, sectionSpecs, type Overrides } from "../lib/overrides";
 import { backtestBody, readBacktestForm, writeBacktestForm, type BacktestForm } from "../lib/params";
-import { toAccountIn, useAccount } from "../state/account";
+import { useAccount, withAccount } from "../state/account";
 
 const ENGINE_COLORS = ["--accent", "--warn"];
 
@@ -55,30 +57,37 @@ function BacktestFormPanel({
 }) {
   const [draft, setDraft] = useState(initial);
   useEffect(() => setDraft(initial), [initial]);
-  const defaults = config.backtest;
   const set = <K extends keyof BacktestForm>(key: K, value: BacktestForm[K]) => setDraft({ ...draft, [key]: value });
   const toggleEngine = (engine: string) =>
     set("engines", draft.engines.includes(engine) ? draft.engines.filter((item) => item !== engine) : [...draft.engines, engine]);
-  const description = signals.find((signal) => signal.name === draft.signal)?.description;
+  const selected = signals.find((signal) => signal.name === draft.signal);
+  const sections = pickSections(config.sections, BACKTEST_SECTIONS);
+  const setSettings = (settings: Overrides) => set("settings", settings);
+  const changes = countChanges(draft.settings) + Object.keys(draft.signalParams).length;
+  const invalid =
+    !backtestBody(draft) ||
+    hasProblems(draft.settings, sectionSpecs(sections)) ||
+    (selected !== undefined && hasProblems({ [selected.name]: draft.signalParams }, { [selected.name]: selected.params }));
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (backtestBody(draft)) onSubmit(draft);
+    if (!invalid) onSubmit(draft);
   };
 
   return (
     <Panel>
-      <form onSubmit={submit} className="space-y-3">
+      <form onSubmit={submit} noValidate className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)_8rem]">
           <Field label="Ticker">
             <Input value={draft.ticker} placeholder="SPY" required onChange={(event) => set("ticker", event.target.value.toUpperCase())} />
           </Field>
-          <Field label="Signal" hint={description}>
-            <SignalSelect value={draft.signal} onChange={(value) => set("signal", value)} signals={signals} />
+          <Field label="Signal" hint={selected ? describeSignal(selected, draft.signalParams) : undefined}>
+            {/* Parameters belong to one signal, so switching signals starts from its defaults. */}
+            <SignalSelect value={draft.signal} onChange={(signal) => setDraft({ ...draft, signal, signalParams: {} })} signals={signals} />
           </Field>
           <Field label="History">
             <Select value={draft.period} onChange={(event) => set("period", event.target.value)}>
-              <option value="">default ({defaults.period})</option>
+              <option value="">default ({config.backtest_period})</option>
               {PERIODS.map((period) => (
                 <option key={period} value={period}>
                   {period}
@@ -87,23 +96,27 @@ function BacktestFormPanel({
             </Select>
           </Field>
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-          <Field label="Stop (ATR ×)">
-            <NumberInput value={draft.atrMult} min={0} step="0.25" placeholder={fmtNumber(defaults.atr_mult, 2)} onChange={(value) => set("atrMult", value)} />
-          </Field>
-          <Field label="Target (R)">
-            <NumberInput value={draft.targetR} min={0} step="0.25" placeholder={fmtNumber(defaults.target_r, 2)} onChange={(value) => set("targetR", value)} />
-          </Field>
-          <Field label="Max hold (bars)">
-            <NumberInput value={draft.maxHold} min={1} step="1" placeholder={String(defaults.max_hold_bars)} onChange={(value) => set("maxHold", value)} />
-          </Field>
-          <Field label="Commission %">
-            <NumberInput value={draft.commissionPct} min={0} step="0.01" placeholder={fmtNumber(defaults.commission_pct, 2)} onChange={(value) => set("commissionPct", value)} />
-          </Field>
-          <Field label="Slippage %">
-            <NumberInput value={draft.slippagePct} min={0} step="0.01" placeholder={fmtNumber(defaults.slippage_pct, 2)} onChange={(value) => set("slippagePct", value)} />
-          </Field>
-        </div>
+        {selected && (
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold">Signal parameters</h2>
+            <ParamFields specs={selected.params} values={draft.signalParams} onChange={(signalParams) => set("signalParams", signalParams)} />
+          </section>
+        )}
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold">Trade rules</h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {sections.map((section) => (
+              <SectionFields
+                key={section.name}
+                section={section}
+                overrides={draft.settings}
+                onChange={setSettings}
+                only={BACKTEST_FIELDS[section.name as keyof typeof BACKTEST_FIELDS]}
+                className="contents"
+              />
+            ))}
+          </div>
+        </section>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <Field label="Engines">
             <div className="flex gap-1.5 py-1">
@@ -114,9 +127,16 @@ function BacktestFormPanel({
               ))}
             </div>
           </Field>
-          <Button type="submit" variant="primary" disabled={busy || !backtestBody(draft)} className="h-9 px-5">
-            {busy ? "Running…" : "Run backtest"}
-          </Button>
+          <div className="flex items-center gap-2">
+            {changes > 0 && (
+              <Button variant="ghost" onClick={() => setDraft({ ...draft, settings: {}, signalParams: {} })}>
+                Reset {changes} changed
+              </Button>
+            )}
+            <Button type="submit" variant="primary" disabled={busy || invalid} className="h-9 px-5">
+              {busy ? "Running…" : "Run backtest"}
+            </Button>
+          </div>
         </div>
       </form>
     </Panel>
@@ -127,7 +147,8 @@ function BacktestView({ result }: { result: BacktestOut }) {
   const [engine, setEngine] = useState(result.runs[0]?.engine ?? "");
   useEffect(() => setEngine(result.runs[0]?.engine ?? ""), [result]);
   const run = result.runs.find((item) => item.engine === engine) ?? result.runs[0];
-  const chart = useChart(result.ticker, [], undefined);
+  const chartBody = useMemo(() => ({ ticker: result.ticker }), [result.ticker]);
+  const chart = useChart(chartBody);
 
   const equitySeries = useMemo<EquitySeries[]>(
     () => [
@@ -155,15 +176,18 @@ function BacktestView({ result }: { result: BacktestOut }) {
   const { config } = result;
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="font-mono text-lg font-semibold">{result.ticker}</span>
-        <span className="font-medium">{result.signal}</span>
-        <DirectionBadge direction={result.direction} />
-        <span className="text-muted">
-          {result.start} → {result.end} · stop {fmtNumber(config.atr_mult, 2)} ATR · target {fmtNumber(config.target_r, 2)}R · time exit{" "}
-          {config.max_hold_bars} bars · risk {fmtNumber(config.risk_pct, 2)}% · costs {fmtNumber(config.commission_pct, 2)}% +{" "}
-          {fmtNumber(config.slippage_pct, 2)}%
-        </span>
+      <div className="space-y-1 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-lg font-semibold">{result.ticker}</span>
+          <span className="font-medium">{result.signal}</span>
+          <DirectionBadge direction={result.direction} />
+          <span className="text-muted">{result.description}</span>
+        </div>
+        <p className="text-muted">
+          {result.start} → {result.end} · stop {fmtNumber(config.atr_mult, 2)} × ATR({config.atr_period}) · target {fmtNumber(config.target_r, 2)}R
+          · time exit {config.max_hold_bars} bars · risk {fmtNumber(config.risk_pct, 2)}%, max position {fmtNumber(config.max_position_pct, 0)}% · costs{" "}
+          {fmtNumber(config.commission_pct, 2)}% + {fmtNumber(config.slippage_pct, 2)}%
+        </p>
       </div>
       {result.runs.length > 1 && (
         <Segmented label="Engine" value={engine} onChange={setEngine} options={result.runs.map((item) => ({ value: item.engine, label: item.engine }))} />
@@ -215,7 +239,7 @@ export function BacktestPage() {
   const form = useMemo(() => readBacktestForm(params), [params]);
   const body = useMemo(() => {
     const request = backtestBody(form);
-    return request ? { ...request, account: toAccountIn(account) } : null;
+    return request ? { ...request, settings: withAccount(form.settings, account) } : null;
   }, [form, account]);
   const backtest = useBacktest(body);
 
@@ -224,7 +248,7 @@ export function BacktestPage() {
 
   return (
     <>
-      <PageHeader title="Backtest" subtitle="One signal on one ticker: next-open entries, ATR stop, R-multiple target, time exit." />
+      <PageHeader title="Backtest" subtitle="One signal on one ticker: next-open entries, ATR stop, R-multiple target, time exit. Every parameter is adjustable." />
       <BacktestFormPanel
         initial={form}
         config={config.data}

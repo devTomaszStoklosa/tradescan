@@ -2,10 +2,10 @@ import type { components } from "./schema";
 
 type Schemas = components["schemas"];
 
-export type AccountIn = Schemas["AccountIn"];
 export type BacktestIn = Schemas["BacktestIn"];
 export type BacktestOut = Schemas["BacktestOut"];
 export type Candle = Schemas["Candle"];
+export type ChartIn = Schemas["ChartIn"];
 export type ChartOut = Schemas["ChartOut"];
 export type ConfigOut = Schemas["ConfigOut"];
 export type Direction = Schemas["Direction"];
@@ -17,10 +17,13 @@ export type EngineRunOut = Schemas["EngineRunOut"];
 export type Family = Schemas["Family"];
 export type HitOut = Schemas["HitOut"];
 export type MetricsOut = Schemas["MetricsOut"];
+export type ParamKind = Schemas["ParamKind"];
+export type ParamSpecOut = Schemas["ParamSpecOut"];
 export type Point = Schemas["Point"];
 export type RegimeOut = Schemas["RegimeOut"];
 export type ScanIn = Schemas["ScanIn"];
 export type ScanOut = Schemas["ScanOut"];
+export type SettingsSectionOut = Schemas["SettingsSectionOut"];
 export type SignalOut = Schemas["SignalOut"];
 export type TradeOut = Schemas["TradeOut"];
 export type WatchlistOut = Schemas["WatchlistOut"];
@@ -81,13 +84,7 @@ export const api = {
   scan: (body: ScanIn) => post<ScanOut>("/scan", body),
   edge: (body: EdgeIn) => post<EdgeOut>("/edge", body),
   backtest: (body: BacktestIn) => post<BacktestOut>("/backtest", body),
-  chart: (ticker: string, signals: string[] = [], period?: string) => {
-    const params = new URLSearchParams();
-    signals.forEach((signal) => params.append("signals", signal));
-    if (period) params.set("period", period);
-    const query = params.size ? `?${params}` : "";
-    return request<ChartOut>(`/chart/${encodeURIComponent(ticker)}${query}`);
-  },
+  chart: (body: ChartIn) => post<ChartOut>("/chart", body),
 };
 
 export type Api = typeof api;

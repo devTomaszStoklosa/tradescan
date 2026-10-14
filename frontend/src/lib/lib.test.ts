@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { toCsv } from "./csv";
 import { DASH, fmtPct, fmtPrice, fmtSigned, fmtSize, tone } from "./format";
-import { backtestBody, edgeBody, readBacktestForm, readScanForm, scanBody, writeScanForm } from "./params";
+import { backtestBody, edgeBody, readBacktestForm, readScanForm, scanBody, writeBacktestForm, writeScanForm } from "./params";
 import { compareValues } from "./useSortable";
 
 describe("format", () => {
@@ -44,23 +44,36 @@ describe("url params", () => {
       universe: { watchlist: "", tickers: "aapl msft; pko.wa" },
       direction: "long",
       families: ["breakout", "trend"],
-      freshBars: 5,
-      minScore: null,
+      period: "2y",
+      benchmark: "qqq",
+      settings: { scan: { fresh_bars: 5 }, scoring: { family_weights: { breakout: 2 } } },
+      signalParams: { donchian_breakout: { period: 30 } },
     });
-    expect(params.toString()).toBe("t=AAPL%2CMSFT%2CPKO.WA&dir=long&fam=breakout%2Ctrend&fresh=5");
+    expect(params.toString()).toBe(
+      "t=AAPL%2CMSFT%2CPKO.WA&dir=long&fam=breakout%2Ctrend&p=2y&b=QQQ&set.scan.fresh_bars=5" +
+        "&set.scoring.family_weights.breakout=2&sig.donchian_breakout.period=30",
+    );
     const form = readScanForm(params);
     expect(scanBody(form)).toEqual({
       tickers: ["AAPL", "MSFT", "PKO.WA"],
       families: ["breakout", "trend"],
       direction: "long",
-      fresh_bars: 5,
-      min_score: null,
+      period: "2y",
+      benchmark: "QQQ",
+      settings: { scan: { fresh_bars: 5 }, scoring: { family_weights: { breakout: 2 } } },
+      signal_params: { donchian_breakout: { period: 30 } },
     });
+  });
+
+  it("keeps an unchanged scan URL short", () => {
+    expect(writeScanForm(readScanForm(new URLSearchParams("w=etf"))).toString()).toBe("w=etf");
   });
 
   it("returns no request without a universe or with invalid input", () => {
     expect(scanBody(readScanForm(new URLSearchParams()))).toBeNull();
-    expect(edgeBody({ universe: { watchlist: "etf", tickers: "" }, direction: "both", families: [], horizons: "x", minEvents: 0, period: "" })).toBeNull();
+    expect(
+      edgeBody({ universe: { watchlist: "etf", tickers: "" }, direction: "both", families: [], horizons: "x", minEvents: 0, period: "", signalParams: {} }),
+    ).toBeNull();
     expect(backtestBody(readBacktestForm(new URLSearchParams("ticker=spy")))).toBeNull();
   });
 
@@ -70,8 +83,19 @@ describe("url params", () => {
     expect(form.families).toEqual(["trend"]);
   });
 
-  it("builds a backtest request with server defaults for empty fields", () => {
-    const body = backtestBody(readBacktestForm(new URLSearchParams("ticker=spy&signal=golden_cross&eng=vectorized,cerebro&atr=2.5")));
-    expect(body).toMatchObject({ ticker: "SPY", signal: "golden_cross", engines: ["vectorized", "cerebro"], atr_mult: 2.5, target_r: null, period: null });
+  it("builds a backtest request with only the selected signal's parameters", () => {
+    const url = "ticker=spy&signal=golden_cross&eng=vectorized,cerebro&set.risk.atr_mult=2.5&sig.golden_cross.fast=20&sig.death_cross.fast=5";
+    const form = readBacktestForm(new URLSearchParams(url));
+    expect(backtestBody(form)).toEqual({
+      ticker: "SPY",
+      signal: "golden_cross",
+      engines: ["vectorized", "cerebro"],
+      period: null,
+      params: { fast: 20 },
+      settings: { risk: { atr_mult: 2.5 } },
+    });
+    expect(writeBacktestForm(form).toString()).toBe(
+      "ticker=SPY&signal=golden_cross&eng=vectorized%2Ccerebro&set.risk.atr_mult=2.5&sig.golden_cross.fast=20",
+    );
   });
 });

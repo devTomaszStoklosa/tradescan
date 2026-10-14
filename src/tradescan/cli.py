@@ -24,7 +24,6 @@ from tradescan.report.tables import (
     trades_to_frame,
 )
 from tradescan.services import (
-    AccountOverrides,
     BacktestRequest,
     EdgeRequest,
     MarketRequest,
@@ -72,8 +71,18 @@ def _signal_filter(args: argparse.Namespace) -> SignalFilter:
     )
 
 
-def _account(args: argparse.Namespace) -> AccountOverrides:
-    return AccountOverrides(equity=args.equity, risk_pct=args.risk_pct, lot_size=args.lot_size)
+def _account(args: argparse.Namespace) -> dict[str, float | None]:
+    return {"equity": args.equity, "risk_pct": args.risk_pct, "lot_size": args.lot_size}
+
+
+def _overrides(sections: dict[str, dict[str, float | None]]) -> dict[str, dict[str, float]]:
+    """Settings overrides from command-line flags; flags that were not given are left out."""
+    result = {}
+    for section, values in sections.items():
+        given = {key: value for key, value in values.items() if value is not None}
+        if given:
+            result[section] = given
+    return result
 
 
 def _split(value: str | None) -> list[str]:
@@ -111,9 +120,9 @@ def cmd_scan(args: argparse.Namespace, settings: Settings, report: ConsoleReport
         ScanRequest(
             universe=universe,
             signals=_signal_filter(args),
-            account=_account(args),
-            fresh_bars=args.fresh,
-            min_score=args.min_score,
+            settings=_overrides(
+                {"account": _account(args), "scan": {"fresh_bars": args.fresh, "min_score": args.min_score}}
+            ),
             benchmark=args.benchmark,
             period=args.period,
             interval=args.interval,
@@ -178,12 +187,18 @@ def cmd_backtest(args: argparse.Namespace, settings: Settings, report: ConsoleRe
             ticker=args.ticker,
             signal=args.signal,
             engines=engines,
-            account=_account(args),
-            atr_mult=args.atr_mult,
-            target_r=args.target_r,
-            max_hold_bars=args.max_hold,
-            commission_pct=args.commission_pct,
-            slippage_pct=args.slippage_pct,
+            settings=_overrides(
+                {
+                    "account": _account(args),
+                    "risk": {"atr_mult": args.atr_mult},
+                    "backtest": {
+                        "target_r": args.target_r,
+                        "max_hold_bars": args.max_hold,
+                        "commission_pct": args.commission_pct,
+                        "slippage_pct": args.slippage_pct,
+                    },
+                }
+            ),
             period=args.period,
             interval=args.interval,
         )

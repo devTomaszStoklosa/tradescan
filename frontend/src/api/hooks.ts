@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { api, type BacktestIn, type EdgeIn, type ScanIn } from "./client";
+import { api, type BacktestIn, type ChartIn, type EdgeIn, type ScanIn } from "./client";
 
 const FIVE_MINUTES = 5 * 60_000;
 
@@ -37,11 +37,11 @@ export const useBacktest = (body: BacktestIn | null) =>
     retry: false,
   });
 
-export const useChart = (ticker: string | null, signals: string[], period?: string) =>
+export const useChart = (body: ChartIn | null) =>
   useQuery({
-    queryKey: ["chart", ticker, signals, period],
-    queryFn: () => api.chart(ticker as string, signals, period),
-    enabled: ticker !== null,
+    queryKey: ["chart", body],
+    queryFn: () => api.chart(body as ChartIn),
+    enabled: body !== null,
     staleTime: FIVE_MINUTES,
     retry: false,
   });

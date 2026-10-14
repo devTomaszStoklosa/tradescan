@@ -2,6 +2,10 @@
 
 Each use case takes a request dataclass and returns a report dataclass; neither knows about
 argparse, HTTP or rendering. `build_use_cases` wires them from settings and a data provider.
+
+Requests carry per-run overrides: `settings` ({section: {parameter: value}}) and signal parameters
+({signal name: {parameter: value}}). Both are validated against the declared ranges, and the
+configured settings are never modified.
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ from tradescan.data.provider import DataProvider
 from tradescan.data.yfinance_provider import YFinanceProvider
 from tradescan.indicators import sma
 from tradescan.parallel import SequentialRunner, TaskRunner
+from tradescan.params import GroupOverrides, Overrides, check_group
 from tradescan.regime import MarketRegime, MarketRegimeAnalyzer
 from tradescan.risk import RiskPlanner
 from tradescan.scanner import ScanHit, Scanner, filter_hits
@@ -52,6 +57,10 @@ def default_provider(settings: Settings, use_cache: bool = True) -> DataProvider
     return CachedProvider(provider, Path(settings.data.cache_dir), settings.data.cache_ttl_hours * 3600.0)
 
 
+# ---------------------------------------------------------------------------
+# Builders: settings -> collaborators
+
+
 def build_scorer(settings: Settings) -> Scorer:
     scoring = settings.scoring
     return Scorer(
@@ -62,6 +71,66 @@ def build_scorer(settings: Settings) -> Scorer:
         rs_bonus=scoring.rs_bonus,
         rs_strong_pct=scoring.rs_strong_pct,
     )
+
+
+def build_context_builder(settings: Settings) -> ContextBuilder:
+    trend = settings.trend
+    return ContextBuilder(
+        atr_period=settings.risk.atr_period,
+        fast_period=trend.fast_period,
+        slow_period=trend.slow_period,
+        weekly_period=trend.weekly_period,
+        rs_periods=trend.rs_periods,
+        rs_weights=trend.rs_weights,
+    )
+
+
+def build_regime_analyzer(settings: Settings) -> MarketRegimeAnalyzer:
+    regime = settings.regime
+    return MarketRegimeAnalyzer(
+        fast_period=regime.fast_period,
+        slow_period=regime.slow_period,
+        high_low_period=regime.high_low_period,
+        risk_on_breadth=regime.risk_on_breadth,
+        risk_off_breadth=regime.risk_off_breadth,
+    )
+
+
+def build_risk_planner(settings: Settings) -> RiskPlanner:
+    account, risk = settings.account, settings.risk
+    return RiskPlanner(
+        equity=account.equity,
+        risk_pct=account.risk_pct,
+        max_position_pct=account.max_position_pct,
+        atr_mult=risk.atr_mult,
+        targets_r=risk.targets_r,
+        lot_size=account.lot_size,
+    )
+
+
+def build_backtest_config(settings: Settings) -> BacktestConfig:
+    account, backtest, risk = settings.account, settings.backtest, settings.risk
+    return BacktestConfig(
+        initial_equity=account.equity,
+        risk_pct=account.risk_pct,
+        max_position_pct=account.max_position_pct,
+        lot_size=account.lot_size,
+        atr_period=risk.atr_period,
+        atr_mult=risk.atr_mult,
+        target_r=backtest.target_r,
+        max_hold_bars=backtest.max_hold_bars,
+        commission_pct=backtest.commission_pct,
+        slippage_pct=backtest.slippage_pct,
+        bars_per_year=backtest.bars_per_year,
+    )
+
+
+def resolve_settings(settings: Settings, overrides: GroupOverrides, registry: SignalRegistry) -> Settings:
+    """The configured settings plus one run's overrides; per-signal weights must name known signals."""
+    weights = (overrides.get("scoring") or {}).get("signal_weights") or {}
+    if isinstance(weights, Mapping):
+        check_group(weights, registry.names(), "signal weight(s)")
+    return settings.with_overrides(overrides)
 
 
 # ---------------------------------------------------------------------------
@@ -77,15 +146,10 @@ class SignalFilter:
     def directions(self) -> set[Direction] | None:
         return None if self.direction is None else {self.direction}
 
-    def select(self, registry: SignalRegistry) -> list[Signal]:
-        return registry.select(names=self.names or None, families=set(self.families) or None, directions=self.directions())
-
-
-@dataclass(frozen=True)
-class AccountOverrides:
-    equity: float | None = None
-    risk_pct: float | None = None
-    lot_size: float | None = None
+    def select(self, registry: SignalRegistry, params: GroupOverrides | None = None) -> list[Signal]:
+        return registry.select(
+            names=self.names or None, families=set(self.families) or None, directions=self.directions(), params=params
+        )
 
 
 @dataclass(frozen=True)
@@ -121,9 +185,8 @@ def _benchmark(requested: str | None, universe: Watchlist, settings: Settings) -
 class ScanRequest:
     universe: Watchlist
     signals: SignalFilter = field(default_factory=SignalFilter)
-    account: AccountOverrides = field(default_factory=AccountOverrides)
-    fresh_bars: int | None = None
-    min_score: float | None = None
+    settings: GroupOverrides = field(default_factory=dict)
+    signal_params: GroupOverrides = field(default_factory=dict)
     benchmark: str | None = None
     period: str | None = None
     interval: str | None = None
@@ -139,6 +202,7 @@ class ScanReport:
     min_score: float
     fresh_bars: int
     edge_horizon: int
+    scorer: Scorer  # the one this run used, so reported weights match the scores
 
 
 class ScanUseCase:
@@ -149,45 +213,35 @@ class ScanUseCase:
         self._runner = runner
 
     def run(self, request: ScanRequest) -> ScanReport:
-        settings = self._settings
+        settings = resolve_settings(self._settings, request.settings, self._registry)
+        signals = request.signals.select(self._registry, request.signal_params)
         benchmark = _benchmark(request.benchmark, request.universe, settings)
         loaded = self._market_data.load([*request.universe.tickers, benchmark], request.period, request.interval)
         universe_frames = {ticker: loaded.frames[ticker] for ticker in request.universe.tickers if ticker in loaded.frames}
-        regime = MarketRegimeAnalyzer().analyze(benchmark, loaded.frames.get(benchmark), universe_frames)
+        regime = build_regime_analyzer(settings).analyze(benchmark, loaded.frames.get(benchmark), universe_frames)
 
-        fresh_bars = request.fresh_bars or settings.scan.fresh_bars
+        scorer = build_scorer(settings)
         scanner = Scanner(
-            signals=request.signals.select(self._registry),
-            context_builder=ContextBuilder(atr_period=settings.risk.atr_period),
-            scorer=build_scorer(settings),
-            risk_planner=self._risk_planner(request.account),
+            signals=signals,
+            context_builder=build_context_builder(settings),
+            scorer=scorer,
+            risk_planner=build_risk_planner(settings),
             edge_horizon=settings.scan.edge_horizon,
-            fresh_bars=fresh_bars,
+            fresh_bars=settings.scan.fresh_bars,
             min_bars=settings.scan.min_bars,
             runner=self._runner,
         )
         result = scanner.scan(universe_frames)
-        min_score = settings.scan.min_score if request.min_score is None else request.min_score
         return ScanReport(
             universe=request.universe,
             regime=regime,
-            hits=filter_hits(result.hits, min_score=min_score, directions=request.signals.directions()),
+            hits=filter_hits(result.hits, min_score=settings.scan.min_score, directions=request.signals.directions()),
             missing=[ticker for ticker in loaded.missing if ticker in request.universe.tickers],
             skipped=result.skipped,
-            min_score=min_score,
-            fresh_bars=fresh_bars,
+            min_score=settings.scan.min_score,
+            fresh_bars=settings.scan.fresh_bars,
             edge_horizon=settings.scan.edge_horizon,
-        )
-
-    def _risk_planner(self, account: AccountOverrides) -> RiskPlanner:
-        defaults = self._settings.account
-        return RiskPlanner(
-            equity=account.equity or defaults.equity,
-            risk_pct=account.risk_pct or defaults.risk_pct,
-            max_position_pct=defaults.max_position_pct,
-            atr_mult=self._settings.risk.atr_mult,
-            targets_r=self._settings.risk.targets_r,
-            lot_size=account.lot_size or defaults.lot_size,
+            scorer=scorer,
         )
 
 
@@ -198,6 +252,7 @@ class ScanUseCase:
 @dataclass(frozen=True)
 class MarketRequest:
     universe: Watchlist
+    settings: GroupOverrides = field(default_factory=dict)
     benchmark: str | None = None
     period: str | None = None
     interval: str | None = None
@@ -211,17 +266,19 @@ class MarketReport:
 
 
 class MarketUseCase:
-    def __init__(self, market_data: MarketData, settings: Settings) -> None:
+    def __init__(self, market_data: MarketData, settings: Settings, registry: SignalRegistry) -> None:
         self._market_data = market_data
         self._settings = settings
+        self._registry = registry
 
     def run(self, request: MarketRequest) -> MarketReport:
-        benchmark = _benchmark(request.benchmark, request.universe, self._settings)
+        settings = resolve_settings(self._settings, request.settings, self._registry)
+        benchmark = _benchmark(request.benchmark, request.universe, settings)
         loaded = self._market_data.load([*request.universe.tickers, benchmark], request.period, request.interval)
         universe_frames = {ticker: loaded.frames[ticker] for ticker in request.universe.tickers if ticker in loaded.frames}
         return MarketReport(
             universe=request.universe,
-            regime=MarketRegimeAnalyzer().analyze(benchmark, loaded.frames.get(benchmark), universe_frames),
+            regime=build_regime_analyzer(settings).analyze(benchmark, loaded.frames.get(benchmark), universe_frames),
             missing=[ticker for ticker in loaded.missing if ticker in request.universe.tickers],
         )
 
@@ -234,6 +291,7 @@ class MarketUseCase:
 class EdgeRequest:
     universe: Watchlist
     signals: SignalFilter = field(default_factory=SignalFilter)
+    signal_params: GroupOverrides = field(default_factory=dict)
     horizons: tuple[int, ...] = (5, 10, 20)
     min_events: int = 0
     period: str | None = None
@@ -265,9 +323,9 @@ class EdgeUseCase:
     def run(self, request: EdgeRequest) -> EdgeReport:
         if not request.horizons or min(request.horizons) < 1:
             raise ValueError("horizons must be positive integers, e.g. 5,10,20")
+        signals = tuple(request.signals.select(self._registry, request.signal_params))
         period = request.period or self._settings.backtest.period
         loaded = self._market_data.load(request.universe.tickers, period, request.interval)
-        signals = tuple(request.signals.select(self._registry))
         horizons = tuple(request.horizons)
         # per_ticker[t][s][h]: samples of signal s at horizon h on ticker t, one job per ticker.
         per_ticker = self._runner.map(EdgeSampler(signals, horizons), list(loaded.frames.values()))
@@ -306,12 +364,8 @@ class BacktestRequest:
     ticker: str
     signal: str
     engines: tuple[str, ...] = ("vectorized",)
-    account: AccountOverrides = field(default_factory=AccountOverrides)
-    atr_mult: float | None = None
-    target_r: float | None = None
-    max_hold_bars: int | None = None
-    commission_pct: float | None = None
-    slippage_pct: float | None = None
+    params: Overrides = field(default_factory=dict)  # the signal's parameters
+    settings: GroupOverrides = field(default_factory=dict)
     period: str | None = None
     interval: str | None = None
 
@@ -352,36 +406,20 @@ class BacktestUseCase:
         unknown = [name for name in request.engines if name not in self._engines]
         if unknown or not request.engines:
             raise ValueError(f"Unknown engine(s): {', '.join(unknown) or 'none given'}. Use: {', '.join(self._engines)}")
+        settings = resolve_settings(self._settings, request.settings, self._registry)
+        signal = self._registry.create(request.signal, request.params)
         ticker = request.ticker.upper()
-        signal = self._registry.create(request.signal)
-        loaded = self._market_data.load([ticker], request.period or self._settings.backtest.period, request.interval)
+        loaded = self._market_data.load([ticker], request.period or settings.backtest.period, request.interval)
         if ticker not in loaded.frames:
             raise ValueError(f"No data for {ticker}")
         df = loaded.frames[ticker]
 
-        config = self._config(request)
+        config = build_backtest_config(settings)
         runs = []
         for name in request.engines:
             result = self._engines[name]().run(ticker, df, signal, config)
             runs.append(EngineRun(result, compute_metrics(result.equity, result.trades, df["close"], config.bars_per_year)))
         return BacktestReport(ticker=ticker, signal=signal, config=config, close=df["close"], runs=runs)
-
-    def _config(self, request: BacktestRequest) -> BacktestConfig:
-        account, backtest, risk = self._settings.account, self._settings.backtest, self._settings.risk
-        overrides = request.account
-        return BacktestConfig(
-            initial_equity=overrides.equity or account.equity,
-            risk_pct=overrides.risk_pct or account.risk_pct,
-            max_position_pct=account.max_position_pct,
-            lot_size=overrides.lot_size or account.lot_size,
-            atr_period=risk.atr_period,
-            atr_mult=request.atr_mult or risk.atr_mult,
-            target_r=request.target_r or backtest.target_r,
-            max_hold_bars=request.max_hold_bars or backtest.max_hold_bars,
-            commission_pct=backtest.commission_pct if request.commission_pct is None else request.commission_pct,
-            slippage_pct=backtest.slippage_pct if request.slippage_pct is None else request.slippage_pct,
-            bars_per_year=backtest.bars_per_year,
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -392,6 +430,7 @@ class BacktestUseCase:
 class ChartRequest:
     ticker: str
     signals: tuple[str, ...] = ()
+    signal_params: GroupOverrides = field(default_factory=dict)
     period: str | None = None
     interval: str | None = None
 
@@ -427,7 +466,8 @@ class ChartUseCase:
 
     def run(self, request: ChartRequest) -> ChartData:
         ticker = request.ticker.upper()
-        signals = [self._registry.create(name) for name in request.signals]
+        self._registry.check_params(request.signal_params)
+        signals = [self._registry.create(name, request.signal_params.get(name)) for name in request.signals]
         loaded = self._market_data.load([ticker], request.period, request.interval)
         if ticker not in loaded.frames:
             raise ValueError(f"No data for {ticker}")
@@ -472,7 +512,7 @@ def build_use_cases(
     task_runner = runner or SequentialRunner()
     return UseCases(
         scan=ScanUseCase(market_data, settings, registry, task_runner),
-        market=MarketUseCase(market_data, settings),
+        market=MarketUseCase(market_data, settings, registry),
         edge=EdgeUseCase(market_data, settings, registry, task_runner),
         backtest=BacktestUseCase(market_data, settings, registry, engines or default_engines()),
         chart=ChartUseCase(market_data, registry),

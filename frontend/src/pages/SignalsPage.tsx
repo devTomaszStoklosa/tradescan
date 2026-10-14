@@ -21,6 +21,23 @@ const columns: Column<SignalOut>[] = [
     render: (s) => fmtNumber(s.weight, 1),
   },
   { key: "description", header: "Rule", className: "min-w-64 text-muted", wrap: true, render: (s) => s.description },
+  {
+    key: "params",
+    header: "Parameters",
+    title: "Default value and allowed range; change them per run on the Scanner, Edge and Backtest pages",
+    className: "min-w-56 text-xs text-muted",
+    wrap: true,
+    render: (s) => (
+      <ul>
+        {s.params.map((spec) => (
+          <li key={spec.name} title={spec.help || undefined}>
+            {spec.label}: <span className="num text-fg">{String(spec.default)}</span>
+            {spec.unit && ` ${spec.unit}`} <span className="num">({spec.minimum}–{spec.maximum})</span>
+          </li>
+        ))}
+      </ul>
+    ),
+  },
 ];
 
 export function SignalsPage() {

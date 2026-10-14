@@ -140,17 +140,20 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/chart/{ticker}": {
+    "/api/chart": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Chart */
-        get: operations["chart_api_chart__ticker__get"];
+        get?: never;
         put?: never;
-        post?: never;
+        /**
+         * Chart
+         * @description POST, so the markers can use the same signal parameters as the scan or backtest they belong to.
+         */
+        post: operations["chart_api_chart_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -161,26 +164,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** AccountDefaults */
-        AccountDefaults: {
-            /** Equity */
-            equity: number;
-            /** Risk Pct */
-            risk_pct: number;
-            /** Max Position Pct */
-            max_position_pct: number;
-            /** Lot Size */
-            lot_size: number;
-        };
-        /** AccountIn */
-        AccountIn: {
-            /** Equity */
-            equity?: number | null;
-            /** Risk Pct */
-            risk_pct?: number | null;
-            /** Lot Size */
-            lot_size?: number | null;
-        };
         /** BacktestConfigOut */
         BacktestConfigOut: {
             /** Initial Equity */
@@ -203,21 +186,8 @@ export interface components {
             commission_pct: number;
             /** Slippage Pct */
             slippage_pct: number;
-        };
-        /** BacktestDefaults */
-        BacktestDefaults: {
-            /** Period */
-            period: string;
-            /** Atr Mult */
-            atr_mult: number;
-            /** Target R */
-            target_r: number;
-            /** Max Hold Bars */
-            max_hold_bars: number;
-            /** Commission Pct */
-            commission_pct: number;
-            /** Slippage Pct */
-            slippage_pct: number;
+            /** Bars Per Year */
+            bars_per_year: number;
         };
         /** BacktestIn */
         BacktestIn: {
@@ -227,17 +197,24 @@ export interface components {
             signal: string;
             /** Engines */
             engines?: string[];
-            account?: components["schemas"]["AccountIn"];
-            /** Atr Mult */
-            atr_mult?: number | null;
-            /** Target R */
-            target_r?: number | null;
-            /** Max Hold Bars */
-            max_hold_bars?: number | null;
-            /** Commission Pct */
-            commission_pct?: number | null;
-            /** Slippage Pct */
-            slippage_pct?: number | null;
+            /**
+             * Params
+             * @description The signal's parameters, e.g. {"period": 30}
+             */
+            params?: {
+                [key: string]: number | number[];
+            };
+            /**
+             * Settings
+             * @description Per-run overrides by settings section, e.g. {"risk": {"atr_mult": 3}}; see /api/config for every parameter
+             */
+            settings?: {
+                [key: string]: {
+                    [key: string]: number | number[] | {
+                        [key: string]: number;
+                    };
+                };
+            };
             /** Period */
             period?: string | null;
         };
@@ -248,6 +225,18 @@ export interface components {
             /** Signal */
             signal: string;
             direction: components["schemas"]["Direction"];
+            /**
+             * Description
+             * @description The signal's rule with this run's parameters
+             */
+            description: string;
+            /**
+             * Params
+             * @description The signal's parameters used in this run
+             */
+            params: {
+                [key: string]: number | number[];
+            };
             /** Start */
             start: string;
             /** End */
@@ -281,6 +270,27 @@ export interface components {
             signal: string;
             direction: components["schemas"]["Direction"];
         };
+        /** ChartIn */
+        ChartIn: {
+            /** Ticker */
+            ticker: string;
+            /**
+             * Signals
+             * @description Signals whose events to mark
+             */
+            signals?: string[];
+            /**
+             * Signal Params
+             * @description Per-run signal parameters by signal name, e.g. {"connors_rsi2_long": {"oversold": 15}}
+             */
+            signal_params?: {
+                [key: string]: {
+                    [key: string]: number | number[];
+                };
+            };
+            /** Period */
+            period?: string | null;
+        };
         /** ChartOut */
         ChartOut: {
             /** Ticker */
@@ -298,11 +308,17 @@ export interface components {
         ConfigOut: {
             /** Version */
             version: string;
-            account: components["schemas"]["AccountDefaults"];
-            scan: components["schemas"]["ScanDefaults"];
-            backtest: components["schemas"]["BacktestDefaults"];
-            /** Targets R */
-            targets_r: number[];
+            /** Scan Period */
+            scan_period: string;
+            /** Backtest Period */
+            backtest_period: string;
+            /** Benchmark */
+            benchmark: string;
+            /**
+             * Sections
+             * @description Adjustable settings; defaults come from settings.toml
+             */
+            sections: components["schemas"]["SettingsSectionOut"][];
             /** Families */
             families: components["schemas"]["Family"][];
             /** Engines */
@@ -334,6 +350,15 @@ export interface components {
              * @description Ad-hoc tickers instead of a watchlist
              */
             tickers?: string[] | null;
+            /**
+             * Signal Params
+             * @description Per-run signal parameters by signal name, e.g. {"connors_rsi2_long": {"oversold": 15}}
+             */
+            signal_params?: {
+                [key: string]: {
+                    [key: string]: number | number[];
+                };
+            };
             /** Horizons */
             horizons?: number[];
             /**
@@ -458,6 +483,17 @@ export interface components {
              * @description Ad-hoc tickers instead of a watchlist
              */
             tickers?: string[] | null;
+            /**
+             * Settings
+             * @description Per-run overrides by settings section, e.g. {"risk": {"atr_mult": 3}}; see /api/config for every parameter
+             */
+            settings?: {
+                [key: string]: {
+                    [key: string]: number | number[] | {
+                        [key: string]: number;
+                    };
+                };
+            };
             /** Benchmark */
             benchmark?: string | null;
             /** Period */
@@ -502,6 +538,38 @@ export interface components {
             exposure_pct: number | null;
             /** Buy Hold Pct */
             buy_hold_pct: number | null;
+        };
+        /**
+         * ParamKind
+         * @enum {string}
+         */
+        ParamKind: "int" | "float" | "int_list" | "float_list" | "weights";
+        /** ParamSpecOut */
+        ParamSpecOut: {
+            /** Name */
+            name: string;
+            kind: components["schemas"]["ParamKind"];
+            /** Label */
+            label: string;
+            /** Unit */
+            unit: string;
+            /** Help */
+            help: string;
+            /** Default */
+            default: number | number[] | {
+                [key: string]: number;
+            };
+            /** Minimum */
+            minimum: number;
+            /** Maximum */
+            maximum: number;
+            /** Step */
+            step: number;
+            /**
+             * Keys
+             * @description Allowed keys of a weights parameter; null means any
+             */
+            keys?: string[] | null;
         };
         /** Point */
         Point: {
@@ -550,19 +618,6 @@ export interface components {
             /** Risk Amount */
             risk_amount: number | null;
         };
-        /** ScanDefaults */
-        ScanDefaults: {
-            /** Fresh Bars */
-            fresh_bars: number;
-            /** Min Score */
-            min_score: number;
-            /** Edge Horizon */
-            edge_horizon: number;
-            /** Benchmark */
-            benchmark: string;
-            /** Period */
-            period: string;
-        };
         /** ScanIn */
         ScanIn: {
             /**
@@ -584,11 +639,26 @@ export interface components {
              * @description Ad-hoc tickers instead of a watchlist
              */
             tickers?: string[] | null;
-            account?: components["schemas"]["AccountIn"];
-            /** Fresh Bars */
-            fresh_bars?: number | null;
-            /** Min Score */
-            min_score?: number | null;
+            /**
+             * Settings
+             * @description Per-run overrides by settings section, e.g. {"risk": {"atr_mult": 3}}; see /api/config for every parameter
+             */
+            settings?: {
+                [key: string]: {
+                    [key: string]: number | number[] | {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /**
+             * Signal Params
+             * @description Per-run signal parameters by signal name, e.g. {"connors_rsi2_long": {"oversold": 15}}
+             */
+            signal_params?: {
+                [key: string]: {
+                    [key: string]: number | number[];
+                };
+            };
             /** Benchmark */
             benchmark?: string | null;
             /** Period */
@@ -625,6 +695,15 @@ export interface components {
             /** Relative Strength */
             relative_strength: number;
         };
+        /** SettingsSectionOut */
+        SettingsSectionOut: {
+            /** Name */
+            name: string;
+            /** Label */
+            label: string;
+            /** Params */
+            params: components["schemas"]["ParamSpecOut"][];
+        };
         /** SignalOut */
         SignalOut: {
             /** Name */
@@ -633,8 +712,18 @@ export interface components {
             direction: components["schemas"]["Direction"];
             /** Weight */
             weight: number;
-            /** Description */
+            /**
+             * Description
+             * @description The rule with the default parameters filled in
+             */
             description: string;
+            /**
+             * Template
+             * @description The rule with {parameter} placeholders; format specs "", "g" and ".0%"
+             */
+            template: string;
+            /** Params */
+            params: components["schemas"]["ParamSpecOut"][];
         };
         /** TradeOut */
         TradeOut: {
@@ -903,20 +992,18 @@ export interface operations {
             };
         };
     };
-    chart_api_chart__ticker__get: {
+    chart_api_chart_post: {
         parameters: {
-            query?: {
-                /** @description Signals whose events to mark */
-                signals?: string[];
-                period?: string | null;
-            };
+            query?: never;
             header?: never;
-            path: {
-                ticker: string;
-            };
+            path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChartIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
