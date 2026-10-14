@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router";
 
-import type { EdgeIn, HitOut } from "../api/client";
+import type { ChartIn, EdgeIn, HitOut } from "../api/client";
 import { useChart, useEdge } from "../api/hooks";
 import { fmtNumber, fmtPct, fmtPrice, fmtSigned, fmtSize, tone } from "../lib/format";
+import { BACKTEST_FIELDS } from "../lib/choices";
+import { pickFields, pickOwners, type Overrides } from "../lib/overrides";
 import { writeBacktestForm } from "../lib/params";
 import { PriceChart, type ChartMarker, type PriceLevel } from "./charts/PriceChart";
 import { EdgeTable } from "./EdgeTable";
@@ -12,11 +14,32 @@ import { Button, DirectionBadge, ErrorBox, Loading, StatTile } from "./ui";
 
 const HORIZONS = [5, 10, 20];
 
-export function TickerPanel({ hit, onClose }: { hit: HitOut; onClose: () => void }) {
+export function TickerPanel({
+  hit,
+  settings,
+  signalParams,
+  period,
+  onClose,
+}: {
+  hit: HitOut;
+  /** The scan's overrides, so the chart, edge and backtest links use the same parameters. */
+  settings: Overrides;
+  signalParams: Overrides;
+  period: string;
+  onClose: () => void;
+}) {
   const closeButton = useRef<HTMLButtonElement>(null);
   const signals = useMemo(() => hit.fired.map((item) => item.name), [hit]);
-  const chart = useChart(hit.ticker, signals);
-  const edgeBody = useMemo<EdgeIn>(() => ({ tickers: [hit.ticker], signals, horizons: HORIZONS, min_events: 0 }), [hit, signals]);
+  const params = useMemo(() => pickOwners(signalParams, signals) as ChartIn["signal_params"], [signalParams, signals]);
+  const chartBody = useMemo<ChartIn>(
+    () => ({ ticker: hit.ticker, signals, signal_params: params, period: period || null }),
+    [hit, signals, params, period],
+  );
+  const chart = useChart(chartBody);
+  const edgeBody = useMemo<EdgeIn>(
+    () => ({ tickers: [hit.ticker], signals, signal_params: params, horizons: HORIZONS, min_events: 0 }),
+    [hit, signals, params],
+  );
   const edge = useEdge(edgeBody);
 
   useEffect(() => {
@@ -132,11 +155,8 @@ export function TickerPanel({ hit, onClose }: { hit: HitOut; onClose: () => void
                   signal: item.name,
                   engines: ["vectorized"],
                   period: "",
-                  atrMult: null,
-                  targetR: null,
-                  maxHold: null,
-                  commissionPct: null,
-                  slippagePct: null,
+                  settings: pickFields(settings, BACKTEST_FIELDS), // the scan's ATR stop rule
+                  signalParams: signalParams[item.name] ?? {},
                 })}`}
                 title={`Backtest ${item.name} on ${hit.ticker}`}
               >

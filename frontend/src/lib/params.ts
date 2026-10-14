@@ -1,8 +1,10 @@
 /**
  * Form state <-> URL search params. Keeping requests in the URL makes results shareable,
  * survives reloads, and lets the query cache show earlier results on back navigation.
+ * Parameter overrides travel as `set.<section>.<name>` and `sig.<signal>.<name>` (see overrides.ts).
  */
 import type { BacktestIn, Direction, EdgeIn, Family, ScanIn } from "../api/client";
+import { readOverrides, SETTINGS_PREFIX, SIGNALS_PREFIX, writeOverrides, type Overrides, type Values } from "./overrides";
 
 export type DirectionChoice = Direction | "both";
 
@@ -15,8 +17,10 @@ export interface ScanForm {
   universe: Universe;
   direction: DirectionChoice;
   families: Family[];
-  freshBars: number | null;
-  minScore: number | null;
+  period: string;
+  benchmark: string;
+  settings: Overrides;
+  signalParams: Overrides;
 }
 
 export interface EdgeForm {
@@ -26,6 +30,7 @@ export interface EdgeForm {
   horizons: string;
   minEvents: number;
   period: string;
+  signalParams: Overrides;
 }
 
 export interface BacktestForm {
@@ -33,12 +38,12 @@ export interface BacktestForm {
   signal: string;
   engines: string[];
   period: string;
-  atrMult: number | null;
-  targetR: number | null;
-  maxHold: number | null;
-  commissionPct: number | null;
-  slippagePct: number | null;
+  settings: Overrides;
+  /** Parameters of the selected signal. */
+  signalParams: Values;
 }
+
+type SignalParamsIn = NonNullable<ScanIn["signal_params"]>;
 
 const FAMILIES: readonly Family[] = ["trend", "momentum", "breakout", "mean_reversion", "volume", "pattern"];
 
@@ -89,8 +94,10 @@ export function readScanForm(params: URLSearchParams): ScanForm {
     universe: readUniverse(params),
     direction: direction(params.get("dir")),
     families: families(params.get("fam")),
-    freshBars: number(params.get("fresh")),
-    minScore: number(params.get("min")),
+    period: params.get("p") ?? "",
+    benchmark: (params.get("b") ?? "").toUpperCase(),
+    settings: readOverrides(params, SETTINGS_PREFIX),
+    signalParams: readOverrides(params, SIGNALS_PREFIX),
   };
 }
 
@@ -99,11 +106,14 @@ export function writeScanForm(form: ScanForm): URLSearchParams {
   writeUniverse(params, form.universe);
   if (form.direction !== "both") params.set("dir", form.direction);
   if (form.families.length) params.set("fam", form.families.join(","));
-  setIf(params, "fresh", form.freshBars);
-  setIf(params, "min", form.minScore);
+  setIf(params, "p", form.period);
+  setIf(params, "b", form.benchmark.trim().toUpperCase());
+  writeOverrides(params, SETTINGS_PREFIX, form.settings);
+  writeOverrides(params, SIGNALS_PREFIX, form.signalParams);
   return params;
 }
 
+/** The scan request without the account, which the page adds from browser storage. */
 export function scanBody(form: ScanForm): ScanIn | null {
   const universe = universeBody(form.universe);
   if (!universe) return null;
@@ -111,8 +121,10 @@ export function scanBody(form: ScanForm): ScanIn | null {
     ...universe,
     families: form.families,
     direction: form.direction === "both" ? null : form.direction,
-    fresh_bars: form.freshBars,
-    min_score: form.minScore,
+    period: form.period || null,
+    benchmark: form.benchmark.trim().toUpperCase() || null,
+    settings: form.settings,
+    signal_params: form.signalParams as SignalParamsIn,
   };
 }
 
@@ -126,6 +138,7 @@ export function readEdgeForm(params: URLSearchParams): EdgeForm {
     horizons: params.get("h") ?? "5,10,20",
     minEvents: number(params.get("n")) ?? 20,
     period: params.get("p") ?? "",
+    signalParams: readOverrides(params, SIGNALS_PREFIX),
   };
 }
 
@@ -137,6 +150,7 @@ export function writeEdgeForm(form: EdgeForm): URLSearchParams {
   setIf(params, "h", list(form.horizons).join(","));
   setIf(params, "n", form.minEvents);
   setIf(params, "p", form.period);
+  writeOverrides(params, SIGNALS_PREFIX, form.signalParams);
   return params;
 }
 
@@ -157,6 +171,7 @@ export function edgeBody(form: EdgeForm): EdgeIn | null {
     horizons,
     min_events: form.minEvents,
     period: form.period || null,
+    signal_params: form.signalParams as SignalParamsIn,
   };
 }
 
@@ -164,16 +179,14 @@ export function edgeBody(form: EdgeForm): EdgeIn | null {
 
 export function readBacktestForm(params: URLSearchParams): BacktestForm {
   const engines = list(params.get("eng"));
+  const signal = params.get("signal") ?? "";
   return {
     ticker: (params.get("ticker") ?? "").toUpperCase(),
-    signal: params.get("signal") ?? "",
+    signal,
     engines: engines.length ? engines : ["vectorized"],
     period: params.get("p") ?? "",
-    atrMult: number(params.get("atr")),
-    targetR: number(params.get("tr")),
-    maxHold: number(params.get("hold")),
-    commissionPct: number(params.get("comm")),
-    slippagePct: number(params.get("slip")),
+    settings: readOverrides(params, SETTINGS_PREFIX),
+    signalParams: (signal && readOverrides(params, SIGNALS_PREFIX)[signal]) || {},
   };
 }
 
@@ -183,14 +196,12 @@ export function writeBacktestForm(form: BacktestForm): URLSearchParams {
   setIf(params, "signal", form.signal);
   setIf(params, "eng", form.engines.join(","));
   setIf(params, "p", form.period);
-  setIf(params, "atr", form.atrMult);
-  setIf(params, "tr", form.targetR);
-  setIf(params, "hold", form.maxHold);
-  setIf(params, "comm", form.commissionPct);
-  setIf(params, "slip", form.slippagePct);
+  writeOverrides(params, SETTINGS_PREFIX, form.settings);
+  if (form.signal) writeOverrides(params, SIGNALS_PREFIX, { [form.signal]: form.signalParams });
   return params;
 }
 
+/** The backtest request without the account, which the page adds from browser storage. */
 export function backtestBody(form: BacktestForm): BacktestIn | null {
   if (!form.ticker.trim() || !form.signal || !form.engines.length) return null;
   return {
@@ -198,10 +209,7 @@ export function backtestBody(form: BacktestForm): BacktestIn | null {
     signal: form.signal,
     engines: form.engines,
     period: form.period || null,
-    atr_mult: form.atrMult,
-    target_r: form.targetR,
-    max_hold_bars: form.maxHold,
-    commission_pct: form.commissionPct,
-    slippage_pct: form.slippagePct,
+    params: form.signalParams as SignalParamsIn[string],
+    settings: form.settings,
   };
 }

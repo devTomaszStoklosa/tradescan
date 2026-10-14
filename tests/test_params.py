@@ -56,8 +56,12 @@ def test_every_result_setting_is_a_declared_parameter():
 def test_descriptions_show_every_parameter_in_a_format_the_ui_renders(name):
     signal = default_registry.create(name)
     placeholders = PLACEHOLDER.findall(signal.description)
-    assert {spec for _, spec in placeholders} <= {"", "g", ".0%"}
-    assert {key for key, _ in placeholders} == {spec.name for spec in signal.parameters()}
+    kinds = {spec.name: spec.kind for spec in signal.parameters()}
+    assert {key for key, _ in placeholders} == set(kinds)
+    for key, format_spec in placeholders:
+        # Python prints 2.0 as "2.0" but the UI as "2", so floats need "g" (or ".0%") to read the same in both.
+        allowed = {"g", ".0%"} if kinds[key] is ParamKind.FLOAT else {""}
+        assert format_spec in allowed, f"{name}: {{{key}:{format_spec}}}"
     text = signal.describe()
     assert "{" not in text and "}" not in text
 

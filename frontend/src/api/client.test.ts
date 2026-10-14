@@ -21,8 +21,8 @@ describe("api client", () => {
   });
 
   it("formats validation errors", async () => {
-    respond(422, { detail: [{ loc: ["body", "fresh_bars"], msg: "Input should be greater than or equal to 1" }] });
-    await expect(api.scan({ watchlist: "etf", fresh_bars: 0 })).rejects.toThrow("fresh_bars: Input should be greater than or equal to 1");
+    respond(422, { detail: [{ loc: ["body", "horizons", 0], msg: "Input should be a valid integer" }] });
+    await expect(api.edge({ watchlist: "etf", horizons: [1.5], min_events: 0 })).rejects.toThrow("horizons.0: Input should be a valid integer");
   });
 
   it("explains when the server is down", async () => {
@@ -32,9 +32,12 @@ describe("api client", () => {
     expect((error as ApiError).message).toMatch(/tradescan serve/);
   });
 
-  it("encodes tickers and repeats signal params for charts", async () => {
+  it("posts chart requests with the signals' parameters", async () => {
     const fetch = respond(200, {});
-    await api.chart("^GSPC", ["golden_cross", "death_cross"], "1y");
-    expect(fetch.mock.calls[0]![0]).toBe("/api/chart/%5EGSPC?signals=golden_cross&signals=death_cross&period=1y");
+    const body = { ticker: "^GSPC", signals: ["golden_cross"], signal_params: { golden_cross: { fast: 20 } }, period: "1y" };
+    await api.chart(body);
+    const [url, init] = fetch.mock.calls[0]!;
+    expect(url).toBe("/api/chart");
+    expect(JSON.parse(String(init?.body))).toEqual(body);
   });
 });

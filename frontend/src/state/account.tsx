@@ -1,16 +1,17 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 
-import type { AccountIn } from "../api/client";
 import { useStoredState } from "../lib/storage";
+import type { Overrides, Values } from "../lib/overrides";
 
-/** `null` means "use the server default from settings.toml". */
+/** `null` (or missing, in data saved by older versions) means "use the server default from settings.toml". */
 export interface Account {
   equity: number | null;
   riskPct: number | null;
+  maxPositionPct?: number | null;
   lotSize: number | null;
 }
 
-const EMPTY: Account = { equity: null, riskPct: null, lotSize: null };
+const EMPTY: Account = { equity: null, riskPct: null, maxPositionPct: null, lotSize: null };
 
 interface AccountValue {
   account: Account;
@@ -32,6 +33,19 @@ export function useAccount(): AccountValue {
   return value;
 }
 
-export function toAccountIn(account: Account): AccountIn {
-  return { equity: account.equity, risk_pct: account.riskPct, lot_size: account.lotSize };
+/** The account as overrides of the `account` settings section, keyed by the API's parameter names. */
+export function accountValues(account: Account): Values {
+  const entries: [string, number | null | undefined][] = [
+    ["equity", account.equity],
+    ["risk_pct", account.riskPct],
+    ["max_position_pct", account.maxPositionPct],
+    ["lot_size", account.lotSize],
+  ];
+  return Object.fromEntries(entries.filter((entry): entry is [string, number] => typeof entry[1] === "number"));
+}
+
+/** Request settings: the form's overrides plus the account saved in this browser. */
+export function withAccount(settings: Overrides, account: Account): Overrides {
+  const values = { ...settings.account, ...accountValues(account) };
+  return Object.keys(values).length ? { ...settings, account: values } : settings;
 }

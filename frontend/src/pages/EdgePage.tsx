@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router";
 
-import type { EdgeOut, Family, WatchlistOut } from "../api/client";
-import { useConfig, useEdge, useWatchlists } from "../api/hooks";
+import type { EdgeOut, Family, SignalOut, WatchlistOut } from "../api/client";
+import { useConfig, useEdge, useSignals, useWatchlists } from "../api/hooks";
+import { AdvancedSettings } from "../components/AdvancedSettings";
 import { EdgeTable } from "../components/EdgeTable";
 import { DirectionPicker, FamilyPicker, UniversePicker } from "../components/UniverseFilters";
 import { Button, EmptyState, ErrorBox, Field, Input, Loading, Notice, NumberInput, PageHeader, Panel, Select } from "../components/ui";
 import { defaultWatchlist, LARGE_UNIVERSE, PERIODS, universeSize } from "../lib/choices";
 import { downloadCsv, type CsvRow } from "../lib/csv";
+import { hasProblems, signalSpecs, visibleSignals } from "../lib/overrides";
 import { edgeBody, parseHorizons, readEdgeForm, writeEdgeForm, type EdgeForm } from "../lib/params";
 
 function edgeToCsv(data: EdgeOut): CsvRow[] {
@@ -30,6 +32,7 @@ function EdgeFormPanel({
   initial,
   watchlists,
   families,
+  signals,
   defaultPeriod,
   busy,
   onSubmit,
@@ -37,6 +40,7 @@ function EdgeFormPanel({
   initial: EdgeForm;
   watchlists: WatchlistOut[];
   families: Family[];
+  signals: SignalOut[];
   defaultPeriod: string;
   busy: boolean;
   onSubmit: (form: EdgeForm) => void;
@@ -45,7 +49,7 @@ function EdgeFormPanel({
     form.universe.watchlist || form.universe.tickers ? form : { ...form, universe: { watchlist: defaultWatchlist(watchlists), tickers: "" } };
   const [draft, setDraft] = useState(() => withUniverse(initial));
   useEffect(() => setDraft(withUniverse(initial)), [initial, watchlists]);
-  const invalid = !edgeBody(draft);
+  const invalid = !edgeBody(draft) || hasProblems(draft.signalParams, signalSpecs(signals));
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -53,8 +57,8 @@ function EdgeFormPanel({
   };
 
   return (
-    <Panel>
-      <form onSubmit={submit} className="space-y-3">
+    <form onSubmit={submit} noValidate className="space-y-3">
+      <Panel className="space-y-3">
         <UniversePicker value={draft.universe} onChange={(universe) => setDraft({ ...draft, universe })} watchlists={watchlists} />
         <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
           <DirectionPicker value={draft.direction} onChange={(direction) => setDraft({ ...draft, direction })} />
@@ -87,21 +91,31 @@ function EdgeFormPanel({
             {busy ? "Computing…" : "Compute edge"}
           </Button>
         </div>
-      </form>
-    </Panel>
+      </Panel>
+      <AdvancedSettings
+        sections={[]}
+        settings={{}}
+        onSettingsChange={() => undefined}
+        signals={visibleSignals(signals, draft.families, draft.direction)}
+        signalParams={draft.signalParams}
+        onSignalParamsChange={(signalParams) => setDraft({ ...draft, signalParams })}
+      />
+    </form>
   );
 }
 
 export function EdgePage() {
   const [params, setParams] = useSearchParams();
   const config = useConfig();
+  const signals = useSignals();
   const watchlists = useWatchlists();
   const form = useMemo(() => readEdgeForm(params), [params]);
   const body = useMemo(() => edgeBody(form), [form]);
   const edge = useEdge(body);
 
-  if (config.isError || watchlists.isError) return <ErrorBox error={config.error ?? watchlists.error} />;
-  if (!config.data || !watchlists.data) return <Loading message="Connecting to the tradescan server…" />;
+  const failed = config.error ?? signals.error ?? watchlists.error;
+  if (failed) return <ErrorBox error={failed} />;
+  if (!config.data || !signals.data || !watchlists.data) return <Loading message="Connecting to the tradescan server…" />;
 
   return (
     <>
@@ -113,7 +127,8 @@ export function EdgePage() {
         initial={form}
         watchlists={watchlists.data}
         families={config.data.families}
-        defaultPeriod={config.data.backtest.period}
+        signals={signals.data}
+        defaultPeriod={config.data.backtest_period}
         busy={edge.isFetching}
         onSubmit={(next) => setParams(writeEdgeForm(next))}
       />
