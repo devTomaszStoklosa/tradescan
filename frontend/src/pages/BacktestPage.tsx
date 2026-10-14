@@ -7,6 +7,7 @@ import { KeyMetrics, MetricsComparison, TradesTable } from "../components/Backte
 import { EquityChart, type EquitySeries } from "../components/charts/EquityChart";
 import { PriceChart, type ChartMarker } from "../components/charts/PriceChart";
 import { ParamFields, SectionFields } from "../components/ParamFields";
+import { PinRunButton } from "../components/PinRunButton";
 import { FAMILY_LABELS } from "../components/SignalChip";
 import { Button, DirectionBadge, EmptyState, ErrorBox, Field, Input, Loading, PageHeader, Panel, Segmented, Select, ToggleChip } from "../components/ui";
 import { BACKTEST_FIELDS, BACKTEST_SECTIONS, PERIODS } from "../lib/choices";
@@ -143,7 +144,7 @@ function BacktestFormPanel({
   );
 }
 
-function BacktestView({ result }: { result: BacktestOut }) {
+function BacktestView({ result, form }: { result: BacktestOut; form: BacktestForm }) {
   const [engine, setEngine] = useState(result.runs[0]?.engine ?? "");
   useEffect(() => setEngine(result.runs[0]?.engine ?? ""), [result]);
   const run = result.runs.find((item) => item.engine === engine) ?? result.runs[0];
@@ -182,6 +183,9 @@ function BacktestView({ result }: { result: BacktestOut }) {
           <span className="font-medium">{result.signal}</span>
           <DirectionBadge direction={result.direction} />
           <span className="text-muted">{result.description}</span>
+          <div className="ml-auto">
+            <PinRunButton result={result} engine={run.engine} form={form} />
+          </div>
         </div>
         <p className="text-muted">
           {result.start} → {result.end} · stop {fmtNumber(config.atr_mult, 2)} × ATR({config.atr_period}) · target {fmtNumber(config.target_r, 2)}R
@@ -261,7 +265,7 @@ export function BacktestPage() {
       )}
       {backtest.isLoading && <Loading message="Downloading history and running the backtest…" />}
       {backtest.isError && <ErrorBox error={backtest.error} onRetry={() => backtest.refetch()} />}
-      {backtest.data && <BacktestView result={backtest.data} />}
+      {backtest.data && <BacktestView result={backtest.data} form={form} />}
     </>
   );
 }

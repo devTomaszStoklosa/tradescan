@@ -2,6 +2,7 @@ import type { components } from "./schema";
 
 type Schemas = components["schemas"];
 
+export type BacktestConfigOut = Schemas["BacktestConfigOut"];
 export type BacktestIn = Schemas["BacktestIn"];
 export type BacktestOut = Schemas["BacktestOut"];
 export type Candle = Schemas["Candle"];

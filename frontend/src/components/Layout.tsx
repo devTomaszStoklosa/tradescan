@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router";
 
+import { usePinnedRuns } from "../state/pinnedRuns";
 import { AccountMenu } from "./AccountMenu";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -7,10 +8,12 @@ const LINKS = [
   { to: "/", label: "Scanner", end: true },
   { to: "/backtest", label: "Backtest", end: false },
   { to: "/edge", label: "Edge", end: false },
+  { to: "/compare", label: "Compare", end: false },
   { to: "/signals", label: "Signals", end: false },
 ];
 
 export function Layout() {
+  const pinned = usePinnedRuns().runs.length;
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-30 border-b border-line bg-panel/90 backdrop-blur">
@@ -30,6 +33,12 @@ export function Layout() {
                 }
               >
                 {link.label}
+                {link.to === "/compare" && pinned > 0 && (
+                  <span className="num ml-1.5 rounded-full bg-accent/15 px-1.5 text-xs text-accent">
+                    {pinned}
+                    <span className="sr-only"> pinned</span>
+                  </span>
+                )}
               </NavLink>
             ))}
           </nav>
