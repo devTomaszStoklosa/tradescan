@@ -99,6 +99,17 @@ describe("ScanPage", () => {
     );
   });
 
+  it("links a fired signal to a backtest with the scan's stop and the default trade rules", async () => {
+    mockServer();
+    renderPage("/?w=us_large&set.risk.atr_mult=3");
+    await userEvent.click(await screen.findByText("AAPL"));
+
+    expect(await screen.findByTitle("Backtest donchian_breakout on AAPL")).toHaveAttribute(
+      "href",
+      "/backtest?ticker=AAPL&signal=donchian_breakout&eng=vectorized&set.risk.atr_mult=3",
+    );
+  });
+
   it("blocks a scan with an out-of-range value", async () => {
     mockServer();
     renderPage("/?w=us_large");

@@ -164,6 +164,25 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AppliedRuleOut */
+        AppliedRuleOut: {
+            /** Name */
+            name: string;
+            /** Label */
+            label: string;
+            /**
+             * Description
+             * @description The rule with this run's parameters
+             */
+            description: string;
+            /**
+             * Params
+             * @description The rule's parameters used in this run
+             */
+            params: {
+                [key: string]: number | number[];
+            };
+        };
         /** BacktestConfigOut */
         BacktestConfigOut: {
             /** Initial Equity */
@@ -178,10 +197,6 @@ export interface components {
             atr_period: number;
             /** Atr Mult */
             atr_mult: number;
-            /** Target R */
-            target_r: number;
-            /** Max Hold Bars */
-            max_hold_bars: number;
             /** Commission Pct */
             commission_pct: number;
             /** Slippage Pct */
@@ -215,6 +230,13 @@ export interface components {
                     };
                 };
             };
+            /** @description Entry rule; omit for the default entry */
+            entry?: components["schemas"]["RuleIn"] | null;
+            /**
+             * Exits
+             * @description Exit rules on top of the initial stop; omit for the default exits, [] for the stop only
+             */
+            exits?: components["schemas"]["RuleIn"][] | null;
             /** Period */
             period?: string | null;
         };
@@ -242,6 +264,12 @@ export interface components {
             /** End */
             end: string;
             config: components["schemas"]["BacktestConfigOut"];
+            entry: components["schemas"]["AppliedRuleOut"];
+            /**
+             * Exits
+             * @description Exit rules on top of the initial stop, in the order given
+             */
+            exits: components["schemas"]["AppliedRuleOut"][];
             /** Buy Hold */
             buy_hold: components["schemas"]["Point"][];
             /** Runs */
@@ -323,6 +351,14 @@ export interface components {
             families: components["schemas"]["Family"][];
             /** Engines */
             engines: string[];
+            /** Entry Rules */
+            entry_rules: components["schemas"]["RuleOut"][];
+            /** Exit Rules */
+            exit_rules: components["schemas"]["RuleOut"][];
+            /** Default Entry */
+            default_entry: string;
+            /** Default Exits */
+            default_exits: string[];
         };
         /**
          * Direction
@@ -617,6 +653,40 @@ export interface components {
             position_value: number | null;
             /** Risk Amount */
             risk_amount: number | null;
+        };
+        /** RuleIn */
+        RuleIn: {
+            /**
+             * Name
+             * @description Rule name; /api/config lists the entry and exit rules
+             */
+            name: string;
+            /**
+             * Params
+             * @description The rule's parameters, e.g. {"target_r": 3}
+             */
+            params?: {
+                [key: string]: number | number[];
+            };
+        };
+        /** RuleOut */
+        RuleOut: {
+            /** Name */
+            name: string;
+            /** Label */
+            label: string;
+            /**
+             * Description
+             * @description The rule with the default parameters filled in
+             */
+            description: string;
+            /**
+             * Template
+             * @description The rule with {parameter} placeholders; format specs "", "g" and ".0%"
+             */
+            template: string;
+            /** Params */
+            params: components["schemas"]["ParamSpecOut"][];
         };
         /** ScanIn */
         ScanIn: {

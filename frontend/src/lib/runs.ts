@@ -2,7 +2,7 @@
  * Pinned backtest runs: frozen snapshots of one engine's result, kept in the browser for comparison.
  * A pin keeps what was seen; it is never re-run, so new bars do not change it.
  */
-import type { BacktestConfigOut, BacktestOut, Direction, MetricsOut, Point } from "../api/client";
+import type { AppliedRuleOut, BacktestConfigOut, BacktestOut, Direction, MetricsOut, Point } from "../api/client";
 import type { BacktestForm } from "./params";
 
 /** One chart and one table stay legible up to this many runs, and the run palette has as many colours. */
@@ -19,8 +19,11 @@ export interface RunSnapshot {
   end: string;
   /** The signal's parameters the run used, as the server reported them. */
   params: Record<string, number | number[]>;
-  /** The trade rules and account the run used. */
+  /** The stop, costs and account the run used. */
   config: BacktestConfigOut;
+  /** The entry rule and the exit rules the run used, with their parameters. */
+  entry: AppliedRuleOut;
+  exits: AppliedRuleOut[];
   metrics: MetricsOut;
   equity: Point[];
   /** Reopens the run on the Backtest page. */
@@ -59,6 +62,8 @@ export function snapshotRun(result: BacktestOut, engine: string, form: BacktestF
     end: result.end,
     params: result.params,
     config: result.config,
+    entry: result.entry,
+    exits: result.exits,
     metrics: run.metrics,
     equity: run.equity,
     form: { ...form, engines: [engine] },
@@ -69,7 +74,18 @@ const sortedEntries = (record: object) => Object.entries(record).sort(([left], [
 
 /** Equal for runs with the same inputs and data range, so the same run is never pinned twice. */
 export function runKey(run: RunSnapshot): string {
-  return JSON.stringify([run.ticker, run.signal, run.engine, run.start, run.end, sortedEntries(run.params), sortedEntries(run.config)]);
+  const rule = ({ name, params }: AppliedRuleOut) => [name, sortedEntries(params)];
+  return JSON.stringify([
+    run.ticker,
+    run.signal,
+    run.engine,
+    run.start,
+    run.end,
+    sortedEntries(run.params),
+    sortedEntries(run.config),
+    rule(run.entry),
+    run.exits.map(rule),
+  ]);
 }
 
 export function newId(): string {

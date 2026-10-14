@@ -2,6 +2,7 @@ import type { components } from "./schema";
 
 type Schemas = components["schemas"];
 
+export type AppliedRuleOut = Schemas["AppliedRuleOut"];
 export type BacktestConfigOut = Schemas["BacktestConfigOut"];
 export type BacktestIn = Schemas["BacktestIn"];
 export type BacktestOut = Schemas["BacktestOut"];
@@ -22,6 +23,8 @@ export type ParamKind = Schemas["ParamKind"];
 export type ParamSpecOut = Schemas["ParamSpecOut"];
 export type Point = Schemas["Point"];
 export type RegimeOut = Schemas["RegimeOut"];
+export type RuleIn = Schemas["RuleIn"];
+export type RuleOut = Schemas["RuleOut"];
 export type ScanIn = Schemas["ScanIn"];
 export type ScanOut = Schemas["ScanOut"];
 export type SettingsSectionOut = Schemas["SettingsSectionOut"];

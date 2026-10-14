@@ -1,21 +1,27 @@
-"""Shared backtest types. Both engines follow the same trade rules:
+"""Shared backtest types. Both engines execute the same trade rules (`trade_rules.TradeRules`):
 
-* a signal on bar t enters at the open of bar t+1 (market order),
-* stop and target come from `risk.trade_levels` around the signal bar's close and ATR,
-* stop/target are checked from the bar after the entry bar (backtrader bracket semantics),
-  the stop wins when both are touched on the same bar,
-* a time exit fills at the open `max_hold_bars` bars after entry,
-* size comes from `risk.position_size` using equity at the signal bar.
+* a signal on bar t places the entry rule's order: a market order for the open of bar t+1, or a stop
+  or limit order active on the next `valid_bars` bars; signals are ignored while an order waits or a
+  position is open,
+* the initial stop sits `atr_mult` ATRs (of the signal bar) from the entry rule's reference price, and
+  size comes from `risk.position_size` using equity at the signal bar,
+* exit orders are placed on the entry bar and checked from the next bar (backtrader bracket
+  semantics); exit rules can move them at every close or ask to exit at the next open,
+* on a bar that touches both, the stop wins over the target; a gap through a level fills at the open,
+* fill prices follow backtrader's percentage slippage, which never moves a fill outside the bar.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import pandas as pd
 
 from tradescan.signals.base import Direction, Signal
+
+if TYPE_CHECKING:
+    from tradescan.backtest.trade_rules import TradeRules
 
 
 @dataclass(frozen=True)
@@ -26,8 +32,6 @@ class BacktestConfig:
     lot_size: float = 1.0
     atr_period: int = 14
     atr_mult: float = 2.0
-    target_r: float = 2.0
-    max_hold_bars: int = 20
     commission_pct: float = 0.1
     slippage_pct: float = 0.05
     bars_per_year: int = 252
@@ -70,4 +74,8 @@ class BacktestResult:
 class BacktestEngine(Protocol):
     name: str
 
-    def run(self, ticker: str, df: pd.DataFrame, signal: Signal, config: BacktestConfig) -> BacktestResult: ...
+    def run(
+        self, ticker: str, df: pd.DataFrame, signal: Signal, config: BacktestConfig, rules: TradeRules | None = None
+    ) -> BacktestResult:
+        """`rules` defaults to `TradeRules()`, the original next-open entry with a target and a time exit."""
+        ...

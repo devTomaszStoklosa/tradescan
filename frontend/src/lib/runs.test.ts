@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { backtestForm, backtestResult, makeRun } from "../test/fixtures";
+import { appliedRule, backtestForm, backtestResult, entryRules, exitRules, makeRun } from "../test/fixtures";
 import { freeSlot, MAX_RUNS, mergeRuns, runKey, snapshotRun, toPinnedRun } from "./runs";
 import { decodeRuns, encodeRuns, parseRunsFile, RUNS_FILE_VERSION } from "./runsFile";
 
@@ -10,6 +10,8 @@ describe("snapshotRun", () => {
     expect(snapshot).toMatchObject({ ticker: "SPY", engine: "vectorized", start: "2016-01-04", end: "2026-10-13" });
     expect(snapshot?.form.engines).toEqual(["vectorized"]);
     expect(snapshot?.metrics.trades).toBe(42);
+    expect(snapshot?.entry.name).toBe("next_open");
+    expect(snapshot?.exits.map((exit) => exit.name)).toEqual(["target", "time"]);
     expect(snapshot).not.toHaveProperty("trades");
   });
 
@@ -26,6 +28,14 @@ describe("runKey", () => {
     expect(runKey(makeRun(1, { params: { ...run.params, oversold: 15 } }))).not.toBe(runKey(run));
     expect(runKey(makeRun(1, { config: { ...run.config, atr_mult: 3 } }))).not.toBe(runKey(run));
     expect(runKey(makeRun(1, { end: "2026-10-14" }))).not.toBe(runKey(run));
+  });
+
+  it("tells runs apart by their entry and exit rules", () => {
+    const run = makeRun(1);
+    expect(runKey(makeRun(1, { entry: appliedRule(entryRules[2]!) }))).not.toBe(runKey(run));
+    expect(runKey(makeRun(1, { exits: [appliedRule(exitRules[0]!, { target_r: 3 }), run.exits[1]!] }))).not.toBe(runKey(run));
+    expect(runKey(makeRun(1, { exits: [run.exits[0]!] }))).not.toBe(runKey(run));
+    expect(runKey(makeRun(1, { entry: { ...run.entry, description: "other words" } }))).toBe(runKey(run));
   });
 });
 
@@ -64,6 +74,20 @@ describe("runs file", () => {
     expect(decoded).toEqual({ ...run, equity: run.equity.map((point) => ({ ...point, value: Math.round(point.value * 100) / 100 })) });
   });
 
+  it("upgrades version 1 runs, whose target and time exit were settings", () => {
+    const { entry: _entry, exits: _exits, ...current } = encodeRuns([makeRun(1)]).runs[0]!;
+    const { entry: _a, entryParams: _b, exits: _c, exitParams: _d, ...oldForm } = current.form;
+    const v1 = { ...current, config: { ...current.config, target_r: 3, max_hold_bars: 20 }, form: { ...oldForm, settings: { backtest: { target_r: 3 } } } };
+    const [run] = decodeRuns({ version: 1, runs: [v1] });
+
+    expect(run!.config).not.toHaveProperty("target_r");
+    expect(run!.config).not.toHaveProperty("max_hold_bars");
+    expect(run!.entry).toEqual(appliedRule(entryRules[0]!));
+    expect(run!.exits).toEqual([appliedRule(exitRules[0]!, { target_r: 3 }), appliedRule(exitRules[1]!)]);
+    expect(run!.form).toMatchObject({ settings: {}, entry: "next_open", entryParams: {}, exits: ["target", "time"], exitParams: { target: { target_r: 3 } } });
+    expect(runKey(run!)).toBe(runKey(makeRun(1, { exits: [appliedRule(exitRules[0]!, { target_r: 3 }), appliedRule(exitRules[1]!)] })));
+  });
+
   it("drops fields it does not know", () => {
     const file = encodeRuns([makeRun(1)]);
     const [decoded] = decodeRuns({ ...file, runs: [{ ...file.runs[0], extra: "x" }] });
@@ -74,16 +98,17 @@ describe("runs file", () => {
     ["not JSON", "{", "The file is not valid JSON"],
     ["another file", JSON.stringify({ hello: 1 }), "This is not a tradescan runs file"],
     ["a newer version", JSON.stringify({ version: 99, runs: [] }), "Unsupported runs file version: 99"],
-    ["a run without metrics", JSON.stringify({ version: 1, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], metrics: null }] }), 'Run 1 has an invalid "metrics"'],
-    ["a slot out of range", JSON.stringify({ version: 1, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], slot: 9 }] }), 'Run 1 has an invalid "slot"'],
+    ["a run without metrics", JSON.stringify({ version: 2, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], metrics: null }] }), 'Run 1 has an invalid "metrics"'],
+    ["a slot out of range", JSON.stringify({ version: 2, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], slot: 9 }] }), 'Run 1 has an invalid "slot"'],
     [
       "uneven equity arrays",
-      JSON.stringify({ version: 1, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], equity: { time: ["2020-01-01"], value: [] } }] }),
+      JSON.stringify({ version: 2, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], equity: { time: ["2020-01-01"], value: [] } }] }),
       'Run 1 has an invalid "equity"',
     ],
+    ["a bad rule", JSON.stringify({ version: 2, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], exits: [{ name: "target" }] }] }), 'Run 1 has an invalid "exits"'],
     [
       "a bad form value",
-      JSON.stringify({ version: 1, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], form: { ...backtestForm, settings: { risk: { atr_mult: "3" } } } }] }),
+      JSON.stringify({ version: 2, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], form: { ...backtestForm, settings: { risk: { atr_mult: "3" } } } }] }),
       'Run 1 has an invalid "form"',
     ],
   ])("rejects %s", (_, content, message) => {

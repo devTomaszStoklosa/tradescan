@@ -11,6 +11,7 @@ from tradescan.api import schemas
 from tradescan.backtest.base import Trade
 from tradescan.backtest.edge import EdgeStats
 from tradescan.backtest.metrics import Metrics
+from tradescan.backtest.rules import Rule
 from tradescan.config import SettingsSection
 from tradescan.params import ParamSpec, parameters_of
 from tradescan.regime import MarketRegime
@@ -67,8 +68,23 @@ def section_out(section: SettingsSection) -> schemas.SettingsSectionOut:
     )
 
 
-def signal_params(signal: Signal) -> dict[str, float | list[float]]:
+def signal_params(signal: Signal | Rule) -> dict[str, float | list[float]]:
+    """Current parameter values of a signal or rule."""
     return {spec.name: _value(spec.default) for spec in parameters_of(signal)}  # type: ignore[misc]
+
+
+def rule_out(rule: type[Rule]) -> schemas.RuleOut:
+    return schemas.RuleOut(
+        name=rule.name,
+        label=rule.label,
+        description=rule().describe(),
+        template=rule.description,
+        params=[param_spec_out(spec) for spec in rule.parameters()],
+    )
+
+
+def applied_rule_out(rule: Rule) -> schemas.AppliedRuleOut:
+    return schemas.AppliedRuleOut(name=rule.name, label=rule.label, description=rule.describe(), params=signal_params(rule))
 
 
 def signal_out(signal: Signal, scorer: Scorer) -> schemas.SignalOut:
@@ -238,12 +254,12 @@ def backtest_out(report: BacktestReport) -> schemas.BacktestOut:
             lot_size=config.lot_size,
             atr_period=config.atr_period,
             atr_mult=config.atr_mult,
-            target_r=config.target_r,
-            max_hold_bars=config.max_hold_bars,
             commission_pct=config.commission_pct,
             slippage_pct=config.slippage_pct,
             bars_per_year=config.bars_per_year,
         ),
+        entry=applied_rule_out(report.rules.entry),
+        exits=[applied_rule_out(rule) for rule in report.rules.exits],
         buy_hold=points(buy_hold),
         runs=[
             schemas.EngineRunOut(

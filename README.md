@@ -42,8 +42,9 @@ the built UI. The screens:
 - **Scanner**: market regime, ranked setups, CSV export; click a row for a candlestick chart with
   signal markers and stop/target lines, the risk plan, the score breakdown and each fired signal's
   history on that ticker.
-- **Backtest**: one signal on one ticker with either or both engines; the signal's parameters and all
-  trade rules are editable; key metrics, equity vs. buy & hold, trades on the chart and in a sortable table.
+- **Backtest**: one signal on one ticker with either or both engines; pick the entry (next open, stop
+  or limit order) and the exits (target, time exit) on top of the ATR stop; the signal's and the rules'
+  parameters are editable; key metrics, equity vs. buy & hold, trades on the chart and in a sortable table.
 - **Edge**: signal statistics across a watchlist at several horizons, coloured by edge.
 - **Compare**: backtest runs pinned with **Pin run** on the Backtest page, side by side: the parameters
   that differ, every metric with the best value highlighted, and the return curves on one chart.
@@ -89,6 +90,7 @@ tradescan scan -w wig20 --direction long --top 10
 tradescan scan -t AAPL,MSFT,PKO.WA --fresh 1 --export exports/hits.csv
 tradescan edge -w etf --family breakout,trend --min-events 30
 tradescan backtest SPY donchian_breakout --engine both
+tradescan backtest SPY connors_rsi2_long --entry limit --exits time --max-hold 5
 tradescan scan -w crypto --lot-size 0.0001
 tradescan update-universes
 ```
@@ -98,7 +100,7 @@ tradescan update-universes
 | `scan` | Signals that fired within the last `--fresh` bars, scored and ranked, with stop/target/size and the edge of the most recent signal on that ticker. |
 | `market` | Regime label (risk-on / neutral / risk-off) from the benchmark trend and watchlist breadth. |
 | `edge` | For each signal, pooled across the watchlist: events, win rate, average and edge vs. baseline at several horizons. |
-| `backtest` | One signal on one ticker with the pandas engine, Cerebro, or `both` side by side. |
+| `backtest` | One signal on one ticker with the pandas engine, Cerebro, or `both` side by side. `--entry` picks the entry rule, `--exits` the exit rules (`none` keeps only the stop). |
 | `list-signals` | All signals with family, direction, scoring weight and rule. |
 | `update-universes` | Refresh the `sp500` and `nasdaq100` watchlists from Wikipedia's constituent tables (`--only sp500`). |
 | `serve` | Web UI and HTTP API. |
@@ -143,14 +145,27 @@ of that risk. Size risks `risk_pct` of equity at the stop, capped at `max_positi
 **Edge.** Return from the next bar's open to the close `h` bars after each past event, in the
 signal's direction, compared with the same measure over all bars ("vs base").
 
-**Backtests.** Both engines use the same rules:
+**Backtests.** A backtest combines one entry rule with any number of exit rules on top of an initial
+ATR stop. Both engines read the same precomputed levels and execute them the same way:
 
-- a signal on bar t buys/sells at the open of bar t+1, sized from equity at bar t;
-- stop and target come from the signal bar's close and ATR;
-- stop and target are checked from the bar after the entry bar (as backtrader's bracket orders do);
-  if both are touched on the same bar the stop wins; a gap through a level fills at the open;
-- a time exit fills at the open `max_hold_bars` bars after entry;
-- commission and slippage are percentages, slippage never moves a fill outside the bar's range.
+| Entry | Order placed when the signal fires on bar t | Stop and target measured from |
+| --- | --- | --- |
+| `next_open` (default) | market order for the open of bar t+1 | the signal bar's close |
+| `stop` | buy-stop `offset_atr` ATRs above bar t's high (sell-stop below its low for shorts), active `valid_bars` bars | the order level |
+| `limit` | buy-limit `offset_atr` ATRs below bar t's close (sell-limit above it for shorts), active `valid_bars` bars | the order level |
+
+| Exit | Closes the trade |
+| --- | --- |
+| initial stop (always on) | at `atr_mult` x ATR from the reference price; it sizes the trade and defines 1R |
+| `target` (default) | with a limit order `target_r` R from the reference price |
+| `time` (default) | at the open `max_hold_bars` bars after the entry bar |
+
+- the size risks `risk_pct` of equity at bar t at the initial stop; signals are ignored while an entry
+  order waits or a position is open, and an order that does not fill in time is cancelled;
+- exit orders are placed on the entry bar and checked from the next bar (as backtrader's bracket orders
+  are); if a bar touches both the stop and the target, the stop wins; a gap through a level fills at the open;
+- commission and slippage are percentages; slippage never moves a fill outside the bar's range, and a
+  limit order never fills worse than its level.
 
 Metrics: total return, CAGR, Sharpe, Sortino, max drawdown, win rate, profit factor, expectancy in R,
 SQN, exposure, buy & hold.
@@ -165,15 +180,18 @@ Data is cached as Parquet in `.cache/` for `cache_ttl_hours`; use `--no-cache` t
 ## Parameters
 
 Every number that changes a result is a declared parameter with a default, an allowed range and a
-label: the settings of all 30 signals (periods, thresholds, multipliers) and the settings sections
-`account`, `risk`, `scan`, `scoring`, `trend`, `regime` and `backtest`. `settings.toml` holds the
-defaults; a single run can override any of them without touching the file:
+label: the settings of all 30 signals (periods, thresholds, multipliers), of the backtest's entry and
+exit rules, and the settings sections `account`, `risk`, `scan`, `scoring`, `trend`, `regime` and
+`backtest`. `settings.toml` holds the defaults of the settings sections, the code those of signals and
+rules; a single run can override any of them without touching the file:
 
 - in the web UI, where changed values are highlighted, kept in the URL and checked against their range;
 - through the API: `"settings": {"risk": {"atr_mult": 3}}` and
   `"signal_params": {"connors_rsi2_long": {"oversold": 15}}` (a backtest takes its signal's values as
-  `"params"`); `/api/config` and `/api/signals` list every parameter with its range;
-- on the CLI, through the existing flags (`--atr-mult`, `--fresh`, `--equity`, ...).
+  `"params"`, and its rules as `"entry": {"name": "limit", "params": {"offset_atr": 1}}` and
+  `"exits": [{"name": "target", "params": {"target_r": 3}}]`); `/api/config` lists the settings and
+  the rules, `/api/signals` the signals, each parameter with its range;
+- on the CLI, through the existing flags (`--atr-mult`, `--fresh`, `--equity`, `--target-r`, ...).
 
 Values outside the range, unknown names and anything that is not a parameter (paths, cache settings)
 are refused. Signal descriptions are filled in from the values in use, so "RSI(3) < 15" always
@@ -207,6 +225,12 @@ The code follows SOLID; each extension point is a new class, not an edit to exis
           return inside.shift(1, fill_value=False) & (df["close"] > level)
   ```
 
+- **New entry or exit rule:** subclass `EntryRule` (in `backtest/entries.py`) and return the order type
+  and level for every bar from `orders`, or subclass `ExitRule` (in `backtest/exits.py`) and return a
+  tracker from `prepare` that names, at every close, the stop level, target level or exit at the next
+  open it wants. Register it with `@entry_rules.register` or `@exit_rules.register` and declare its
+  numbers with `param(...)`. Both engines, the API, the CLI and the UI pick it up, and the engine-parity
+  test runs it on both engines.
 - **New data source:** implement the `DataProvider` protocol (`history(tickers, period, interval)`);
   `CachedProvider` wraps any provider.
 - **New backtest engine:** implement `BacktestEngine.run` and add it to `default_engines()` in

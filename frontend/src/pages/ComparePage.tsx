@@ -30,7 +30,7 @@ export function ComparePage() {
   const fileInput = useRef<HTMLInputElement>(null);
 
   const visible = useMemo(() => runs.filter((run) => !run.hidden), [runs]);
-  const rows = useMemo(() => parameterRows(visible, config.data?.sections, signals.data), [visible, config.data, signals.data]);
+  const rows = useMemo(() => parameterRows(visible, config.data?.sections, signals.data, config.data), [visible, config.data, signals.data]);
   const columns = useMemo(() => visible.map((run) => ({ key: run.id, header: <RunLabel run={run} />, metrics: run.metrics })), [visible]);
   const series = useMemo<EquitySeries[]>(
     () => visible.map((run) => ({ label: `#${run.slot} ${run.name}`, points: returnCurve(run.equity), colorVar: runColorVar(run) })),

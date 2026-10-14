@@ -9,6 +9,8 @@ from typing import ClassVar
 import numpy as np
 import pandas as pd
 
+from tradescan.backtest.exits import ExitOrders, ExitRule, TrackerFactory
+from tradescan.backtest.rules import Bars
 from tradescan.signals.base import Direction, Family, Signal
 
 
@@ -72,6 +74,52 @@ class FixedSignal(Signal):
         flags = np.zeros(len(df), dtype=bool)
         flags[list(self.positions)] = True
         return pd.Series(flags, index=df.index)
+
+
+@dataclass(frozen=True)
+class RatchetStop(ExitRule):
+    """Test exit: a stop that follows the close at `atr_mult` ATRs and only tightens. Proves moving stops work."""
+
+    atr_mult: float = 1.5
+    name: ClassVar[str] = "test_ratchet"
+    label: ClassVar[str] = "Ratchet stop"
+    description: ClassVar[str] = "test only"
+
+    def prepare(self, bars: Bars, direction: Direction) -> TrackerFactory:
+        return lambda trade: _Ratchet(bars, direction.sign, self.atr_mult, trade.stop)
+
+
+class _Ratchet:
+    def __init__(self, bars: Bars, sign: float, atr_mult: float, initial: float) -> None:
+        self._bars, self._sign, self._atr_mult, self.level = bars, sign, atr_mult, initial
+
+    def orders(self, index: int) -> ExitOrders:
+        candidate = self._bars.close[index] - self._sign * self._atr_mult * self._bars.atr[index]
+        if self._sign * (candidate - self.level) > 0:
+            self.level = float(candidate)
+        return ExitOrders(stop=self.level, stop_reason="trailing")
+
+
+@dataclass(frozen=True)
+class AdverseCloseExit(ExitRule):
+    """Test exit: leave at the next open after a close against the position. Proves exits at the open work."""
+
+    name: ClassVar[str] = "test_adverse_close"
+    label: ClassVar[str] = "Adverse close"
+    description: ClassVar[str] = "test only"
+
+    def prepare(self, bars: Bars, direction: Direction) -> TrackerFactory:
+        return lambda trade: _AdverseClose(bars.close, direction.sign)
+
+
+@dataclass(frozen=True)
+class _AdverseClose:
+    close: np.ndarray
+    sign: float
+
+    def orders(self, index: int) -> ExitOrders:
+        against = self.sign * (self.close[index] - self.close[index - 1]) < 0
+        return ExitOrders(at_open="signal") if against else ExitOrders()
 
 
 class FakeProvider:

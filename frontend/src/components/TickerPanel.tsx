@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router";
 
 import type { ChartIn, EdgeIn, HitOut } from "../api/client";
-import { useChart, useEdge } from "../api/hooks";
+import { useChart, useConfig, useEdge } from "../api/hooks";
 import { fmtNumber, fmtPct, fmtPrice, fmtSigned, fmtSize, tone } from "../lib/format";
 import { BACKTEST_FIELDS } from "../lib/choices";
 import { pickFields, pickOwners, type Overrides } from "../lib/overrides";
 import { writeBacktestForm } from "../lib/params";
+import { defaultRules } from "../lib/rules";
 import { PriceChart, type ChartMarker, type PriceLevel } from "./charts/PriceChart";
 import { EdgeTable } from "./EdgeTable";
 import { SignalChip } from "./SignalChip";
@@ -41,6 +42,7 @@ export function TickerPanel({
     [hit, signals, params],
   );
   const edge = useEdge(edgeBody);
+  const defaults = useConfig().data; // loaded by the scan page already; backtest links use its default trade rules
 
   useEffect(() => {
     closeButton.current?.focus();
@@ -146,24 +148,29 @@ export function TickerPanel({
         <section>
           <h3 className="mb-2 text-sm font-semibold">Fired signals: history on {hit.ticker}</h3>
           <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
-            {hit.fired.map((item) => (
-              <Link
-                key={item.name}
-                className="inline-flex items-center gap-1 rounded-md hover:opacity-80"
-                to={`/backtest?${writeBacktestForm({
-                  ticker: hit.ticker,
-                  signal: item.name,
-                  engines: ["vectorized"],
-                  period: "",
-                  settings: pickFields(settings, BACKTEST_FIELDS), // the scan's ATR stop rule
-                  signalParams: signalParams[item.name] ?? {},
-                })}`}
-                title={`Backtest ${item.name} on ${hit.ticker}`}
-              >
-                <SignalChip name={item.name} family={item.family} />
-                <span className="text-xs text-accent">backtest →</span>
-              </Link>
-            ))}
+            {defaults &&
+              hit.fired.map((item) => (
+                <Link
+                  key={item.name}
+                  className="inline-flex items-center gap-1 rounded-md hover:opacity-80"
+                  to={`/backtest?${writeBacktestForm(
+                    {
+                      ticker: hit.ticker,
+                      signal: item.name,
+                      engines: ["vectorized"],
+                      period: "",
+                      settings: pickFields(settings, BACKTEST_FIELDS), // the scan's ATR stop rule
+                      signalParams: signalParams[item.name] ?? {},
+                      ...defaultRules(defaults),
+                    },
+                    defaults,
+                  )}`}
+                  title={`Backtest ${item.name} on ${hit.ticker}`}
+                >
+                  <SignalChip name={item.name} family={item.family} />
+                  <span className="text-xs text-accent">backtest →</span>
+                </Link>
+              ))}
           </div>
           {edge.isLoading && <Loading message="Computing historical edge…" />}
           {edge.isError && <ErrorBox error={edge.error} onRetry={() => edge.refetch()} />}

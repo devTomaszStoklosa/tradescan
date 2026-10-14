@@ -5,11 +5,15 @@ from pathlib import Path
 import pytest
 from synthetic import random_walk
 
+from tradescan.backtest.entries import entry_rules
+from tradescan.backtest.exits import exit_rules
+from tradescan.backtest.trade_rules import RuleCatalog, RuleChoice, TradeRules
 from tradescan.config import Settings, adjustable_sections, load_settings
 from tradescan.params import ParamKind, parameters_of, validate, with_overrides
 from tradescan.signals import Family, default_registry
 
 ALL_SIGNALS = default_registry.names()
+ALL_RULES = [*entry_rules.classes(), *exit_rules.classes()]
 
 # Numeric settings that never change a result, so they are deliberately not adjustable per run.
 NOT_PARAMETERS = {("data", "cache_ttl_hours")}
@@ -52,18 +56,31 @@ def test_every_result_setting_is_a_declared_parameter():
         _assert_numeric_fields_declared(getattr(settings, item.name), item.name, skip=NOT_PARAMETERS)
 
 
-@pytest.mark.parametrize("name", ALL_SIGNALS)
-def test_descriptions_show_every_parameter_in_a_format_the_ui_renders(name):
-    signal = default_registry.create(name)
-    placeholders = PLACEHOLDER.findall(signal.description)
-    kinds = {spec.name: spec.kind for spec in signal.parameters()}
+@pytest.mark.parametrize("rule", ALL_RULES, ids=lambda rule: rule.name)
+def test_every_entry_and_exit_rule_setting_is_a_declared_parameter(rule):
+    _assert_numeric_fields_declared(rule(), rule.name)
+
+
+def _assert_description_shows_every_parameter(obj, name):
+    placeholders = PLACEHOLDER.findall(obj.description)
+    kinds = {spec.name: spec.kind for spec in obj.parameters()}
     assert {key for key, _ in placeholders} == set(kinds)
     for key, format_spec in placeholders:
         # Python prints 2.0 as "2.0" but the UI as "2", so floats need "g" (or ".0%") to read the same in both.
         allowed = {"g", ".0%"} if kinds[key] is ParamKind.FLOAT else {""}
         assert format_spec in allowed, f"{name}: {{{key}:{format_spec}}}"
-    text = signal.describe()
+    text = obj.describe()
     assert "{" not in text and "}" not in text
+
+
+@pytest.mark.parametrize("name", ALL_SIGNALS)
+def test_descriptions_show_every_parameter_in_a_format_the_ui_renders(name):
+    _assert_description_shows_every_parameter(default_registry.create(name), name)
+
+
+@pytest.mark.parametrize("rule", ALL_RULES, ids=lambda rule: rule.name)
+def test_rule_descriptions_show_every_parameter_in_a_format_the_ui_renders(rule):
+    _assert_description_shows_every_parameter(rule(), rule.name)
 
 
 # --- Overrides -----------------------------------------------------------------------------------
@@ -147,6 +164,28 @@ def test_sections_publish_the_configured_values_as_defaults():
     sections = {section.name: {spec.name: spec for spec in section.parameters} for section in adjustable_sections(settings)}
     assert sections["risk"]["atr_mult"].default == 3.0
     assert "data" not in sections
+
+
+def test_rule_catalog_builds_validated_rules():
+    catalog = RuleCatalog()
+    assert catalog.build() == TradeRules()
+    rules = catalog.build(RuleChoice("stop", {"offset_atr": 0.25}), [RuleChoice("target", {"target_r": 3})])
+    assert rules.entry.offset_atr == 0.25 and [rule.target_r for rule in rules.exits] == [3.0]
+    assert catalog.build(exits=[]).exits == ()
+    for entry, exits, message in [
+        (RuleChoice("nope"), None, "Unknown entry rule 'nope'. Use: next_open, stop, limit"),
+        (None, [RuleChoice("nope")], "Unknown exit rule"),
+        (RuleChoice("limit", {"valid_bars": 21}), None, "between 1 and 20"),
+        (RuleChoice("next_open", {"offset_atr": 1}), None, "unknown or fixed"),
+        (None, [RuleChoice("time"), RuleChoice("time")], "more than once"),
+    ]:
+        with pytest.raises(ValueError, match=message):
+            catalog.build(entry, exits)
+
+
+def test_old_target_and_time_settings_are_gone():
+    with pytest.raises(ValueError, match="target_r"):
+        Settings().with_overrides({"backtest": {"target_r": 3}})
 
 
 def test_parameters_change_signal_events():

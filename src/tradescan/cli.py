@@ -10,6 +10,7 @@ from pathlib import Path
 import pandas as pd
 from rich.console import Console
 
+from tradescan.backtest.trade_rules import RuleChoice, default_catalog
 from tradescan.config import Settings, load_settings
 from tradescan.data.provider import DataProvider
 from tradescan.parallel import ProcessRunner
@@ -42,6 +43,8 @@ from tradescan.watchlist import Watchlist, from_tickers, load_watchlist
 Handler = Callable[[argparse.Namespace, Settings, ConsoleReport], int]
 
 ENGINE_CHOICES = [*default_engines(), "both"]
+# Exit parameters with their own flags: flag attribute -> (exit rule, parameter).
+EXIT_FLAGS = {"target_r": ("target", "target_r"), "max_hold": ("time", "max_hold_bars")}
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
@@ -83,6 +86,23 @@ def _overrides(sections: dict[str, dict[str, float | None]]) -> dict[str, dict[s
         if given:
             result[section] = given
     return result
+
+
+def _exits(args: argparse.Namespace) -> tuple[RuleChoice, ...]:
+    """The exit rules from `--exits` (default exits when not given, `none` for the stop only) and their flags."""
+    if args.exits is None:
+        names = list(default_catalog.default_exits)
+    else:
+        names = [name for name in _split(args.exits) if name != "none"]
+    params: dict[str, dict[str, float]] = {}
+    for attribute, (rule, name) in EXIT_FLAGS.items():
+        value = getattr(args, attribute)
+        if value is None:
+            continue
+        if rule not in names:
+            raise ValueError(f"--{attribute.replace('_', '-')} sets the {rule} exit, which --exits leaves out")
+        params.setdefault(rule, {})[name] = value
+    return tuple(RuleChoice(name, params.get(name, {})) for name in names)
 
 
 def _split(value: str | None) -> list[str]:
@@ -191,25 +211,23 @@ def cmd_backtest(args: argparse.Namespace, settings: Settings, report: ConsoleRe
                 {
                     "account": _account(args),
                     "risk": {"atr_mult": args.atr_mult},
-                    "backtest": {
-                        "target_r": args.target_r,
-                        "max_hold_bars": args.max_hold,
-                        "commission_pct": args.commission_pct,
-                        "slippage_pct": args.slippage_pct,
-                    },
+                    "backtest": {"commission_pct": args.commission_pct, "slippage_pct": args.slippage_pct},
                 }
             ),
+            entry=RuleChoice(args.entry) if args.entry else None,
+            exits=_exits(args),
             period=args.period,
             interval=args.interval,
         )
     )
-    config, signal = result.config, result.signal
+    config, signal, rules = result.config, result.signal, result.rules
+    exits = "; ".join(rule.describe() for rule in rules.exits) or "none"
     report.frame(
         metrics_to_frame(result.runs),
         title=f"{result.ticker} {signal.name} ({signal.direction.value}), "
         f"{result.close.index[0].date()} to {result.close.index[-1].date()}",
-        caption=f"stop {config.atr_mult:g} ATR, target {config.target_r:g}R, time exit {config.max_hold_bars} bars, "
-        f"risk {config.risk_pct:g}%/trade, costs {config.commission_pct:g}% + {config.slippage_pct:g}% slippage",
+        caption=f"entry: {rules.entry.describe()}. Stop {config.atr_mult:g} ATR, exits: {exits}. "
+        f"Risk {config.risk_pct:g}%/trade, costs {config.commission_pct:g}% + {config.slippage_pct:g}% slippage",
         show_index=True,
     )
     first = result.runs[0].result
@@ -351,9 +369,15 @@ def build_parser() -> argparse.ArgumentParser:
     backtest.add_argument("--engine", choices=ENGINE_CHOICES, default="vectorized")
     _add_data_args(backtest)
     _add_account_args(backtest)
+    backtest.add_argument("--entry", choices=default_catalog.entries.names(), help=f"entry order (default {default_catalog.default_entry})")
+    backtest.add_argument(
+        "--exits",
+        help=f"exit rules on top of the stop, comma separated ({', '.join(default_catalog.exits.names())}); "
+        f"'none' keeps only the stop (default {','.join(default_catalog.default_exits)})",
+    )
     backtest.add_argument("--atr-mult", type=float, help="stop distance in ATRs")
-    backtest.add_argument("--target-r", type=float, help="target as a multiple of the risk")
-    backtest.add_argument("--max-hold", type=int, help="time exit after N bars")
+    backtest.add_argument("--target-r", type=float, help="target as a multiple of the risk (target exit)")
+    backtest.add_argument("--max-hold", type=int, help="time exit after N bars (time exit)")
     backtest.add_argument("--commission-pct", type=float)
     backtest.add_argument("--slippage-pct", type=float)
     backtest.add_argument("--trades", type=int, default=10, help="recent trades to show")
