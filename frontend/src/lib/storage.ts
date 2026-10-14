@@ -10,11 +10,14 @@ export function readStorage<T>(key: string, fallback: T): T {
   }
 }
 
-export function writeStorage<T>(key: string, value: T): void {
+/** False when the value could not be saved (storage full or blocked). */
+export function writeStorage<T>(key: string, value: T): boolean {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    return true;
   } catch {
     // Not persisted; the in-memory value still applies for this session.
+    return false;
   }
 }
 

@@ -1,21 +1,35 @@
+import type { ReactNode } from "react";
+
 import type { BacktestOut, EngineRunOut, MetricsOut, TradeOut } from "../api/client";
+import { bestIndexes, metricValue, type MetricKey } from "../lib/compare";
 import { fmtNumber, fmtPct, fmtPrice, fmtSigned, fmtSize, tone } from "../lib/format";
 import { DataTable, type Column } from "./DataTable";
 import { StatTile } from "./ui";
 
-type MetricKey = Exclude<keyof MetricsOut, "profit_factor_infinite">;
+interface Metric {
+  key: MetricKey;
+  label: string;
+  format: (metrics: MetricsOut) => string;
+  /** Higher is better (drawdown is negative, so the value closest to zero ranks first). Unranked metrics only describe the run. */
+  ranked?: boolean;
+}
 
-const METRICS: { key: MetricKey; label: string; format: (metrics: MetricsOut) => string }[] = [
-  { key: "total_return_pct", label: "Total return", format: (m) => fmtPct(m.total_return_pct, 2, true) },
-  { key: "cagr_pct", label: "CAGR", format: (m) => fmtPct(m.cagr_pct, 2, true) },
-  { key: "max_drawdown_pct", label: "Max drawdown", format: (m) => fmtPct(m.max_drawdown_pct, 2) },
-  { key: "sharpe", label: "Sharpe", format: (m) => fmtNumber(m.sharpe) },
-  { key: "sortino", label: "Sortino", format: (m) => fmtNumber(m.sortino) },
+export const METRICS: Metric[] = [
+  { key: "total_return_pct", label: "Total return", format: (m) => fmtPct(m.total_return_pct, 2, true), ranked: true },
+  { key: "cagr_pct", label: "CAGR", format: (m) => fmtPct(m.cagr_pct, 2, true), ranked: true },
+  { key: "max_drawdown_pct", label: "Max drawdown", format: (m) => fmtPct(m.max_drawdown_pct, 2), ranked: true },
+  { key: "sharpe", label: "Sharpe", format: (m) => fmtNumber(m.sharpe), ranked: true },
+  { key: "sortino", label: "Sortino", format: (m) => fmtNumber(m.sortino), ranked: true },
   { key: "trades", label: "Trades", format: (m) => String(m.trades) },
-  { key: "win_rate_pct", label: "Win rate", format: (m) => fmtPct(m.win_rate_pct) },
-  { key: "profit_factor", label: "Profit factor", format: (m) => (m.profit_factor_infinite ? "∞" : fmtNumber(m.profit_factor)) },
-  { key: "expectancy_r", label: "Expectancy", format: (m) => `${fmtSigned(m.expectancy_r)} R` },
-  { key: "sqn", label: "SQN", format: (m) => fmtNumber(m.sqn) },
+  { key: "win_rate_pct", label: "Win rate", format: (m) => fmtPct(m.win_rate_pct), ranked: true },
+  {
+    key: "profit_factor",
+    label: "Profit factor",
+    format: (m) => (m.profit_factor_infinite ? "∞" : fmtNumber(m.profit_factor)),
+    ranked: true,
+  },
+  { key: "expectancy_r", label: "Expectancy", format: (m) => `${fmtSigned(m.expectancy_r)} R`, ranked: true },
+  { key: "sqn", label: "SQN", format: (m) => fmtNumber(m.sqn), ranked: true },
   { key: "exposure_pct", label: "Exposure", format: (m) => fmtPct(m.exposure_pct) },
   { key: "buy_hold_pct", label: "Buy & hold", format: (m) => fmtPct(m.buy_hold_pct, 2, true) },
 ];
@@ -56,8 +70,57 @@ export function enginesAgree(runs: EngineRunOut[]): boolean {
   );
 }
 
+export interface MetricsColumn {
+  key: string;
+  header: ReactNode;
+  metrics: MetricsOut;
+}
+
+/** One column per engine or run; with `highlightBest`, the best value of each ranked metric is marked. */
+export function MetricsTable({ columns, caption, highlightBest = false }: { columns: MetricsColumn[]; caption: string; highlightBest?: boolean }) {
+  // `relative` keeps the absolutely positioned screen-reader labels inside the scroll area on narrow screens.
+  return (
+    <div className="relative overflow-x-auto rounded-xl border border-line bg-panel">
+      <table className="w-full text-sm">
+        <caption className="sr-only">{caption}</caption>
+        <thead>
+          <tr className="border-b border-line text-xs text-muted">
+            <th scope="col" className="sticky left-0 bg-panel px-3 py-2 text-left font-medium">
+              Metric
+            </th>
+            {columns.map((column) => (
+              <th key={column.key} scope="col" className="px-3 py-2 text-right font-medium">
+                {column.header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {METRICS.map((metric) => {
+            const best = highlightBest && metric.ranked ? bestIndexes(columns.map((column) => metricValue(column.metrics, metric.key))) : null;
+            return (
+              <tr key={metric.key} className="border-b border-line last:border-0">
+                <th scope="row" className="sticky left-0 bg-panel px-3 py-1.5 text-left font-normal whitespace-nowrap text-muted">
+                  {metric.label}
+                </th>
+                {columns.map((column, index) => (
+                  <td key={column.key} className={`num px-3 py-1.5 text-right whitespace-nowrap ${best?.has(index) ? "bg-up/10 font-semibold" : ""}`}>
+                    {metric.format(column.metrics)}
+                    {best?.has(index) && <span className="sr-only"> (best)</span>}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function MetricsComparison({ result }: { result: BacktestOut }) {
   const agree = enginesAgree(result.runs);
+  const columns = result.runs.map((run) => ({ key: run.engine, header: <span className="capitalize">{run.engine}</span>, metrics: run.metrics }));
   return (
     <div className="space-y-2">
       {result.runs.length > 1 && (
@@ -65,37 +128,7 @@ export function MetricsComparison({ result }: { result: BacktestOut }) {
           {agree ? "✓ Both engines produced identical results." : "Engines differ: compare the trades below."}
         </p>
       )}
-      <div className="overflow-x-auto rounded-xl border border-line bg-panel">
-        <table className="w-full text-sm">
-          <caption className="sr-only">Backtest metrics by engine</caption>
-          <thead>
-            <tr className="border-b border-line text-xs text-muted">
-              <th scope="col" className="px-3 py-2 text-left font-medium">
-                Metric
-              </th>
-              {result.runs.map((run) => (
-                <th key={run.engine} scope="col" className="px-3 py-2 text-right font-medium capitalize">
-                  {run.engine}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {METRICS.map((metric) => (
-              <tr key={metric.key} className="border-b border-line last:border-0">
-                <th scope="row" className="px-3 py-1.5 text-left font-normal text-muted">
-                  {metric.label}
-                </th>
-                {result.runs.map((run) => (
-                  <td key={run.engine} className="num px-3 py-1.5 text-right">
-                    {metric.format(run.metrics)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <MetricsTable columns={columns} caption="Backtest metrics by engine" />
     </div>
   );
 }

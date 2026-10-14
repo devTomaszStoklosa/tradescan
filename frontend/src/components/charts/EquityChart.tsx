@@ -1,7 +1,8 @@
-import { LineSeries, LineStyle, createChart, type Time } from "lightweight-charts";
+import { LineSeries, LineStyle, createChart, type PriceFormat, type Time } from "lightweight-charts";
 import { useEffect, useRef } from "react";
 
 import type { Point } from "../../api/client";
+import { fmtNumber } from "../../lib/format";
 import { useTheme } from "../../state/theme";
 import { LegendItem } from "./PriceChart";
 import { baseOptions, chartPalette } from "./theme";
@@ -16,7 +17,26 @@ export interface EquitySeries {
   axis?: "left" | "right";
 }
 
-export function EquityChart({ series, height = 300 }: { series: EquitySeries[]; height?: number }) {
+/** "price" shows whole currency units; "percent" shows returns with one decimal and a % sign. */
+export type EquityFormat = "price" | "percent";
+
+// A custom formatter for percent: the built-in "percent" type reads `precision` as a price scale and drops the decimals.
+const PRICE_FORMATS: Record<EquityFormat, PriceFormat> = {
+  price: { type: "price", precision: 0, minMove: 1 },
+  percent: { type: "custom", minMove: 0.1, formatter: (value: number) => `${fmtNumber(value, 1)}%` },
+};
+
+export function EquityChart({
+  series,
+  height = 300,
+  format = "price",
+  label = "Equity curve",
+}: {
+  series: EquitySeries[];
+  height?: number;
+  format?: EquityFormat;
+  label?: string;
+}) {
   const container = useRef<HTMLDivElement>(null);
   const { resolved } = useTheme();
 
@@ -41,7 +61,7 @@ export function EquityChart({ series, height = 300 }: { series: EquitySeries[]; 
         title: item.label,
         priceLineVisible: false,
         priceScaleId: item.axis ?? "right",
-        priceFormat: { type: "price", precision: 0, minMove: 1 },
+        priceFormat: PRICE_FORMATS[format],
       });
       line.setData(item.points.map((point) => ({ time: point.time as Time, value: point.value })));
     }
@@ -51,7 +71,7 @@ export function EquityChart({ series, height = 300 }: { series: EquitySeries[]; 
       cancelAnimationFrame(frame);
       chart.remove();
     };
-  }, [series, resolved]);
+  }, [series, resolved, format]);
 
   return (
     <div>
@@ -65,7 +85,7 @@ export function EquityChart({ series, height = 300 }: { series: EquitySeries[]; 
           />
         ))}
       </div>
-      <div ref={container} role="img" aria-label="Equity curve" style={{ height }} className="w-full overflow-hidden rounded-lg" />
+      <div ref={container} role="img" aria-label={label} style={{ height }} className="w-full overflow-hidden rounded-lg" />
     </div>
   );
 }

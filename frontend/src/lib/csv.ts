@@ -15,7 +15,12 @@ export function toCsv(rows: CsvRow[]): string {
 }
 
 export function downloadCsv(filename: string, rows: CsvRow[]): void {
-  const blob = new Blob([toCsv(rows)], { type: "text/csv;charset=utf-8" });
+  downloadFile(filename, toCsv(rows), "text/csv;charset=utf-8");
+}
+
+/** Save text as a file through the browser's download. */
+export function downloadFile(filename: string, content: string, type: string): void {
+  const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

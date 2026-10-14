@@ -45,12 +45,20 @@ the built UI. The screens:
 - **Backtest**: one signal on one ticker with either or both engines; the signal's parameters and all
   trade rules are editable; key metrics, equity vs. buy & hold, trades on the chart and in a sortable table.
 - **Edge**: signal statistics across a watchlist at several horizons, coloured by edge.
+- **Compare**: backtest runs pinned with **Pin run** on the Backtest page, side by side: the parameters
+  that differ, every metric with the best value highlighted, and the return curves on one chart.
 - **Signals**: the signal library with families, weights, rules and each parameter's default and range.
 
 Scanner and Edge have an **Advanced settings** panel with every other parameter (see
 [Parameters](#parameters)). Account size, risk per trade, max position and lot size are set from the
 header and stored in the browser. Forms, including changed parameters, live in the URL, so a scan or
 backtest can be bookmarked, shared or opened in two tabs to compare.
+
+Up to 8 runs can be pinned. A pinned run is a snapshot: it keeps the result you saw even after new bars
+arrive, and **Open in Backtest** runs it again with today's data and the account currently set in the
+header. Pinned runs live in this browser only (clearing site data deletes them), so use **Export JSON**
+as a backup or to move them to another browser, and **Import JSON** to bring them back. Runs with fewer
+than 20 trades are flagged, because their metrics are mostly noise.
 
 > The API has no authentication. `serve` binds to 127.0.0.1; do not expose it to a network.
 

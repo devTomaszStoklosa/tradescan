@@ -1,4 +1,6 @@
-import type { ConfigOut, HitOut, ParamSpecOut, ScanOut, SignalOut, WatchlistOut } from "../api/client";
+import type { BacktestOut, ConfigOut, HitOut, MetricsOut, ParamSpecOut, ScanOut, SignalOut, WatchlistOut } from "../api/client";
+import type { BacktestForm } from "../lib/params";
+import { toPinnedRun, type PinnedRun, type RunSnapshot } from "../lib/runs";
 
 export function spec(
   name: string,
@@ -153,3 +155,90 @@ export const scanResult: ScanOut = {
   fresh_bars: 3,
   edge_horizon: 10,
 };
+
+export function makeMetrics(overrides: Partial<MetricsOut> = {}): MetricsOut {
+  return {
+    total_return_pct: 12.5,
+    cagr_pct: 4.1,
+    sharpe: 0.8,
+    sortino: 1.1,
+    max_drawdown_pct: -9.3,
+    trades: 42,
+    win_rate_pct: 61.9,
+    profit_factor: 1.6,
+    profit_factor_infinite: false,
+    expectancy_r: 0.21,
+    sqn: 1.9,
+    exposure_pct: 18,
+    buy_hold_pct: 30.2,
+    ...overrides,
+  };
+}
+
+export const backtestResult: BacktestOut = {
+  ticker: "SPY",
+  signal: "connors_rsi2_long",
+  direction: "long",
+  description: "RSI(2) < 10 while price is above SMA(200): dip in an uptrend",
+  params: { rsi_period: 2, trend_period: 200, oversold: 10 },
+  start: "2016-01-04",
+  end: "2026-10-13",
+  config: {
+    initial_equity: 100000,
+    risk_pct: 1,
+    max_position_pct: 25,
+    lot_size: 1,
+    atr_period: 14,
+    atr_mult: 2,
+    target_r: 2,
+    max_hold_bars: 20,
+    commission_pct: 0.1,
+    slippage_pct: 0.05,
+    bars_per_year: 252,
+  },
+  buy_hold: [
+    { time: "2016-01-04", value: 100000 },
+    { time: "2026-10-13", value: 130200 },
+  ],
+  runs: [
+    {
+      engine: "vectorized",
+      metrics: makeMetrics(),
+      equity: [
+        { time: "2016-01-04", value: 100000 },
+        { time: "2021-06-01", value: 105000.123 },
+        { time: "2026-10-13", value: 112500 },
+      ],
+      trades: [],
+    },
+  ],
+};
+
+export const backtestForm: BacktestForm = {
+  ticker: "SPY",
+  signal: "connors_rsi2_long",
+  engines: ["vectorized"],
+  period: "",
+  settings: {},
+  signalParams: {},
+};
+
+/** A pinned run of `backtestResult`, changed by `overrides`, with a fixed slot. */
+export function makeRun(slot: number, overrides: Partial<RunSnapshot> = {}, extra: Partial<PinnedRun> = {}): PinnedRun {
+  const snapshot: RunSnapshot = {
+    ticker: backtestResult.ticker,
+    signal: backtestResult.signal,
+    direction: backtestResult.direction,
+    description: backtestResult.description,
+    engine: "vectorized",
+    start: backtestResult.start,
+    end: backtestResult.end,
+    params: backtestResult.params,
+    config: backtestResult.config,
+    metrics: makeMetrics(),
+    equity: backtestResult.runs[0]!.equity,
+    form: backtestForm,
+    ...overrides,
+  };
+  return { ...toPinnedRun(snapshot, new Date("2026-10-14T09:00:00Z")), id: `run-${slot}`, slot, ...extra };
+}

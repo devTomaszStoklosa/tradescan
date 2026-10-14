@@ -40,6 +40,15 @@
   --fam-mean_reversion: #0e7490;
   --fam-volume: #be185d;
   --fam-pattern: #475569;
+  /* Pinned runs, by slot. The order keeps neighbours apart for colour-blind readers; checked against the panel colour. */
+  --run-1: #2a78d6;
+  --run-2: #eb6834;
+  --run-3: #1baf7a;
+  --run-4: #eda100;
+  --run-5: #e87ba4;
+  --run-6: #008300;
+  --run-7: #4a3aa7;
+  --run-8: #e34948;
 }
 
 :root[data-theme="dark"] {
@@ -65,6 +74,14 @@
   --fam-mean_reversion: #22d3ee;
   --fam-volume: #f472b6;
   --fam-pattern: #94a3b8;
+  --run-1: #3987e5;
+  --run-2: #d95926;
+  --run-3: #199e70;
+  --run-4: #c98500;
+  --run-5: #d55181;
+  --run-6: #008300;
+  --run-7: #9085e9;
+  --run-8: #e66767;
 }
 
 html,
