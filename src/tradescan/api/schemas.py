@@ -70,12 +70,21 @@ class EdgeIn(UniverseIn, SignalFilterIn):
     period: str | None = None
 
 
+class RuleIn(_Request):
+    name: str = Field(description="Rule name; /api/config lists the entry and exit rules")
+    params: SignalParamsIn = Field(default_factory=dict, description="The rule's parameters, e.g. {\"target_r\": 3}")
+
+
 class BacktestIn(_Request):
     ticker: str = Field(min_length=1)
     signal: str
     engines: list[str] = Field(default_factory=lambda: ["vectorized"], min_length=1)
     params: SignalParamsIn = Field(default_factory=dict, description="The signal's parameters, e.g. {\"period\": 30}")
     settings: SettingsIn = _SETTINGS
+    entry: RuleIn | None = Field(None, description="Entry rule; omit for the default entry")
+    exits: list[RuleIn] | None = Field(
+        None, description="Exit rules on top of the initial stop; omit for the default exits, [] for the stop only"
+    )
     period: str | None = None
 
 
@@ -124,6 +133,14 @@ class SignalOut(BaseModel):
     params: list[ParamSpecOut]
 
 
+class RuleOut(BaseModel):
+    name: str
+    label: str
+    description: str = Field(description="The rule with the default parameters filled in")
+    template: str = Field(description='The rule with {parameter} placeholders; format specs "", "g" and ".0%"')
+    params: list[ParamSpecOut]
+
+
 class WatchlistOut(BaseModel):
     name: str
     tickers: list[str]
@@ -138,6 +155,10 @@ class ConfigOut(BaseModel):
     sections: list[SettingsSectionOut] = Field(description="Adjustable settings; defaults come from settings.toml")
     families: list[Family]
     engines: list[str]
+    entry_rules: list[RuleOut]
+    exit_rules: list[RuleOut]
+    default_entry: str
+    default_exits: list[str]
 
 
 class RegimeOut(BaseModel):
@@ -295,11 +316,16 @@ class BacktestConfigOut(BaseModel):
     lot_size: float
     atr_period: int
     atr_mult: float
-    target_r: float
-    max_hold_bars: int
     commission_pct: float
     slippage_pct: float
     bars_per_year: int
+
+
+class AppliedRuleOut(BaseModel):
+    name: str
+    label: str
+    description: str = Field(description="The rule with this run's parameters")
+    params: dict[str, float | list[float]] = Field(description="The rule's parameters used in this run")
 
 
 class BacktestOut(BaseModel):
@@ -311,6 +337,8 @@ class BacktestOut(BaseModel):
     start: str
     end: str
     config: BacktestConfigOut
+    entry: AppliedRuleOut
+    exits: list[AppliedRuleOut] = Field(description="Exit rules on top of the initial stop, in the order given")
     buy_hold: list[Point]
     runs: list[EngineRunOut]
 

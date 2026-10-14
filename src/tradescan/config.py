@@ -148,8 +148,6 @@ class BacktestSettings:
     period: str = "10y"
     commission_pct: float = param(0.1, minimum=0.0, maximum=5.0, step=0.01, label="Commission", unit="%")
     slippage_pct: float = param(0.05, minimum=0.0, maximum=5.0, step=0.01, label="Slippage", unit="%")
-    target_r: float = param(2.0, minimum=0.25, maximum=50.0, step=0.25, label="Target", unit="R")
-    max_hold_bars: int = param(20, minimum=1, maximum=1000, step=1, label="Time exit", unit="bars")
     bars_per_year: int = param(
         252, minimum=1, maximum=10_000, step=1, label="Bars per year", help="Annualizes CAGR, Sharpe and Sortino (365 for crypto)"
     )

@@ -4,8 +4,8 @@ Each use case takes a request dataclass and returns a report dataclass; neither 
 argparse, HTTP or rendering. `build_use_cases` wires them from settings and a data provider.
 
 Requests carry per-run overrides: `settings` ({section: {parameter: value}}) and signal parameters
-({signal name: {parameter: value}}). Both are validated against the declared ranges, and the
-configured settings are never modified.
+({signal name: {parameter: value}}); a backtest also names its entry and exit rules with their
+parameters. All are validated against the declared ranges, and the configured settings are never modified.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ import pandas as pd
 from tradescan.backtest.base import BacktestConfig, BacktestEngine, BacktestResult
 from tradescan.backtest.edge import EdgeSampler, EdgeStats, combine_samples
 from tradescan.backtest.metrics import Metrics, compute_metrics
+from tradescan.backtest.trade_rules import RuleCatalog, RuleChoice, TradeRules, default_catalog
 from tradescan.backtest.vectorized import VectorizedEngine
 from tradescan.config import Settings
 from tradescan.context import ContextBuilder
@@ -117,8 +118,6 @@ def build_backtest_config(settings: Settings) -> BacktestConfig:
         lot_size=account.lot_size,
         atr_period=risk.atr_period,
         atr_mult=risk.atr_mult,
-        target_r=backtest.target_r,
-        max_hold_bars=backtest.max_hold_bars,
         commission_pct=backtest.commission_pct,
         slippage_pct=backtest.slippage_pct,
         bars_per_year=backtest.bars_per_year,
@@ -366,6 +365,8 @@ class BacktestRequest:
     engines: tuple[str, ...] = ("vectorized",)
     params: Overrides = field(default_factory=dict)  # the signal's parameters
     settings: GroupOverrides = field(default_factory=dict)
+    entry: RuleChoice | None = None  # None: the catalog's default entry
+    exits: tuple[RuleChoice, ...] | None = None  # None: the default exits; empty: only the initial stop
     period: str | None = None
     interval: str | None = None
 
@@ -381,6 +382,7 @@ class BacktestReport:
     ticker: str
     signal: Signal
     config: BacktestConfig
+    rules: TradeRules
     close: pd.Series
     runs: list[EngineRun]
 
@@ -392,15 +394,21 @@ class BacktestUseCase:
         settings: Settings,
         registry: SignalRegistry,
         engines: Mapping[str, EngineFactory],
+        rules: RuleCatalog = default_catalog,
     ) -> None:
         self._market_data = market_data
         self._settings = settings
         self._registry = registry
         self._engines = engines
+        self._rules = rules
 
     @property
     def engine_names(self) -> list[str]:
         return list(self._engines)
+
+    @property
+    def rules(self) -> RuleCatalog:
+        return self._rules
 
     def run(self, request: BacktestRequest) -> BacktestReport:
         unknown = [name for name in request.engines if name not in self._engines]
@@ -408,6 +416,7 @@ class BacktestUseCase:
             raise ValueError(f"Unknown engine(s): {', '.join(unknown) or 'none given'}. Use: {', '.join(self._engines)}")
         settings = resolve_settings(self._settings, request.settings, self._registry)
         signal = self._registry.create(request.signal, request.params)
+        rules = self._rules.build(request.entry, request.exits)
         ticker = request.ticker.upper()
         loaded = self._market_data.load([ticker], request.period or settings.backtest.period, request.interval)
         if ticker not in loaded.frames:
@@ -417,9 +426,9 @@ class BacktestUseCase:
         config = build_backtest_config(settings)
         runs = []
         for name in request.engines:
-            result = self._engines[name]().run(ticker, df, signal, config)
+            result = self._engines[name]().run(ticker, df, signal, config, rules)
             runs.append(EngineRun(result, compute_metrics(result.equity, result.trades, df["close"], config.bars_per_year)))
-        return BacktestReport(ticker=ticker, signal=signal, config=config, close=df["close"], runs=runs)
+        return BacktestReport(ticker=ticker, signal=signal, config=config, rules=rules, close=df["close"], runs=runs)
 
 
 # ---------------------------------------------------------------------------
@@ -506,6 +515,7 @@ def build_use_cases(
     registry: SignalRegistry = default_registry,
     engines: Mapping[str, EngineFactory] | None = None,
     runner: TaskRunner | None = None,
+    rules: RuleCatalog = default_catalog,
 ) -> UseCases:
     """`runner` runs per-ticker work; pass a `ProcessRunner` to use every core on large universes."""
     market_data = MarketData(provider, settings)
@@ -514,6 +524,6 @@ def build_use_cases(
         scan=ScanUseCase(market_data, settings, registry, task_runner),
         market=MarketUseCase(market_data, settings, registry),
         edge=EdgeUseCase(market_data, settings, registry, task_runner),
-        backtest=BacktestUseCase(market_data, settings, registry, engines or default_engines()),
+        backtest=BacktestUseCase(market_data, settings, registry, engines or default_engines(), rules),
         chart=ChartUseCase(market_data, registry),
     )

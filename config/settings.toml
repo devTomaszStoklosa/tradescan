@@ -61,6 +61,5 @@ risk_off_breadth = 40.0  # risk-off needs the benchmark below SMA(slow) and brea
 period = "10y"           # history used by `backtest` and `edge`
 commission_pct = 0.1
 slippage_pct = 0.05
-target_r = 2.0
-max_hold_bars = 20
 bars_per_year = 252
+# Entry and exit rules (target, time exit, ...) and their parameters are chosen per backtest.

@@ -32,6 +32,13 @@ def test_meta_endpoints(client):
     assert sections["scoring"]["family_weights"]["keys"] == ["trend", "momentum", "breakout", "mean_reversion", "volume", "pattern"]
     assert "cache_dir" not in str(config["sections"])
     assert set(config["engines"]) == {"vectorized", "cerebro"}
+    assert [rule["name"] for rule in config["entry_rules"]] == ["next_open", "stop", "limit"]
+    assert [rule["name"] for rule in config["exit_rules"]] == ["target", "time"]
+    assert (config["default_entry"], config["default_exits"]) == ("next_open", ["target", "time"])
+    limit = config["entry_rules"][2]
+    assert [param["name"] for param in limit["params"]] == ["offset_atr", "valid_bars"]
+    assert limit["description"].startswith("Buy-limit 0.5 ATR") and "{offset_atr:g}" in limit["template"]
+    assert "target_r" not in str(config["sections"])
 
     signals = client.get("/api/signals").json()
     assert len(signals) == 30 and {"name", "family", "direction", "weight", "description", "template", "params"} <= set(signals[0])
@@ -111,6 +118,12 @@ def test_signal_parameters_change_results(client):
         ("/api/market", {"watchlist": "demo", "settings": {"regime": {"risk_off_breadth": 70}}}),
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "params": {"fast": 300}}),
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "settings": {"backtest": {"period": 5}}}),
+        ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "settings": {"backtest": {"target_r": 3}}}),
+        ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "entry": {"name": "nope"}}),
+        ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "entry": {"name": "limit", "params": {"valid_bars": 0}}}),
+        ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "exits": [{"name": "trailing"}]}),
+        ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "exits": [{"name": "time"}, {"name": "time"}]}),
+        ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "exits": [{"name": "target", "params": {"max_hold_bars": 5}}]}),
         ("/api/chart", {"ticker": "AAA", "signals": ["golden_cross"], "signal_params": {"golden_cross": {"slow": 1}}}),
     ],
 )
@@ -143,18 +156,44 @@ def test_backtest_and_chart(client):
 
 
 def test_backtest_and_chart_use_the_given_parameters(client):
-    settings = {"risk": {"atr_mult": 3}, "backtest": {"max_hold_bars": 7}, "account": {"max_position_pct": 50}}
-    body = {"ticker": "AAA", "signal": "donchian_breakout", "params": {"period": 40}, "settings": settings}
+    settings = {"risk": {"atr_mult": 3}, "account": {"max_position_pct": 50}}
+    exits = [{"name": "time", "params": {"max_hold_bars": 7}}]
+    body = {"ticker": "AAA", "signal": "donchian_breakout", "params": {"period": 40}, "settings": settings, "exits": exits}
     data = client.post("/api/backtest", json=body).json()
     assert data["params"] == {"period": 40} and "previous 40 bars" in data["description"]
     config = data["config"]
-    assert (config["atr_mult"], config["max_hold_bars"], config["max_position_pct"]) == (3, 7, 50)
+    assert (config["atr_mult"], config["max_position_pct"]) == (3, 50)
+    assert data["entry"] == {
+        "name": "next_open",
+        "label": "Next open",
+        "description": "Market order at the next open; stop and target are measured from the signal bar's close",
+        "params": {},
+    }
+    assert [(rule["name"], rule["params"]) for rule in data["exits"]] == [("time", {"max_hold_bars": 7})]
+    reasons = {trade["exit_reason"] for trade in data["runs"][0]["trades"]}
+    assert "target" not in reasons and "time" in reasons
 
     def events(params):
         body = {"ticker": "AAA", "signals": ["donchian_breakout"], "signal_params": {"donchian_breakout": params}}
         return client.post("/api/chart", json=body).json()["events"]
 
     assert 0 < len(events({"period": 60})) < len(events({}))
+
+
+def test_backtest_entry_and_exit_rules(client):
+    body = {"ticker": "AAA", "signal": "connors_rsi2_long"}
+    default = client.post("/api/backtest", json=body).json()
+    assert [rule["name"] for rule in default["exits"]] == ["target", "time"]
+    assert default["exits"][0]["description"] == "Limit order 2R from the entry reference"
+
+    entry = {"name": "limit", "params": {"offset_atr": 1, "valid_bars": 3}}
+    limit = client.post("/api/backtest", json={**body, "entry": entry, "exits": []}).json()
+    assert limit["entry"]["params"] == {"offset_atr": 1.0, "valid_bars": 3}
+    assert limit["entry"]["description"].startswith("Buy-limit 1 ATR below") and limit["exits"] == []
+    trades = limit["runs"][0]["trades"]
+    assert trades and {trade["exit_reason"] for trade in trades} <= {"stop", "open"}
+    assert all(trade["entry_date"] > trade["signal_date"] for trade in trades)
+    assert [trade["entry_date"] for trade in trades] != [trade["entry_date"] for trade in default["runs"][0]["trades"]]
 
 
 def test_static_ui_with_spa_fallback(watchlists, tmp_path):

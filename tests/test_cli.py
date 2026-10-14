@@ -57,6 +57,17 @@ def test_backtest_both_engines(provider, tmp_path):
     )
 
 
+def test_backtest_entry_and_exit_options(provider, tmp_path):
+    target = tmp_path / "trades.csv"
+    code = cli.main(["backtest", "AAA", "connors_rsi2_long", "--entry", "limit", "--exits", "time", "--max-hold", "3", "--export", str(target)])
+    assert code == 0
+    trades = pd.read_csv(target)
+    assert not trades.empty and set(trades["exit_reason"]) <= {"stop", "time", "open"}
+    assert cli.main(["backtest", "AAA", "connors_rsi2_long", "--exits", "none"]) == 0
+
+
 def test_errors_are_reported_not_raised(provider):
     assert cli.main(["backtest", "AAA", "no_such_signal"]) == 2
+    assert cli.main(["backtest", "AAA", "golden_cross", "--exits", "time", "--target-r", "3"]) == 2
+    assert cli.main(["backtest", "AAA", "golden_cross", "--exits", "trailing"]) == 2
     assert cli.main(["scan", "--watchlist", "missing-list"]) == 2

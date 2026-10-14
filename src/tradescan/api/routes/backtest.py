@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from tradescan.api import schemas
 from tradescan.api.context import ApiContext
 from tradescan.api.mappers import backtest_out
+from tradescan.backtest.trade_rules import RuleChoice
 from tradescan.services import BacktestRequest
 
 
@@ -23,9 +24,15 @@ def build_router(context: ApiContext) -> APIRouter:
                 engines=tuple(body.engines),
                 params=body.params,
                 settings=body.settings,
+                entry=_choice(body.entry) if body.entry else None,
+                exits=None if body.exits is None else tuple(_choice(rule) for rule in body.exits),
                 period=body.period,
             )
         )
         return backtest_out(report)
 
     return router
+
+
+def _choice(rule: schemas.RuleIn) -> RuleChoice:
+    return RuleChoice(name=rule.name, params=rule.params)
