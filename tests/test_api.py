@@ -25,16 +25,25 @@ def client(watchlists: Path) -> TestClient:
 def test_meta_endpoints(client):
     assert client.get("/api/health").json()["status"] == "ok"
     config = client.get("/api/config").json()
-    assert config["account"]["equity"] == 100_000
+    sections = {section["name"]: {param["name"]: param for param in section["params"]} for section in config["sections"]}
+    assert set(sections) == {"account", "risk", "scan", "scoring", "trend", "regime", "backtest"}
+    assert sections["account"]["equity"]["default"] == 100_000
+    assert sections["risk"]["targets_r"] | {"kind": "float_list", "default": [2.0, 3.0]} == sections["risk"]["targets_r"]
+    assert sections["scoring"]["family_weights"]["keys"] == ["trend", "momentum", "breakout", "mean_reversion", "volume", "pattern"]
+    assert "cache_dir" not in str(config["sections"])
     assert set(config["engines"]) == {"vectorized", "cerebro"}
+
     signals = client.get("/api/signals").json()
-    assert len(signals) == 30 and {"name", "family", "direction", "weight", "description"} <= set(signals[0])
+    assert len(signals) == 30 and {"name", "family", "direction", "weight", "description", "template", "params"} <= set(signals[0])
+    rsi2 = next(signal for signal in signals if signal["name"] == "connors_rsi2_long")
+    assert [param["name"] for param in rsi2["params"]] == ["rsi_period", "trend_period", "oversold"]
+    assert rsi2["description"].startswith("RSI(2) < 10 while") and "{oversold:g}" in rsi2["template"]
     assert client.get("/api/watchlists").json() == [{"name": "demo", "tickers": ["AAA", "BBB", "CCC"], "benchmark": "SPY"}]
 
 
 def test_scan_returns_scored_hits_without_nan(client):
-    body = {"watchlist": "demo", "fresh_bars": 10, "min_score": -10, "account": {"equity": 50_000, "risk_pct": 0.5}}
-    response = client.post("/api/scan", json=body)
+    settings = {"scan": {"fresh_bars": 10, "min_score": -10}, "account": {"equity": 50_000, "risk_pct": 0.5}}
+    response = client.post("/api/scan", json={"watchlist": "demo", "settings": settings})
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["universe"] == "demo" and data["regime"]["benchmark"] == "SPY"
@@ -44,16 +53,27 @@ def test_scan_returns_scored_hits_without_nan(client):
     assert hit["risk"]["risk_amount"] <= 50_000 * 0.005 + 1e-6
     scores = [item["score"]["total"] for item in data["hits"]]
     assert scores == sorted(scores, reverse=True)
+    assert data["fresh_bars"] == 10 and data["min_score"] == -10
 
 
 def test_scan_filters_and_validation(client):
-    long_only = client.post("/api/scan", json={"tickers": ["AAA"], "direction": "long", "min_score": -10, "fresh_bars": 20})
+    settings = {"scan": {"fresh_bars": 20, "min_score": -10}}
+    long_only = client.post("/api/scan", json={"tickers": ["AAA"], "direction": "long", "settings": settings})
     assert {hit["direction"] for hit in long_only.json()["hits"]} <= {"long"}
     assert client.post("/api/scan", json={}).status_code == 422
     assert client.post("/api/scan", json={"watchlist": "demo", "tickers": ["AAA"]}).status_code == 422
     assert client.post("/api/scan", json={"watchlist": "nope"}).status_code == 404
     assert client.post("/api/scan", json={"watchlist": "../demo"}).status_code == 404
     assert client.post("/api/scan", json={"tickers": ["AAA"], "signals": ["bogus"]}).status_code == 400
+    # Removed one-off fields are rejected rather than silently ignored; paths never parse as parameters.
+    assert client.post("/api/scan", json={"tickers": ["AAA"], "min_score": 1}).status_code == 422
+    assert client.post("/api/scan", json={"tickers": ["AAA"], "settings": {"data": {"cache_dir": "C:/"}}}).status_code == 422
+
+
+def test_scan_reports_the_weights_this_run_used(client):
+    settings = {"scan": {"fresh_bars": 30, "min_score": -10}, "scoring": {"family_weights": {"breakout": 4}}}
+    hits = client.post("/api/scan", json={"watchlist": "demo", "families": ["breakout"], "settings": settings}).json()["hits"]
+    assert hits and {item["weight"] for hit in hits for item in hit["fired"]} == {4}
 
 
 def test_market_and_edge(client):
@@ -66,6 +86,37 @@ def test_market_and_edge(client):
     assert {row["family"] for row in data["rows"]} == {"breakout"}
     assert all(len(row["stats"]) == 2 for row in data["rows"])
     assert client.post("/api/edge", json={"watchlist": "demo", "horizons": [0]}).status_code == 400
+
+
+def test_signal_parameters_change_results(client):
+    base = {"watchlist": "demo", "signals": ["connors_rsi2_long"], "horizons": [5]}
+    default = client.post("/api/edge", json=base).json()["rows"][0]
+    looser = client.post("/api/edge", json={**base, "signal_params": {"connors_rsi2_long": {"oversold": 30}}}).json()["rows"][0]
+    assert looser["stats"][0]["events"] > default["stats"][0]["events"]
+    assert looser["description"].startswith("RSI(2) < 30 while")
+
+
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("/api/edge", {"watchlist": "demo", "signal_params": {"connors_rsi2_long": {"oversold": 500}}}),
+        ("/api/edge", {"watchlist": "demo", "signal_params": {"connors_rsi2_long": {"overbought": 90}}}),
+        ("/api/edge", {"watchlist": "demo", "signal_params": {"nope": {"period": 1}}}),
+        ("/api/scan", {"watchlist": "demo", "settings": {"data": {"cache_ttl_hours": 0}}}),
+        ("/api/scan", {"watchlist": "demo", "settings": {"risk": {"atr_mult": -1}}}),
+        ("/api/scan", {"watchlist": "demo", "settings": {"risk": {"atr_period": 2.5}}}),
+        ("/api/scan", {"watchlist": "demo", "settings": {"scoring": {"signal_weights": {"nope": 1}}}}),
+        ("/api/scan", {"watchlist": "demo", "settings": {"scoring": {"family_weights": {"nope": 1}}}}),
+        ("/api/scan", {"watchlist": "demo", "settings": {"trend": {"rs_weights": [1.0]}}}),
+        ("/api/market", {"watchlist": "demo", "settings": {"regime": {"risk_off_breadth": 70}}}),
+        ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "params": {"fast": 300}}),
+        ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "settings": {"backtest": {"period": 5}}}),
+        ("/api/chart", {"ticker": "AAA", "signals": ["golden_cross"], "signal_params": {"golden_cross": {"slow": 1}}}),
+    ],
+)
+def test_invalid_overrides_are_rejected(client, path, body):
+    response = client.post(path, json=body)
+    assert response.status_code == 400, response.text
 
 
 def test_backtest_and_chart(client):
@@ -83,12 +134,27 @@ def test_backtest_and_chart(client):
     assert client.post("/api/backtest", json={"ticker": "ZZZ", "signal": "golden_cross"}).status_code == 400
     assert client.post("/api/backtest", json={"ticker": "AAA", "signal": "golden_cross", "engines": ["x"]}).status_code == 400
 
-    chart = client.get("/api/chart/AAA", params=[("signals", "golden_cross"), ("signals", "death_cross")]).json()
+    chart = client.post("/api/chart", json={"ticker": "AAA", "signals": ["golden_cross", "death_cross"]}).json()
     assert len(chart["candles"]) == 1500
     assert len(chart["sma_slow"]) == 1500 - 199
     assert {event["signal"] for event in chart["events"]} <= {"golden_cross", "death_cross"}
     times = [event["time"] for event in chart["events"]]
     assert times == sorted(times)
+
+
+def test_backtest_and_chart_use_the_given_parameters(client):
+    settings = {"risk": {"atr_mult": 3}, "backtest": {"max_hold_bars": 7}, "account": {"max_position_pct": 50}}
+    body = {"ticker": "AAA", "signal": "donchian_breakout", "params": {"period": 40}, "settings": settings}
+    data = client.post("/api/backtest", json=body).json()
+    assert data["params"] == {"period": 40} and "previous 40 bars" in data["description"]
+    config = data["config"]
+    assert (config["atr_mult"], config["max_hold_bars"], config["max_position_pct"]) == (3, 7, 50)
+
+    def events(params):
+        body = {"ticker": "AAA", "signals": ["donchian_breakout"], "signal_params": {"donchian_breakout": params}}
+        return client.post("/api/chart", json=body).json()["events"]
+
+    assert 0 < len(events({"period": 60})) < len(events({}))
 
 
 def test_static_ui_with_spa_fallback(watchlists, tmp_path):

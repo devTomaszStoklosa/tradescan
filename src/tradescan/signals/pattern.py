@@ -7,15 +7,16 @@ from dataclasses import dataclass
 import pandas as pd
 
 from tradescan.indicators import relative_volume, sma
+from tradescan.params import param
 from tradescan.signals.base import Direction, Family, Signal
 from tradescan.signals.registry import register
 
 
 @dataclass(frozen=True)
 class _GapAndGo(Signal):
-    min_gap_pct: float = 2.0
-    rvol_period: int = 20
-    min_rvol: float = 1.5
+    min_gap_pct: float = param(2.0, minimum=0.1, maximum=20.0, step=0.1, label="Minimum gap", unit="%")
+    rvol_period: int = param(20, minimum=5, maximum=200, step=1, label="Volume average", unit="bars")
+    min_rvol: float = param(1.5, minimum=0.0, maximum=10.0, step=0.1, label="Minimum relative volume", unit="x")
     family = Family.PATTERN
 
     def condition(self, df: pd.DataFrame) -> pd.Series:
@@ -31,19 +32,23 @@ class _GapAndGo(Signal):
 class GapAndGoUp(_GapAndGo):
     name = "gap_and_go_up"
     direction = Direction.LONG
-    description = "Gap up >= 2% that closes above the open on >= 1.5x volume"
+    description = (
+        "Gap up >= {min_gap_pct:g}% that closes above the open on >= {min_rvol:g}x the {rvol_period}-bar average volume"
+    )
 
 
 @register
 class GapAndGoDown(_GapAndGo):
     name = "gap_and_go_down"
     direction = Direction.SHORT
-    description = "Gap down >= 2% that closes below the open on >= 1.5x volume"
+    description = (
+        "Gap down >= {min_gap_pct:g}% that closes below the open on >= {min_rvol:g}x the {rvol_period}-bar average volume"
+    )
 
 
 @dataclass(frozen=True)
 class _Engulfing(Signal):
-    trend_period: int = 20
+    trend_period: int = param(20, minimum=5, maximum=200, step=1, label="Trend SMA", unit="bars")
     family = Family.PATTERN
 
     def condition(self, df: pd.DataFrame) -> pd.Series:
@@ -71,11 +76,11 @@ class _Engulfing(Signal):
 class BullishEngulfing(_Engulfing):
     name = "bullish_engulfing"
     direction = Direction.LONG
-    description = "Bullish candle engulfing a bearish one after a pullback below SMA(20)"
+    description = "Bullish candle engulfing a bearish one after a pullback below SMA({trend_period})"
 
 
 @register
 class BearishEngulfing(_Engulfing):
     name = "bearish_engulfing"
     direction = Direction.SHORT
-    description = "Bearish candle engulfing a bullish one after a rally above SMA(20)"
+    description = "Bearish candle engulfing a bullish one after a rally above SMA({trend_period})"

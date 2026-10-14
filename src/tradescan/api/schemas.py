@@ -5,15 +5,35 @@ Floats that are NaN or infinite in pandas are sent as `null`, because JSON canno
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from tradescan.params import ParamKind
 from tradescan.signals.base import Direction, Family
 
 # ---------------------------------------------------------------------------
 # Requests
 
+ParamValueIn = float | list[float] | dict[str, float]
+SettingsIn = dict[str, dict[str, ParamValueIn]]
+SignalParamsIn = dict[str, float | list[float]]
 
-class UniverseIn(BaseModel):
+_SETTINGS = Field(
+    default_factory=dict,
+    description='Per-run overrides by settings section, e.g. {"risk": {"atr_mult": 3}}; see /api/config for every parameter',
+)
+_SIGNAL_PARAMS = Field(
+    default_factory=dict,
+    description='Per-run signal parameters by signal name, e.g. {"connors_rsi2_long": {"oversold": 15}}',
+)
+
+
+class _Request(BaseModel):
+    """Unknown fields are an error, so a misspelt or removed field never passes silently."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class UniverseIn(_Request):
     watchlist: str | None = Field(None, description="Watchlist name, e.g. us_large")
     tickers: list[str] | None = Field(None, description="Ad-hoc tickers instead of a watchlist")
 
@@ -24,47 +44,45 @@ class UniverseIn(BaseModel):
         return self
 
 
-class SignalFilterIn(BaseModel):
+class SignalFilterIn(_Request):
     signals: list[str] = Field(default_factory=list, description="Signal names; empty means all")
     families: list[Family] = Field(default_factory=list)
     direction: Direction | None = Field(None, description="Omit for both directions")
 
 
-class AccountIn(BaseModel):
-    equity: float | None = Field(None, gt=0)
-    risk_pct: float | None = Field(None, gt=0, le=100)
-    lot_size: float | None = Field(None, gt=0)
-
-
 class ScanIn(UniverseIn, SignalFilterIn):
-    account: AccountIn = Field(default_factory=AccountIn)
-    fresh_bars: int | None = Field(None, ge=1, le=60)
-    min_score: float | None = None
+    settings: SettingsIn = _SETTINGS
+    signal_params: dict[str, SignalParamsIn] = _SIGNAL_PARAMS
     benchmark: str | None = None
     period: str | None = None
 
 
 class MarketIn(UniverseIn):
+    settings: SettingsIn = _SETTINGS
     benchmark: str | None = None
     period: str | None = None
 
 
 class EdgeIn(UniverseIn, SignalFilterIn):
+    signal_params: dict[str, SignalParamsIn] = _SIGNAL_PARAMS
     horizons: list[int] = Field(default_factory=lambda: [5, 10, 20], min_length=1)
     min_events: int = Field(0, ge=0)
     period: str | None = None
 
 
-class BacktestIn(BaseModel):
+class BacktestIn(_Request):
     ticker: str = Field(min_length=1)
     signal: str
     engines: list[str] = Field(default_factory=lambda: ["vectorized"], min_length=1)
-    account: AccountIn = Field(default_factory=AccountIn)
-    atr_mult: float | None = Field(None, gt=0)
-    target_r: float | None = Field(None, gt=0)
-    max_hold_bars: int | None = Field(None, ge=1)
-    commission_pct: float | None = Field(None, ge=0)
-    slippage_pct: float | None = Field(None, ge=0)
+    params: SignalParamsIn = Field(default_factory=dict, description="The signal's parameters, e.g. {\"period\": 30}")
+    settings: SettingsIn = _SETTINGS
+    period: str | None = None
+
+
+class ChartIn(_Request):
+    ticker: str = Field(min_length=1)
+    signals: list[str] = Field(default_factory=list, description="Signals whose events to mark")
+    signal_params: dict[str, SignalParamsIn] = _SIGNAL_PARAMS
     period: str | None = None
 
 
@@ -77,12 +95,33 @@ class Point(BaseModel):
     value: float
 
 
+class ParamSpecOut(BaseModel):
+    name: str
+    kind: ParamKind
+    label: str
+    unit: str
+    help: str
+    default: int | float | list[float] | dict[str, float]
+    minimum: float
+    maximum: float
+    step: float
+    keys: list[str] | None = Field(None, description="Allowed keys of a weights parameter; null means any")
+
+
+class SettingsSectionOut(BaseModel):
+    name: str
+    label: str
+    params: list[ParamSpecOut]
+
+
 class SignalOut(BaseModel):
     name: str
     family: Family
     direction: Direction
     weight: float
-    description: str
+    description: str = Field(description="The rule with the default parameters filled in")
+    template: str = Field(description='The rule with {parameter} placeholders; format specs "", "g" and ".0%"')
+    params: list[ParamSpecOut]
 
 
 class WatchlistOut(BaseModel):
@@ -91,36 +130,12 @@ class WatchlistOut(BaseModel):
     benchmark: str | None
 
 
-class AccountDefaults(BaseModel):
-    equity: float
-    risk_pct: float
-    max_position_pct: float
-    lot_size: float
-
-
-class ScanDefaults(BaseModel):
-    fresh_bars: int
-    min_score: float
-    edge_horizon: int
-    benchmark: str
-    period: str
-
-
-class BacktestDefaults(BaseModel):
-    period: str
-    atr_mult: float
-    target_r: float
-    max_hold_bars: int
-    commission_pct: float
-    slippage_pct: float
-
-
 class ConfigOut(BaseModel):
     version: str
-    account: AccountDefaults
-    scan: ScanDefaults
-    backtest: BacktestDefaults
-    targets_r: list[float]
+    scan_period: str
+    backtest_period: str
+    benchmark: str
+    sections: list[SettingsSectionOut] = Field(description="Adjustable settings; defaults come from settings.toml")
     families: list[Family]
     engines: list[str]
 
@@ -284,12 +299,15 @@ class BacktestConfigOut(BaseModel):
     max_hold_bars: int
     commission_pct: float
     slippage_pct: float
+    bars_per_year: int
 
 
 class BacktestOut(BaseModel):
     ticker: str
     signal: str
     direction: Direction
+    description: str = Field(description="The signal's rule with this run's parameters")
+    params: dict[str, float | list[float]] = Field(description="The signal's parameters used in this run")
     start: str
     end: str
     config: BacktestConfigOut

@@ -11,6 +11,8 @@ from tradescan.api import schemas
 from tradescan.backtest.base import Trade
 from tradescan.backtest.edge import EdgeStats
 from tradescan.backtest.metrics import Metrics
+from tradescan.config import SettingsSection
+from tradescan.params import ParamSpec, parameters_of
 from tradescan.regime import MarketRegime
 from tradescan.scanner import ScanHit
 from tradescan.scoring import Scorer
@@ -35,13 +37,49 @@ def points(series: pd.Series) -> list[schemas.Point]:
     return [schemas.Point(time=day(index), value=float(value)) for index, value in clean.items()]
 
 
+def _value(value: object) -> object:
+    """Tuples become lists and mappings plain dicts, so pydantic can serialize them."""
+    if isinstance(value, tuple):
+        return list(value)
+    if isinstance(value, dict):
+        return dict(value)
+    return value
+
+
+def param_spec_out(spec: ParamSpec) -> schemas.ParamSpecOut:
+    return schemas.ParamSpecOut(
+        name=spec.name,
+        kind=spec.kind,
+        label=spec.label,
+        unit=spec.unit,
+        help=spec.help,
+        default=_value(spec.default),  # type: ignore[arg-type]
+        minimum=spec.minimum,
+        maximum=spec.maximum,
+        step=spec.step,
+        keys=list(spec.keys) if spec.keys is not None else None,
+    )
+
+
+def section_out(section: SettingsSection) -> schemas.SettingsSectionOut:
+    return schemas.SettingsSectionOut(
+        name=section.name, label=section.label, params=[param_spec_out(spec) for spec in section.parameters]
+    )
+
+
+def signal_params(signal: Signal) -> dict[str, float | list[float]]:
+    return {spec.name: _value(spec.default) for spec in parameters_of(signal)}  # type: ignore[misc]
+
+
 def signal_out(signal: Signal, scorer: Scorer) -> schemas.SignalOut:
     return schemas.SignalOut(
         name=signal.name,
         family=signal.family,
         direction=signal.direction,
         weight=scorer.weight(signal),
-        description=signal.description,
+        description=signal.describe(),
+        template=signal.description,
+        params=[param_spec_out(spec) for spec in signal.parameters()],
     )
 
 
@@ -120,11 +158,11 @@ def hit_out(hit: ScanHit, scorer: Scorer) -> schemas.HitOut:
     )
 
 
-def scan_out(report: ScanReport, scorer: Scorer) -> schemas.ScanOut:
+def scan_out(report: ScanReport) -> schemas.ScanOut:
     return schemas.ScanOut(
         universe=report.universe.name,
         regime=regime_out(report.regime),
-        hits=[hit_out(hit, scorer) for hit in report.hits],
+        hits=[hit_out(hit, report.scorer) for hit in report.hits],
         missing=report.missing,
         skipped=report.skipped,
         min_score=report.min_score,
@@ -147,7 +185,7 @@ def edge_out(report: EdgeReport) -> schemas.EdgeOut:
                 signal=row.signal.name,
                 family=row.signal.family,
                 direction=row.signal.direction,
-                description=row.signal.description,
+                description=row.signal.describe(),
                 stats=[edge_stats_out(stats) for stats in row.stats],
             )
             for row in report.rows
@@ -189,6 +227,8 @@ def backtest_out(report: BacktestReport) -> schemas.BacktestOut:
         ticker=report.ticker,
         signal=report.signal.name,
         direction=report.signal.direction,
+        description=report.signal.describe(),
+        params=signal_params(report.signal),
         start=day(close.index[0]),
         end=day(close.index[-1]),
         config=schemas.BacktestConfigOut(
@@ -202,6 +242,7 @@ def backtest_out(report: BacktestReport) -> schemas.BacktestOut:
             max_hold_bars=config.max_hold_bars,
             commission_pct=config.commission_pct,
             slippage_pct=config.slippage_pct,
+            bars_per_year=config.bars_per_year,
         ),
         buy_hold=points(buy_hold),
         runs=[

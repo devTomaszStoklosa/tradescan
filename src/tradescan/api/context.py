@@ -8,10 +8,10 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-from tradescan.api.schemas import AccountIn, SignalFilterIn, UniverseIn
+from tradescan.api.schemas import SignalFilterIn, UniverseIn
 from tradescan.config import Settings
 from tradescan.scoring import Scorer
-from tradescan.services import AccountOverrides, SignalFilter, UseCases
+from tradescan.services import SignalFilter, UseCases
 from tradescan.signals.registry import SignalRegistry
 from tradescan.watchlist import Watchlist, available_watchlists, from_tickers, load_watchlist
 
@@ -44,7 +44,3 @@ class ApiContext:
     def signal_filter(self, request: SignalFilterIn) -> SignalFilter:
         self.check_signals(request.signals)
         return SignalFilter(names=tuple(request.signals), families=tuple(request.families), direction=request.direction)
-
-
-def account_overrides(account: AccountIn) -> AccountOverrides:
-    return AccountOverrides(equity=account.equity, risk_pct=account.risk_pct, lot_size=account.lot_size)

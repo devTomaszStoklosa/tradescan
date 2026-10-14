@@ -19,6 +19,7 @@ def build_router(context: ApiContext) -> APIRouter:
             EdgeRequest(
                 universe=context.universe(body),
                 signals=context.signal_filter(body),
+                signal_params=body.signal_params,
                 horizons=tuple(body.horizons),
                 min_events=body.min_events,
                 period=body.period,

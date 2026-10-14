@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -11,7 +12,8 @@ import pandas as pd
 from tradescan.indicators import adx, atr, rate_of_change, sma
 
 # IBD-style relative strength: the latest quarter counts double.
-_RS_WEIGHTS: tuple[tuple[int, float], ...] = ((63, 0.4), (126, 0.2), (189, 0.2), (252, 0.2))
+_RS_PERIODS: tuple[int, ...] = (63, 126, 189, 252)
+_RS_WEIGHTS: tuple[float, ...] = (0.4, 0.2, 0.2, 0.2)
 
 
 class Trend(StrEnum):
@@ -41,11 +43,16 @@ class ContextBuilder:
         fast_period: int = 50,
         slow_period: int = 200,
         weekly_period: int = 30,
+        rs_periods: Sequence[int] = _RS_PERIODS,
+        rs_weights: Sequence[float] = _RS_WEIGHTS,
     ) -> None:
+        if len(rs_periods) != len(rs_weights):
+            raise ValueError("relative strength needs one weight per lookback")
         self._atr_period = atr_period
         self._fast_period = fast_period
         self._slow_period = slow_period
         self._weekly_period = weekly_period
+        self._rs_weights = tuple(zip(rs_periods, rs_weights))
 
     def build(self, ticker: str, df: pd.DataFrame) -> TickerContext:
         close = df["close"]
@@ -89,10 +96,9 @@ class ContextBuilder:
             return Trend.DOWN
         return Trend.NEUTRAL
 
-    @staticmethod
-    def _relative_strength(close: pd.Series) -> float:
+    def _relative_strength(self, close: pd.Series) -> float:
         total = 0.0
-        for period, weight in _RS_WEIGHTS:
+        for period, weight in self._rs_weights:
             change = rate_of_change(close, period).iloc[-1] if len(close) > period else math.nan
             if pd.isna(change):
                 return math.nan
