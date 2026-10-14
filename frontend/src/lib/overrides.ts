@@ -2,7 +2,7 @@
  * Per-run parameter overrides, built from the API's parameter declarations.
  *
  * Only values that differ from the default are kept, so URLs stay short and a run is fully described
- * by its link. Owners are settings sections ("risk") or signal names ("connors_rsi2_long").
+ * by its link. Owners are settings sections ("risk"), signal names ("connors_rsi2_long") or trade rule names ("limit").
  */
 import type { ParamSpecOut, SettingsSectionOut, SignalOut } from "../api/client";
 
@@ -12,9 +12,14 @@ export type Values = Record<string, ParamValue>;
 /** Changed values by owner. */
 export type Overrides = Record<string, Values>;
 
-/** URL prefixes: `set.risk.atr_mult=3`, `sig.donchian_breakout.period=30`, `set.scoring.family_weights.breakout=2`. */
+/**
+ * URL prefixes: `set.risk.atr_mult=3`, `sig.donchian_breakout.period=30`, `set.scoring.family_weights.breakout=2`,
+ * and for a backtest's trade rules `en.limit.offset_atr=1` and `ex.target.target_r=3`.
+ */
 export const SETTINGS_PREFIX = "set";
 export const SIGNALS_PREFIX = "sig";
+export const ENTRY_PREFIX = "en";
+export const EXIT_PREFIX = "ex";
 
 export const EMPTY: Overrides = {};
 
@@ -189,9 +194,12 @@ export function formatTemplate(template: string, values: Values): string {
   return template.replace(PLACEHOLDER, (_, name: string, spec = "") => formatValue(values[name], spec));
 }
 
-export function signalValues(signal: SignalOut, overrides: Values | undefined): Values {
+/** Anything with declared parameters and a description template: a signal or a trade rule. */
+type Described = Pick<SignalOut, "params" | "template">;
+
+export function signalValues(signal: Described, overrides: Values | undefined): Values {
   return { ...Object.fromEntries(signal.params.map((spec) => [spec.name, spec.default])), ...overrides };
 }
 
-export const describeSignal = (signal: SignalOut, overrides: Values | undefined): string =>
+export const describeSignal = (signal: Described, overrides: Values | undefined): string =>
   formatTemplate(signal.template, signalValues(signal, overrides));

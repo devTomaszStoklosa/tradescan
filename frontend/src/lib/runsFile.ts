@@ -1,12 +1,15 @@
 /**
  * Pinned runs on disk. Browser storage and the JSON export use the same format:
  * `{version, runs}`, with each equity curve as two arrays (dates, values rounded to cents),
- * about half the size of one object per point.
+ * about half the size of one object per point. Version 1 files, from before entry and exit rules,
+ * are upgraded when read.
  */
-import type { MetricsOut } from "../api/client";
+import type { AppliedRuleOut, MetricsOut } from "../api/client";
+import { formatTemplate, type Overrides } from "./overrides";
+import { moveLegacyExitSettings } from "./rules";
 import { MAX_RUNS, type PinnedRun } from "./runs";
 
-export const RUNS_FILE_VERSION = 1;
+export const RUNS_FILE_VERSION = 2;
 
 interface StoredEquity {
   time: string[];
@@ -55,7 +58,14 @@ const form: Check = (value) =>
   arrayOf(text)(value.engines) &&
   text(value.period) &&
   recordOf(recordOf(paramValue))(value.settings) &&
-  recordOf(paramValue)(value.signalParams);
+  recordOf(paramValue)(value.signalParams) &&
+  text(value.entry) &&
+  recordOf(paramValue)(value.entryParams) &&
+  arrayOf(text)(value.exits) &&
+  recordOf(recordOf(paramValue))(value.exitParams);
+
+const appliedRule: Check = (value) =>
+  isRecord(value) && text(value.name) && text(value.label) && text(value.description) && recordOf(oneOf(finite, arrayOf(finite)))(value.params);
 
 const RUN_FIELDS: Record<keyof StoredRun, Check> = {
   id: text,
@@ -72,6 +82,8 @@ const RUN_FIELDS: Record<keyof StoredRun, Check> = {
   end: text,
   params: recordOf(oneOf(finite, arrayOf(finite))),
   config: recordOf(finite),
+  entry: appliedRule,
+  exits: arrayOf(appliedRule),
   metrics,
   equity,
   form,
@@ -88,9 +100,38 @@ function decodeRun(value: unknown, index: number): PinnedRun {
   return { ...run, equity: points };
 }
 
+// --- Version 1: every run used a next-open entry, a target and a time exit, set in `config` ------------
+
+const rule = (name: string, label: string, template: string, params: Record<string, number>): AppliedRuleOut => ({
+  name,
+  label,
+  description: formatTemplate(template, params),
+  params,
+});
+
+/** A version 1 run in the current format; anything malformed is left for validation to reject. */
+function upgradeV1(value: unknown): unknown {
+  if (!isRecord(value) || !isRecord(value.config) || !isRecord(value.form)) return value;
+  const { target_r = 2, max_hold_bars = 20, ...config } = value.config;
+  if (!finite(target_r) || !finite(max_hold_bars)) return value;
+  const exits = [
+    rule("target", "Profit target", "Limit order {target_r:g}R from the entry reference", { target_r: target_r as number }),
+    rule("time", "Time exit", "Exit at the open {max_hold_bars} bars after the entry bar", { max_hold_bars: max_hold_bars as number }),
+  ];
+  const moved = moveLegacyExitSettings((isRecord(value.form.settings) ? value.form.settings : {}) as Overrides, {});
+  return {
+    ...value,
+    config,
+    entry: rule("next_open", "Next open", "Market order at the next open; stop and target are measured from the signal bar's close", {}),
+    exits,
+    form: { ...value.form, settings: moved.settings, entry: "next_open", entryParams: {}, exits: ["target", "time"], exitParams: moved.exitParams },
+  };
+}
+
 /** Runs from parsed JSON; throws an Error naming the first problem. */
 export function decodeRuns(data: unknown): PinnedRun[] {
   if (!isRecord(data) || !Array.isArray(data.runs)) throw new Error("This is not a tradescan runs file");
+  if (data.version === 1) return data.runs.map((run, index) => decodeRun(upgradeV1(run), index));
   if (data.version !== RUNS_FILE_VERSION) throw new Error(`Unsupported runs file version: ${String(data.version)}`);
   return data.runs.map(decodeRun);
 }

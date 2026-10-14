@@ -2,8 +2,9 @@
  * Comparison of pinned runs: which parameters differ and which run is best on each metric.
  * Labels and units come from the API's parameter specs, so parameters added later appear without frontend changes.
  */
-import type { MetricsOut, Point, SettingsSectionOut, SignalOut } from "../api/client";
+import type { MetricsOut, ParamSpecOut, Point, SettingsSectionOut, SignalOut } from "../api/client";
 import { DASH } from "./format";
+import type { RuleSpecs } from "./rules";
 import type { PinnedRun } from "./runs";
 
 /** Fewer trades than this make a run's metrics mostly noise. */
@@ -21,6 +22,7 @@ export interface ParamRow {
 }
 
 type Raw = number | number[] | string | undefined;
+type Params = Record<string, number | number[]>;
 
 function humanize(name: string): string {
   const words = name.replace(/_/g, " ");
@@ -43,10 +45,38 @@ function row(key: string, label: string, unit: string, raw: Raw[]): ParamRow {
 const keysOf = (records: object[]): string[] => [...new Set(records.flatMap((record) => Object.keys(record)))];
 
 /**
- * Every input of the runs as rows: what was tested, the data range, the trade rules and account,
- * and the signal parameters. Signal parameters are keyed by signal, so two signals' "period" never share a row.
+ * Rows for parameters that belong to an owner (a signal or a rule), keyed by owner so two owners' "period"
+ * never share a row. `paramsOf` is undefined for runs that do not use the owner.
  */
-export function parameterRows(runs: PinnedRun[], sections: SettingsSectionOut[] = [], signals: SignalOut[] = []): ParamRow[] {
+function ownedRows(
+  prefix: string,
+  owners: Iterable<string>,
+  labelOf: (owner: string) => string,
+  specsOf: (owner: string) => ParamSpecOut[],
+  paramsOf: (run: PinnedRun, owner: string) => Params | undefined,
+  runs: PinnedRun[],
+): ParamRow[] {
+  const rows: ParamRow[] = [];
+  for (const owner of owners) {
+    const params = runs.map((run) => paramsOf(run, owner));
+    for (const name of keysOf(params.filter((item) => item !== undefined))) {
+      const spec = specsOf(owner).find((item) => item.name === name);
+      rows.push(row(`${prefix}.${owner}.${name}`, `${labelOf(owner)} · ${spec?.label ?? humanize(name)}`, spec?.unit ?? "", params.map((item) => item?.[name])));
+    }
+  }
+  return rows;
+}
+
+/**
+ * Every input of the runs as rows: what was tested, the data range, the stop, costs and account,
+ * the entry and exit rules with their parameters, and the signal parameters.
+ */
+export function parameterRows(
+  runs: PinnedRun[],
+  sections: SettingsSectionOut[] = [],
+  signals: SignalOut[] = [],
+  rules: RuleSpecs = { entry_rules: [], exit_rules: [] },
+): ParamRow[] {
   const settingSpecs = sections.flatMap((section) => section.params);
   const rows: ParamRow[] = [
     row("ticker", "Ticker", "", runs.map((run) => run.ticker)),
@@ -59,14 +89,42 @@ export function parameterRows(runs: PinnedRun[], sections: SettingsSectionOut[] 
     const values = runs.map((run) => (run.config as unknown as Record<string, number | undefined>)[name]);
     rows.push(row(`config.${name}`, spec?.label ?? humanize(name), spec?.unit ?? "", values));
   }
-  for (const signal of new Set(runs.map((run) => run.signal))) {
-    const specs = signals.find((item) => item.name === signal)?.params ?? [];
-    const params = runs.map((run) => (run.signal === signal ? run.params : undefined));
-    for (const name of keysOf(params.filter((item) => item !== undefined))) {
-      const spec = specs.find((item) => item.name === name);
-      rows.push(row(`params.${signal}.${name}`, `${signal} · ${spec?.label ?? humanize(name)}`, spec?.unit ?? "", params.map((item) => item?.[name])));
-    }
-  }
+
+  const entryLabels = new Map(runs.map((run) => [run.entry.name, run.entry.label]));
+  rows.push(row("entry", "Entry", "", runs.map((run) => run.entry.label)));
+  rows.push(
+    ...ownedRows(
+      "entry",
+      entryLabels.keys(),
+      (name) => entryLabels.get(name) ?? name,
+      (name) => rules.entry_rules.find((rule) => rule.name === name)?.params ?? [],
+      (run, name) => (run.entry.name === name ? run.entry.params : undefined),
+      runs,
+    ),
+  );
+  const exitLabels = new Map(runs.flatMap((run) => run.exits.map((exit) => [exit.name, exit.label] as const)));
+  rows.push(row("exits", "Exits", "", runs.map((run) => run.exits.map((exit) => exit.label).join(", ") || "stop only")));
+  rows.push(
+    ...ownedRows(
+      "exit",
+      exitLabels.keys(),
+      (name) => exitLabels.get(name) ?? name,
+      (name) => rules.exit_rules.find((rule) => rule.name === name)?.params ?? [],
+      (run, name) => run.exits.find((exit) => exit.name === name)?.params,
+      runs,
+    ),
+  );
+
+  rows.push(
+    ...ownedRows(
+      "params",
+      new Set(runs.map((run) => run.signal)),
+      (signal) => signal,
+      (signal) => signals.find((item) => item.name === signal)?.params ?? [],
+      (run, signal) => (run.signal === signal ? run.params : undefined),
+      runs,
+    ),
+  );
   return rows;
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { config, makeMetrics, makeRun, signals } from "../test/fixtures";
+import { appliedRule, config, entryRules, exitRules, makeMetrics, makeRun, signals } from "../test/fixtures";
 import { bestIndexes, metricValue, parameterRows, returnCurve } from "./compare";
 
 const differing = (rows: ReturnType<typeof parameterRows>) => rows.filter((row) => row.differs);
@@ -32,6 +32,21 @@ describe("parameterRows", () => {
     expect(rows.find((row) => row.key === "params.donchian_breakout.period")).toMatchObject({ values: ["–", "20"], differs: true });
     expect(rows.find((row) => row.key === "params.connors_rsi2_long.rsi_period")).toMatchObject({ values: ["2", "–"], differs: true });
     expect(rows.find((row) => row.key === "signal")?.differs).toBe(true);
+  });
+
+  it("shows the entry and exit rules with their parameters", () => {
+    const limit = makeRun(2, { entry: appliedRule(entryRules[2]!, { offset_atr: 1 }), exits: [appliedRule(exitRules[1]!, { max_hold_bars: 5 })] });
+    const rows = parameterRows([makeRun(1), limit], config.sections, signals, config);
+
+    expect(differing(rows)).toEqual([
+      { key: "entry", label: "Entry", unit: "", values: ["Next open", "Limit order"], differs: true },
+      { key: "entry.limit.offset_atr", label: "Limit order · Offset", unit: "ATR", values: ["–", "1"], differs: true },
+      { key: "entry.limit.valid_bars", label: "Limit order · Active for", unit: "bars", values: ["–", "1"], differs: true },
+      { key: "exits", label: "Exits", unit: "", values: ["Profit target, Time exit", "Time exit"], differs: true },
+      { key: "exit.target.target_r", label: "Profit target · Distance", unit: "R", values: ["2", "–"], differs: true },
+      { key: "exit.time.max_hold_bars", label: "Time exit · Hold for", unit: "bars", values: ["20", "5"], differs: true },
+    ]);
+    expect(parameterRows([makeRun(1, { exits: [] })]).find((row) => row.key === "exits")?.values).toEqual(["stop only"]);
   });
 
   it("shows the data range so runs on different days are told apart", () => {

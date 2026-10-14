@@ -1,10 +1,22 @@
 /**
  * Form state <-> URL search params. Keeping requests in the URL makes results shareable,
  * survives reloads, and lets the query cache show earlier results on back navigation.
- * Parameter overrides travel as `set.<section>.<name>` and `sig.<signal>.<name>` (see overrides.ts).
+ * Parameter overrides travel as `set.<section>.<name>` and `sig.<signal>.<name>`, a backtest's rules as
+ * `entry=<rule>`, `exit=<rule>,<rule>` (`none` for no exits) and `en.<rule>.<name>` / `ex.<rule>.<name>` (see overrides.ts).
  */
 import type { BacktestIn, Direction, EdgeIn, Family, ScanIn } from "../api/client";
-import { readOverrides, SETTINGS_PREFIX, SIGNALS_PREFIX, writeOverrides, type Overrides, type Values } from "./overrides";
+import {
+  ENTRY_PREFIX,
+  EXIT_PREFIX,
+  pickOwners,
+  readOverrides,
+  SETTINGS_PREFIX,
+  SIGNALS_PREFIX,
+  writeOverrides,
+  type Overrides,
+  type Values,
+} from "./overrides";
+import { moveLegacyExitSettings, sameList, type RuleDefaults, type TradeRulesForm } from "./rules";
 
 export type DirectionChoice = Direction | "both";
 
@@ -33,7 +45,7 @@ export interface EdgeForm {
   signalParams: Overrides;
 }
 
-export interface BacktestForm {
+export interface BacktestForm extends TradeRulesForm {
   ticker: string;
   signal: string;
   engines: string[];
@@ -177,27 +189,41 @@ export function edgeBody(form: EdgeForm): EdgeIn | null {
 
 // --- Backtest ---------------------------------------------------------------
 
-export function readBacktestForm(params: URLSearchParams): BacktestForm {
+/** Rules the URL leaves out are the server's defaults. */
+export function readBacktestForm(params: URLSearchParams, defaults: RuleDefaults): BacktestForm {
   const engines = list(params.get("eng"));
   const signal = params.get("signal") ?? "";
+  const entry = params.get("entry") || defaults.default_entry;
+  const exitList = params.get("exit");
+  const exits = exitList === null ? [...defaults.default_exits] : list(exitList).filter((name) => name !== "none");
+  const { settings, exitParams } = moveLegacyExitSettings(readOverrides(params, SETTINGS_PREFIX), readOverrides(params, EXIT_PREFIX));
   return {
     ticker: (params.get("ticker") ?? "").toUpperCase(),
     signal,
     engines: engines.length ? engines : ["vectorized"],
     period: params.get("p") ?? "",
-    settings: readOverrides(params, SETTINGS_PREFIX),
+    settings,
     signalParams: (signal && readOverrides(params, SIGNALS_PREFIX)[signal]) || {},
+    entry,
+    entryParams: readOverrides(params, ENTRY_PREFIX)[entry] ?? {},
+    exits,
+    exitParams: pickOwners(exitParams, exits),
   };
 }
 
-export function writeBacktestForm(form: BacktestForm): URLSearchParams {
+/** With `defaults`, rules equal to them are left out, so unchanged links stay short. */
+export function writeBacktestForm(form: BacktestForm, defaults?: RuleDefaults): URLSearchParams {
   const params = new URLSearchParams();
   setIf(params, "ticker", form.ticker.trim().toUpperCase());
   setIf(params, "signal", form.signal);
   setIf(params, "eng", form.engines.join(","));
   setIf(params, "p", form.period);
+  if (form.entry !== defaults?.default_entry) setIf(params, "entry", form.entry);
+  if (!defaults || !sameList(form.exits, defaults.default_exits)) params.set("exit", form.exits.join(",") || "none");
   writeOverrides(params, SETTINGS_PREFIX, form.settings);
   if (form.signal) writeOverrides(params, SIGNALS_PREFIX, { [form.signal]: form.signalParams });
+  writeOverrides(params, ENTRY_PREFIX, { [form.entry]: form.entryParams });
+  writeOverrides(params, EXIT_PREFIX, pickOwners(form.exitParams, form.exits));
   return params;
 }
 
@@ -211,5 +237,7 @@ export function backtestBody(form: BacktestForm): BacktestIn | null {
     period: form.period || null,
     params: form.signalParams as SignalParamsIn[string],
     settings: form.settings,
+    entry: { name: form.entry, params: form.entryParams as SignalParamsIn[string] },
+    exits: form.exits.map((name) => ({ name, params: (form.exitParams[name] ?? {}) as SignalParamsIn[string] })),
   };
 }

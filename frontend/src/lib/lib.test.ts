@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { config } from "../test/fixtures";
 import { toCsv } from "./csv";
 import { DASH, fmtPct, fmtPrice, fmtSigned, fmtSize, tone } from "./format";
 import { backtestBody, edgeBody, readBacktestForm, readScanForm, scanBody, writeBacktestForm, writeScanForm } from "./params";
@@ -74,7 +75,7 @@ describe("url params", () => {
     expect(
       edgeBody({ universe: { watchlist: "etf", tickers: "" }, direction: "both", families: [], horizons: "x", minEvents: 0, period: "", signalParams: {} }),
     ).toBeNull();
-    expect(backtestBody(readBacktestForm(new URLSearchParams("ticker=spy")))).toBeNull();
+    expect(backtestBody(readBacktestForm(new URLSearchParams("ticker=spy"), config))).toBeNull();
   });
 
   it("ignores unknown families and directions from the URL", () => {
@@ -85,7 +86,7 @@ describe("url params", () => {
 
   it("builds a backtest request with only the selected signal's parameters", () => {
     const url = "ticker=spy&signal=golden_cross&eng=vectorized,cerebro&set.risk.atr_mult=2.5&sig.golden_cross.fast=20&sig.death_cross.fast=5";
-    const form = readBacktestForm(new URLSearchParams(url));
+    const form = readBacktestForm(new URLSearchParams(url), config);
     expect(backtestBody(form)).toEqual({
       ticker: "SPY",
       signal: "golden_cross",
@@ -93,9 +94,43 @@ describe("url params", () => {
       period: null,
       params: { fast: 20 },
       settings: { risk: { atr_mult: 2.5 } },
+      entry: { name: "next_open", params: {} },
+      exits: [
+        { name: "target", params: {} },
+        { name: "time", params: {} },
+      ],
     });
-    expect(writeBacktestForm(form).toString()).toBe(
+    expect(writeBacktestForm(form, config).toString()).toBe(
       "ticker=SPY&signal=golden_cross&eng=vectorized%2Ccerebro&set.risk.atr_mult=2.5&sig.golden_cross.fast=20",
     );
+  });
+
+  it("keeps trade rules in the URL only when they differ from the defaults", () => {
+    const url =
+      "ticker=SPY&signal=golden_cross&entry=limit&exit=time&en.limit.offset_atr=1&en.stop.offset_atr=2&ex.time.max_hold_bars=5&ex.target.target_r=3";
+    const form = readBacktestForm(new URLSearchParams(url), config);
+    expect(form).toMatchObject({ entry: "limit", entryParams: { offset_atr: 1 }, exits: ["time"], exitParams: { time: { max_hold_bars: 5 } } });
+    expect(backtestBody(form)).toMatchObject({ entry: { name: "limit", params: { offset_atr: 1 } }, exits: [{ name: "time", params: { max_hold_bars: 5 } }] });
+    expect(writeBacktestForm(form, config).toString()).toBe(
+      "ticker=SPY&signal=golden_cross&eng=vectorized&entry=limit&exit=time&en.limit.offset_atr=1&ex.time.max_hold_bars=5",
+    );
+    // Without the defaults (a pinned run's link) the rules are always written.
+    expect(writeBacktestForm({ ...form, entry: "next_open", entryParams: {}, exits: ["target", "time"] }).toString()).toContain(
+      "entry=next_open&exit=target%2Ctime",
+    );
+
+    const none = readBacktestForm(new URLSearchParams("ticker=SPY&signal=golden_cross&exit=none"), config);
+    expect(none.exits).toEqual([]);
+    expect(writeBacktestForm(none, config).get("exit")).toBe("none");
+    expect(backtestBody(none)?.exits).toEqual([]);
+  });
+
+  it("reads links from before trade rules, whose target and time exit were settings", () => {
+    const url = "ticker=SPY&signal=golden_cross&set.backtest.target_r=3&set.backtest.commission_pct=0.2&set.backtest.max_hold_bars=10";
+    const form = readBacktestForm(new URLSearchParams(url), config);
+    expect(form.settings).toEqual({ backtest: { commission_pct: 0.2 } });
+    expect(form.exitParams).toEqual({ target: { target_r: 3 }, time: { max_hold_bars: 10 } });
+    // An exit the link switches off keeps none of its old parameters.
+    expect(readBacktestForm(new URLSearchParams(`${url}&exit=time`), config).exitParams).toEqual({ time: { max_hold_bars: 10 } });
   });
 });

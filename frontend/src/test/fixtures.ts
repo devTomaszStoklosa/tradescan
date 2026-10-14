@@ -1,4 +1,5 @@
-import type { BacktestOut, ConfigOut, HitOut, MetricsOut, ParamSpecOut, ScanOut, SignalOut, WatchlistOut } from "../api/client";
+import type { AppliedRuleOut, BacktestOut, ConfigOut, HitOut, MetricsOut, ParamSpecOut, RuleOut, ScanOut, SignalOut, WatchlistOut } from "../api/client";
+import { formatTemplate } from "../lib/overrides";
 import type { BacktestForm } from "../lib/params";
 import { toPinnedRun, type PinnedRun, type RunSnapshot } from "../lib/runs";
 
@@ -14,6 +15,57 @@ export function spec(
 }
 
 const FAMILY_WEIGHTS = { trend: 1, momentum: 1, breakout: 1.5, mean_reversion: 1, volume: 1, pattern: 0.5 };
+
+const VALID_BARS = spec("valid_bars", "Active for", 1, [1, 20, 1], "int", { unit: "bars" });
+
+/** What /api/config lists as entry rules. */
+export const entryRules: RuleOut[] = [
+  {
+    name: "next_open",
+    label: "Next open",
+    description: "Market order at the next open; stop and target are measured from the signal bar's close",
+    template: "Market order at the next open; stop and target are measured from the signal bar's close",
+    params: [],
+  },
+  {
+    name: "stop",
+    label: "Stop order",
+    description: "Buy-stop 0 ATR above the signal bar's high (sell-stop below its low for shorts), active for 1 bar(s)",
+    template: "Buy-stop {offset_atr:g} ATR above the signal bar's high (sell-stop below its low for shorts), active for {valid_bars} bar(s)",
+    params: [spec("offset_atr", "Offset", 0, [0, 5, 0.05], "float", { unit: "ATR" }), VALID_BARS],
+  },
+  {
+    name: "limit",
+    label: "Limit order",
+    description: "Buy-limit 0.5 ATR below the signal bar's close (sell-limit above it for shorts), active for 1 bar(s)",
+    template: "Buy-limit {offset_atr:g} ATR below the signal bar's close (sell-limit above it for shorts), active for {valid_bars} bar(s)",
+    params: [spec("offset_atr", "Offset", 0.5, [0, 5, 0.05], "float", { unit: "ATR" }), VALID_BARS],
+  },
+];
+
+/** What /api/config lists as exit rules. */
+export const exitRules: RuleOut[] = [
+  {
+    name: "target",
+    label: "Profit target",
+    description: "Limit order 2R from the entry reference",
+    template: "Limit order {target_r:g}R from the entry reference",
+    params: [spec("target_r", "Distance", 2, [0.25, 50, 0.25], "float", { unit: "R" })],
+  },
+  {
+    name: "time",
+    label: "Time exit",
+    description: "Exit at the open 20 bars after the entry bar",
+    template: "Exit at the open {max_hold_bars} bars after the entry bar",
+    params: [spec("max_hold_bars", "Hold for", 20, [1, 1000, 1], "int", { unit: "bars" })],
+  },
+];
+
+/** A rule as a backtest result reports it. */
+export function appliedRule(rule: RuleOut, params: Record<string, number> = {}): AppliedRuleOut {
+  const values = { ...Object.fromEntries(rule.params.map((item) => [item.name, item.default as number])), ...params };
+  return { name: rule.name, label: rule.label, description: formatTemplate(rule.template, values), params: values };
+}
 
 /** A trimmed copy of what /api/config returns. */
 export const config: ConfigOut = {
@@ -64,13 +116,16 @@ export const config: ConfigOut = {
       label: "Backtest",
       params: [
         spec("commission_pct", "Commission", 0.1, [0, 5, 0.01], "float", { unit: "%" }),
-        spec("target_r", "Target", 2, [0.25, 50, 0.25], "float", { unit: "R" }),
-        spec("max_hold_bars", "Time exit", 20, [1, 1000, 1], "int", { unit: "bars" }),
+        spec("slippage_pct", "Slippage", 0.05, [0, 5, 0.01], "float", { unit: "%" }),
       ],
     },
   ],
   families: ["trend", "momentum", "breakout", "mean_reversion", "volume", "pattern"],
   engines: ["vectorized", "cerebro"],
+  entry_rules: entryRules,
+  exit_rules: exitRules,
+  default_entry: "next_open",
+  default_exits: ["target", "time"],
 };
 
 /** A trimmed copy of what /api/signals returns. */
@@ -190,12 +245,12 @@ export const backtestResult: BacktestOut = {
     lot_size: 1,
     atr_period: 14,
     atr_mult: 2,
-    target_r: 2,
-    max_hold_bars: 20,
     commission_pct: 0.1,
     slippage_pct: 0.05,
     bars_per_year: 252,
   },
+  entry: appliedRule(entryRules[0]!),
+  exits: exitRules.map((rule) => appliedRule(rule)),
   buy_hold: [
     { time: "2016-01-04", value: 100000 },
     { time: "2026-10-13", value: 130200 },
@@ -221,6 +276,10 @@ export const backtestForm: BacktestForm = {
   period: "",
   settings: {},
   signalParams: {},
+  entry: "next_open",
+  entryParams: {},
+  exits: ["target", "time"],
+  exitParams: {},
 };
 
 /** A pinned run of `backtestResult`, changed by `overrides`, with a fixed slot. */
@@ -235,6 +294,8 @@ export function makeRun(slot: number, overrides: Partial<RunSnapshot> = {}, extr
     end: backtestResult.end,
     params: backtestResult.params,
     config: backtestResult.config,
+    entry: backtestResult.entry,
+    exits: backtestResult.exits,
     metrics: makeMetrics(),
     equity: backtestResult.runs[0]!.equity,
     form: backtestForm,

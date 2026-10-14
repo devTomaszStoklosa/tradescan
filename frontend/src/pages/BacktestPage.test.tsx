@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it, vi } from "vitest";
@@ -40,6 +40,13 @@ function renderPage(path: string) {
   );
 }
 
+/** Bodies of the backtest requests sent so far. */
+const backtestBodies = () =>
+  vi
+    .mocked(globalThis.fetch)
+    .mock.calls.filter(([input]) => String(input).endsWith("/backtest"))
+    .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>);
+
 const storedRuns = () => (JSON.parse(localStorage.getItem("tradescan.runs") ?? '{"runs":[]}') as { runs: { form: unknown; engine: string }[] }).runs;
 
 describe("BacktestPage pinning", () => {
@@ -57,5 +64,31 @@ describe("BacktestPage pinning", () => {
     await userEvent.click(screen.getByRole("button", { name: "Unpin run" }));
     expect(storedRuns()).toHaveLength(0);
     expect(screen.getByRole("button", { name: "Pin run" })).toBeInTheDocument();
+  });
+});
+
+describe("BacktestPage trade rules", () => {
+  it("sends the chosen entry and exits", async () => {
+    renderPage("/backtest?ticker=SPY&signal=connors_rsi2_long");
+    await screen.findByRole("button", { name: "Pin run" });
+    expect(backtestBodies().at(-1)).toMatchObject({ entry: { name: "next_open" }, exits: [{ name: "target" }, { name: "time" }] });
+
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Entry" }), "limit");
+    expect(screen.getByText(/^Buy-limit 0.5 ATR below/)).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Offset (ATR)"), "1");
+    await userEvent.click(screen.getByRole("button", { name: "Profit target", pressed: true }));
+    await userEvent.type(screen.getByLabelText("Hold for (bars)"), "5");
+    expect(screen.getByText("Exit at the open 5 bars after the entry bar")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Run backtest" }));
+
+    await waitFor(() =>
+      expect(backtestBodies().at(-1)).toMatchObject({
+        entry: { name: "limit", params: { offset_atr: 1 } },
+        exits: [{ name: "time", params: { max_hold_bars: 5 } }],
+      }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Reset 4 changed" }));
+    expect(screen.getByRole("combobox", { name: "Entry" })).toHaveValue("next_open");
+    expect(screen.getByRole("button", { name: "Profit target", pressed: true })).toBeInTheDocument();
   });
 });

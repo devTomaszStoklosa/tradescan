@@ -9,12 +9,14 @@ import { PriceChart, type ChartMarker } from "../components/charts/PriceChart";
 import { ParamFields, SectionFields } from "../components/ParamFields";
 import { PinRunButton } from "../components/PinRunButton";
 import { FAMILY_LABELS } from "../components/SignalChip";
+import { EntryFields, ExitFields, GroupHeading } from "../components/TradeRuleFields";
 import { Button, DirectionBadge, EmptyState, ErrorBox, Field, Input, Loading, PageHeader, Panel, Segmented, Select, ToggleChip } from "../components/ui";
 import { BACKTEST_FIELDS, BACKTEST_SECTIONS, PERIODS } from "../lib/choices";
 import { downloadCsv } from "../lib/csv";
 import { fmtNumber } from "../lib/format";
 import { countChanges, describeSignal, hasProblems, pickSections, sectionSpecs, type Overrides } from "../lib/overrides";
 import { backtestBody, readBacktestForm, writeBacktestForm, type BacktestForm } from "../lib/params";
+import { countRuleChanges, defaultRules, hasRuleProblems } from "../lib/rules";
 import { useAccount, withAccount } from "../state/account";
 
 const ENGINE_COLORS = ["--accent", "--warn"];
@@ -63,11 +65,13 @@ function BacktestFormPanel({
     set("engines", draft.engines.includes(engine) ? draft.engines.filter((item) => item !== engine) : [...draft.engines, engine]);
   const selected = signals.find((signal) => signal.name === draft.signal);
   const sections = pickSections(config.sections, BACKTEST_SECTIONS);
+  const [stop, costs] = BACKTEST_SECTIONS.map((name) => sections.find((section) => section.name === name));
   const setSettings = (settings: Overrides) => set("settings", settings);
-  const changes = countChanges(draft.settings) + Object.keys(draft.signalParams).length;
+  const changes = countChanges(draft.settings) + Object.keys(draft.signalParams).length + countRuleChanges(draft, config);
   const invalid =
     !backtestBody(draft) ||
     hasProblems(draft.settings, sectionSpecs(sections)) ||
+    hasRuleProblems(draft, config) ||
     (selected !== undefined && hasProblems({ [selected.name]: draft.signalParams }, { [selected.name]: selected.params }));
 
   const submit = (event: FormEvent) => {
@@ -103,20 +107,34 @@ function BacktestFormPanel({
             <ParamFields specs={selected.params} values={draft.signalParams} onChange={(signalParams) => set("signalParams", signalParams)} />
           </section>
         )}
-        <section className="space-y-2">
+        <section className="space-y-3">
           <h2 className="text-sm font-semibold">Trade rules</h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            {sections.map((section) => (
-              <SectionFields
-                key={section.name}
-                section={section}
-                overrides={draft.settings}
-                onChange={setSettings}
-                only={BACKTEST_FIELDS[section.name as keyof typeof BACKTEST_FIELDS]}
-                className="contents"
-              />
-            ))}
+          <div className="grid gap-x-6 gap-y-4 md:grid-cols-2 lg:grid-cols-3">
+            <EntryFields
+              rules={config.entry_rules}
+              entry={draft.entry}
+              params={draft.entryParams}
+              onChange={(entry, entryParams) => setDraft({ ...draft, entry, entryParams })}
+            />
+            {stop && (
+              <div className="space-y-2">
+                <GroupHeading>Initial stop (sizes every trade)</GroupHeading>
+                <SectionFields section={stop} overrides={draft.settings} onChange={setSettings} only={BACKTEST_FIELDS.risk} className="grid grid-cols-2 gap-3" />
+              </div>
+            )}
+            <ExitFields
+              rules={config.exit_rules}
+              exits={draft.exits}
+              params={draft.exitParams}
+              onChange={(exits, exitParams) => setDraft({ ...draft, exits, exitParams })}
+            />
           </div>
+          {costs && (
+            <div className="space-y-2">
+              <GroupHeading>Costs and metrics</GroupHeading>
+              <SectionFields section={costs} overrides={draft.settings} onChange={setSettings} />
+            </div>
+          )}
         </section>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <Field label="Engines">
@@ -130,7 +148,7 @@ function BacktestFormPanel({
           </Field>
           <div className="flex items-center gap-2">
             {changes > 0 && (
-              <Button variant="ghost" onClick={() => setDraft({ ...draft, settings: {}, signalParams: {} })}>
+              <Button variant="ghost" onClick={() => setDraft({ ...draft, settings: {}, signalParams: {}, ...defaultRules(config) })}>
                 Reset {changes} changed
               </Button>
             )}
@@ -175,6 +193,7 @@ function BacktestView({ result, form }: { result: BacktestOut; form: BacktestFor
 
   if (!run) return null;
   const { config } = result;
+  const exits = result.exits.map((exit) => exit.description).join("; ") || "none, only the stop";
   return (
     <div className="space-y-4">
       <div className="space-y-1 text-sm">
@@ -188,9 +207,11 @@ function BacktestView({ result, form }: { result: BacktestOut; form: BacktestFor
           </div>
         </div>
         <p className="text-muted">
-          {result.start} → {result.end} · stop {fmtNumber(config.atr_mult, 2)} × ATR({config.atr_period}) · target {fmtNumber(config.target_r, 2)}R
-          · time exit {config.max_hold_bars} bars · risk {fmtNumber(config.risk_pct, 2)}%, max position {fmtNumber(config.max_position_pct, 0)}% · costs{" "}
+          {result.start} → {result.end} · risk {fmtNumber(config.risk_pct, 2)}%, max position {fmtNumber(config.max_position_pct, 0)}% · costs{" "}
           {fmtNumber(config.commission_pct, 2)}% + {fmtNumber(config.slippage_pct, 2)}%
+        </p>
+        <p className="text-muted">
+          Entry: {result.entry.description} · initial stop {fmtNumber(config.atr_mult, 2)} × ATR({config.atr_period}) · exits: {exits}
         </p>
       </div>
       {result.runs.length > 1 && (
@@ -240,25 +261,27 @@ export function BacktestPage() {
   const config = useConfig();
   const signals = useSignals();
   const { account } = useAccount();
-  const form = useMemo(() => readBacktestForm(params), [params]);
+  // The rules a link leaves out are the server's defaults, so the form needs the config first.
+  const form = useMemo(() => (config.data ? readBacktestForm(params, config.data) : null), [params, config.data]);
   const body = useMemo(() => {
-    const request = backtestBody(form);
-    return request ? { ...request, settings: withAccount(form.settings, account) } : null;
+    const request = form && backtestBody(form);
+    return form && request ? { ...request, settings: withAccount(form.settings, account) } : null;
   }, [form, account]);
   const backtest = useBacktest(body);
 
   if (config.isError || signals.isError) return <ErrorBox error={config.error ?? signals.error} />;
-  if (!config.data || !signals.data) return <Loading message="Connecting to the tradescan server…" />;
+  if (!config.data || !signals.data || !form) return <Loading message="Connecting to the tradescan server…" />;
+  const defaults = config.data;
 
   return (
     <>
-      <PageHeader title="Backtest" subtitle="One signal on one ticker: next-open entries, ATR stop, R-multiple target, time exit. Every parameter is adjustable." />
+      <PageHeader title="Backtest" subtitle="One signal on one ticker with the entry and exit rules you choose. Every parameter is adjustable." />
       <BacktestFormPanel
         initial={form}
         config={config.data}
         signals={signals.data}
         busy={backtest.isFetching}
-        onSubmit={(next) => setParams(writeBacktestForm(next))}
+        onSubmit={(next) => setParams(writeBacktestForm(next, defaults))}
       />
       {!body && (
         <EmptyState title="Choose a ticker and a signal">Select both engines to check that the pandas engine matches backtrader's Cerebro.</EmptyState>
