@@ -140,6 +140,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sweep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sweep */
+        post: operations["sweep_api_sweep_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chart": {
         parameters: {
             query?: never;
@@ -203,6 +220,8 @@ export interface components {
             slippage_pct: number;
             /** Bars Per Year */
             bars_per_year: number;
+            /** Oos Pct */
+            oos_pct: number;
         };
         /** BacktestIn */
         BacktestIn: {
@@ -210,8 +229,6 @@ export interface components {
             ticker: string;
             /** Signal */
             signal: string;
-            /** Engines */
-            engines?: string[];
             /**
              * Params
              * @description The signal's parameters, e.g. {"period": 30}
@@ -221,7 +238,7 @@ export interface components {
             };
             /**
              * Settings
-             * @description Per-run overrides by settings section, e.g. {"risk": {"atr_mult": 3}}; see /api/config for every parameter
+             * @description Per-run overrides by settings section, e.g. {"risk": {"atr_mult": 3}}; backtest.oos_pct sets the out-of-sample share
              */
             settings?: {
                 [key: string]: {
@@ -239,6 +256,8 @@ export interface components {
             exits?: components["schemas"]["RuleIn"][] | null;
             /** Period */
             period?: string | null;
+            /** Engines */
+            engines?: string[];
         };
         /** BacktestOut */
         BacktestOut: {
@@ -270,6 +289,8 @@ export interface components {
              * @description Exit rules on top of the initial stop, in the order given
              */
             exits: components["schemas"]["AppliedRuleOut"][];
+            /** @description The in-sample/out-of-sample split; null when the history is too short */
+            split: components["schemas"]["SplitOut"] | null;
             /** Buy Hold */
             buy_hold: components["schemas"]["Point"][];
             /** Runs */
@@ -359,6 +380,7 @@ export interface components {
             default_entry: string;
             /** Default Exits */
             default_exits: string[];
+            sweep: components["schemas"]["SweepLimitsOut"];
         };
         /**
          * Direction
@@ -453,6 +475,10 @@ export interface components {
             /** Engine */
             engine: string;
             metrics: components["schemas"]["MetricsOut"];
+            /** @description The run on the history before the split; null without a split */
+            in_sample: components["schemas"]["MetricsOut"] | null;
+            /** @description The run from the split on, with fresh equity; null without a split */
+            out_of_sample: components["schemas"]["MetricsOut"] | null;
             /** Equity */
             equity: components["schemas"]["Point"][];
             /** Trades */
@@ -795,6 +821,193 @@ export interface components {
             /** Params */
             params: components["schemas"]["ParamSpecOut"][];
         };
+        /** SplitOut */
+        SplitOut: {
+            /** Oos Pct */
+            oos_pct: number;
+            /** In Sample Start */
+            in_sample_start: string;
+            /** In Sample End */
+            in_sample_end: string;
+            /** Out Of Sample Start */
+            out_of_sample_start: string;
+            /** Out Of Sample End */
+            out_of_sample_end: string;
+        };
+        /** SweepAxisIn */
+        SweepAxisIn: {
+            /** @description What holds the parameter: the signal, the entry rule, an exit rule or a settings section */
+            target: components["schemas"]["SweepTarget"];
+            /**
+             * Owner
+             * @description The exit rule or settings section; omit for the signal and the entry rule
+             */
+            owner?: string | null;
+            /**
+             * Name
+             * @description The parameter, e.g. oversold
+             */
+            name: string;
+            /**
+             * Values
+             * @description The values to try, in order
+             */
+            values: number[];
+        };
+        /** SweepAxisOut */
+        SweepAxisOut: {
+            target: components["schemas"]["SweepTarget"];
+            /** Owner */
+            owner: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Key
+             * @description target[.owner].name
+             */
+            key: string;
+            /** Label */
+            label: string;
+            /** Unit */
+            unit: string;
+            kind: components["schemas"]["ParamKind"];
+            /**
+             * Current
+             * @description The value in the setup the sweep started from
+             */
+            current: number;
+            /** Values */
+            values: number[];
+        };
+        /** SweepCellOut */
+        SweepCellOut: {
+            /**
+             * Values
+             * @description One value per axis, in axis order
+             */
+            values: number[];
+            in_sample: components["schemas"]["MetricsOut"] | null;
+            out_of_sample: components["schemas"]["MetricsOut"] | null;
+            /**
+             * Error
+             * @description Why this combination could not run, e.g. a rule between two parameters
+             */
+            error: string | null;
+        };
+        /** SweepIn */
+        SweepIn: {
+            /** Ticker */
+            ticker: string;
+            /** Signal */
+            signal: string;
+            /**
+             * Params
+             * @description The signal's parameters, e.g. {"period": 30}
+             */
+            params?: {
+                [key: string]: number | number[];
+            };
+            /**
+             * Settings
+             * @description Per-run overrides by settings section, e.g. {"risk": {"atr_mult": 3}}; backtest.oos_pct sets the out-of-sample share
+             */
+            settings?: {
+                [key: string]: {
+                    [key: string]: number | number[] | {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /** @description Entry rule; omit for the default entry */
+            entry?: components["schemas"]["RuleIn"] | null;
+            /**
+             * Exits
+             * @description Exit rules on top of the initial stop; omit for the default exits, [] for the stop only
+             */
+            exits?: components["schemas"]["RuleIn"][] | null;
+            /** Period */
+            period?: string | null;
+            /**
+             * Axes
+             * @description One or two parameters; the first changes slowest
+             */
+            axes: components["schemas"]["SweepAxisIn"][];
+        };
+        /** SweepLimitsOut */
+        SweepLimitsOut: {
+            /** Max Axes */
+            max_axes: number;
+            /** Min Values */
+            min_values: number;
+            /** Max Values */
+            max_values: number;
+            /** Max Combinations */
+            max_combinations: number;
+            /**
+             * Sections
+             * @description Settings sections whose parameters a sweep can change
+             */
+            sections: string[];
+            /**
+             * Fixed
+             * @description section.name of settings a sweep cannot change
+             */
+            fixed: string[];
+            /**
+             * Min Period Bars
+             * @description Bars each period needs for an in-sample/out-of-sample split
+             */
+            min_period_bars: number;
+        };
+        /** SweepOut */
+        SweepOut: {
+            /** Ticker */
+            ticker: string;
+            /** Signal */
+            signal: string;
+            direction: components["schemas"]["Direction"];
+            /**
+             * Description
+             * @description The signal's rule with this run's parameters
+             */
+            description: string;
+            /**
+             * Params
+             * @description The signal's parameters used in this run
+             */
+            params: {
+                [key: string]: number | number[];
+            };
+            /** Start */
+            start: string;
+            /** End */
+            end: string;
+            config: components["schemas"]["BacktestConfigOut"];
+            entry: components["schemas"]["AppliedRuleOut"];
+            /**
+             * Exits
+             * @description Exit rules on top of the initial stop, in the order given
+             */
+            exits: components["schemas"]["AppliedRuleOut"][];
+            /**
+             * Engine
+             * @description Sweeps run on this engine
+             */
+            engine: string;
+            split: components["schemas"]["SplitOut"];
+            /** Axes */
+            axes: components["schemas"]["SweepAxisOut"][];
+            /**
+             * Cells
+             * @description Every combination; the first axis changes slowest
+             */
+            cells: components["schemas"]["SweepCellOut"][];
+        };
+        /**
+         * SweepTarget
+         * @enum {string}
+         */
+        SweepTarget: "signal" | "entry" | "exit" | "settings";
         /** TradeOut */
         TradeOut: {
             direction: components["schemas"]["Direction"];
@@ -1049,6 +1262,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BacktestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sweep_api_sweep_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SweepIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SweepOut"];
                 };
             };
             /** @description Validation Error */

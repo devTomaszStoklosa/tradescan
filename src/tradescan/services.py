@@ -6,13 +6,14 @@ argparse, HTTP or rendering. `build_use_cases` wires them from settings and a da
 Requests carry per-run overrides: `settings` ({section: {parameter: value}}) and signal parameters
 ({signal name: {parameter: value}}); a backtest also names its entry and exit rules with their
 parameters. All are validated against the declared ranges, and the configured settings are never modified.
+A sweep reruns one backtest setup over a grid of one or two of those parameters.
 """
 
 from __future__ import annotations
 
 import math
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import pandas as pd
@@ -20,6 +21,8 @@ import pandas as pd
 from tradescan.backtest.base import BacktestConfig, BacktestEngine, BacktestResult
 from tradescan.backtest.edge import EdgeSampler, EdgeStats, combine_samples
 from tradescan.backtest.metrics import Metrics, compute_metrics
+from tradescan.backtest.oos import MIN_PERIOD_BARS, PeriodMetrics, Split, run_periods, split_history
+from tradescan.backtest.sweep import SweepAxis, SweepCase, SweepJob, SweepTarget, check_axes, grid
 from tradescan.backtest.trade_rules import RuleCatalog, RuleChoice, TradeRules, default_catalog
 from tradescan.backtest.vectorized import VectorizedEngine
 from tradescan.config import Settings
@@ -29,7 +32,7 @@ from tradescan.data.provider import DataProvider
 from tradescan.data.yfinance_provider import YFinanceProvider
 from tradescan.indicators import sma
 from tradescan.parallel import SequentialRunner, TaskRunner
-from tradescan.params import GroupOverrides, Overrides, check_group
+from tradescan.params import GroupOverrides, Overrides, ParamSpec, check_group, check_values, parameters_of
 from tradescan.regime import MarketRegime, MarketRegimeAnalyzer
 from tradescan.risk import RiskPlanner
 from tradescan.scanner import ScanHit, Scanner, filter_hits
@@ -121,6 +124,7 @@ def build_backtest_config(settings: Settings) -> BacktestConfig:
         commission_pct=backtest.commission_pct,
         slippage_pct=backtest.slippage_pct,
         bars_per_year=backtest.bars_per_year,
+        oos_pct=backtest.oos_pct,
     )
 
 
@@ -375,6 +379,7 @@ class BacktestRequest:
 class EngineRun:
     result: BacktestResult
     metrics: Metrics
+    periods: PeriodMetrics | None  # None when the history is too short to split
 
 
 @dataclass(frozen=True)
@@ -385,6 +390,29 @@ class BacktestReport:
     rules: TradeRules
     close: pd.Series
     runs: list[EngineRun]
+    split: Split | None
+
+
+@dataclass(frozen=True)
+class ResolvedBacktest:
+    """A backtest request turned into validated settings, signal, rules and config."""
+
+    settings: Settings
+    signal: Signal
+    rules: TradeRules
+    config: BacktestConfig
+
+
+def resolve_backtest(
+    request: BacktestRequest, settings: Settings, registry: SignalRegistry, rules: RuleCatalog
+) -> ResolvedBacktest:
+    resolved = resolve_settings(settings, request.settings, registry)
+    return ResolvedBacktest(
+        settings=resolved,
+        signal=registry.create(request.signal, request.params),
+        rules=rules.build(request.entry, request.exits),
+        config=build_backtest_config(resolved),
+    )
 
 
 class BacktestUseCase:
@@ -414,21 +442,184 @@ class BacktestUseCase:
         unknown = [name for name in request.engines if name not in self._engines]
         if unknown or not request.engines:
             raise ValueError(f"Unknown engine(s): {', '.join(unknown) or 'none given'}. Use: {', '.join(self._engines)}")
-        settings = resolve_settings(self._settings, request.settings, self._registry)
-        signal = self._registry.create(request.signal, request.params)
-        rules = self._rules.build(request.entry, request.exits)
+        resolved = resolve_backtest(request, self._settings, self._registry, self._rules)
+        signal, rules, config = resolved.signal, resolved.rules, resolved.config
         ticker = request.ticker.upper()
-        loaded = self._market_data.load([ticker], request.period or settings.backtest.period, request.interval)
-        if ticker not in loaded.frames:
-            raise ValueError(f"No data for {ticker}")
-        df = loaded.frames[ticker]
+        df = _load_one(self._market_data, ticker, request.period or resolved.settings.backtest.period, request.interval)
+        split = split_history(df.index, config.oos_pct)
 
-        config = build_backtest_config(settings)
         runs = []
         for name in request.engines:
-            result = self._engines[name]().run(ticker, df, signal, config, rules)
-            runs.append(EngineRun(result, compute_metrics(result.equity, result.trades, df["close"], config.bars_per_year)))
-        return BacktestReport(ticker=ticker, signal=signal, config=config, rules=rules, close=df["close"], runs=runs)
+            engine = self._engines[name]()
+            result = engine.run(ticker, df, signal, config, rules)
+            metrics = compute_metrics(result.equity, result.trades, df["close"], config.bars_per_year)
+            periods = run_periods(engine, ticker, df, signal, config, rules, split.index) if split else None
+            runs.append(EngineRun(result, metrics, periods))
+        return BacktestReport(
+            ticker=ticker, signal=signal, config=config, rules=rules, close=df["close"], runs=runs, split=split
+        )
+
+
+def _load_one(market_data: MarketData, ticker: str, period: str, interval: str | None) -> pd.DataFrame:
+    loaded = market_data.load([ticker], period, interval)
+    if ticker not in loaded.frames:
+        raise ValueError(f"No data for {ticker}")
+    return loaded.frames[ticker]
+
+
+# ---------------------------------------------------------------------------
+# Sweep
+
+
+@dataclass(frozen=True)
+class SweepRequest:
+    """`setup` is the backtest every combination starts from. Its `engines` are ignored: sweeps run on the
+    vectorized engine, which gives the same trades as Cerebro many times faster."""
+
+    setup: BacktestRequest
+    axes: tuple[SweepAxis, ...]
+
+
+@dataclass(frozen=True)
+class SweptParameter:
+    axis: SweepAxis  # with validated values
+    spec: ParamSpec  # the declaration; its default is the setup's own value
+
+
+@dataclass(frozen=True)
+class SweepCell:
+    values: tuple[float, ...]  # one per axis
+    periods: PeriodMetrics | None
+    error: str | None = None  # why this combination could not run, e.g. a cross-field rule
+
+
+@dataclass(frozen=True)
+class SweepReport:
+    ticker: str
+    base: ResolvedBacktest
+    parameters: tuple[SweptParameter, ...]
+    close: pd.Series
+    split: Split
+    cells: list[SweepCell]
+
+
+# Settings sections a backtest reads. The out-of-sample share defines the split itself, so it is fixed.
+SWEEP_SECTIONS = ("account", "risk", "backtest")
+NOT_SWEEPABLE = {("backtest", "oos_pct")}
+
+
+class SweepUseCase:
+    def __init__(
+        self,
+        market_data: MarketData,
+        settings: Settings,
+        registry: SignalRegistry,
+        runner: TaskRunner,
+        rules: RuleCatalog = default_catalog,
+    ) -> None:
+        self._market_data = market_data
+        self._settings = settings
+        self._registry = registry
+        self._runner = runner
+        self._rules = rules
+
+    def run(self, request: SweepRequest) -> SweepReport:
+        check_axes(request.axes)
+        setup = self._named_rules(request.setup)
+        base = resolve_backtest(setup, self._settings, self._registry, self._rules)
+        parameters = tuple(self._check(axis, base) for axis in request.axes)
+        axes = tuple(parameter.axis for parameter in parameters)
+
+        ticker = setup.ticker.upper()
+        df = _load_one(self._market_data, ticker, setup.period or base.settings.backtest.period, setup.interval)
+        split = split_history(df.index, base.config.oos_pct)
+        if split is None:
+            raise ValueError(
+                f"{ticker} has {len(df)} bars: too few to split at {base.config.oos_pct:g}% "
+                f"with at least {MIN_PERIOD_BARS} bars in each period. Use a longer history."
+            )
+
+        cells: list[SweepCell] = []
+        cases: list[tuple[int, SweepCase]] = []
+        for values in grid(axes):
+            combination = setup
+            for axis, value in zip(axes, values):
+                combination = _APPLY[axis.target](combination, axis, value)
+            try:
+                resolved = resolve_backtest(combination, self._settings, self._registry, self._rules)
+            except ValueError as error:
+                cells.append(SweepCell(values, None, str(error)))
+                continue
+            cases.append((len(cells), SweepCase(resolved.signal, resolved.rules, resolved.config)))
+            cells.append(SweepCell(values, None))
+        results = self._runner.map(SweepJob(ticker, df, split.index), [case for _, case in cases])
+        for (position, _), periods in zip(cases, results):
+            cells[position] = replace(cells[position], periods=periods)
+        return SweepReport(ticker=ticker, base=base, parameters=parameters, close=df["close"], split=split, cells=cells)
+
+    def _named_rules(self, setup: BacktestRequest) -> BacktestRequest:
+        """The setup with its entry and exits named, so axes can refer to the default rules too."""
+        exits = setup.exits if setup.exits is not None else tuple(RuleChoice(name) for name in self._rules.default_exits)
+        return replace(setup, entry=setup.entry or RuleChoice(self._rules.default_entry), exits=exits)
+
+    def _check(self, axis: SweepAxis, base: ResolvedBacktest) -> SweptParameter:
+        """The axis with its values checked against the declaration of the parameter it names."""
+        holder, owner = _holder(axis, base)
+        values = check_values(holder, axis.name, axis.values, owner)
+        spec = next(spec for spec in parameters_of(holder) if spec.name == axis.name)
+        return SweptParameter(replace(axis, values=values), spec)
+
+
+def _holder(axis: SweepAxis, base: ResolvedBacktest) -> tuple[object, str]:
+    """The object that declares the axis's parameter, and its name for messages."""
+    if axis.target in (SweepTarget.SIGNAL, SweepTarget.ENTRY) and axis.owner:
+        raise ValueError(f"{axis.key}: a {axis.target.value} parameter takes no owner")
+    if axis.target is SweepTarget.SIGNAL:
+        return base.signal, base.signal.name
+    if axis.target is SweepTarget.ENTRY:
+        return base.rules.entry, base.rules.entry.name
+    if axis.target is SweepTarget.EXIT:
+        rule = next((rule for rule in base.rules.exits if rule.name == axis.owner), None)
+        if rule is None:
+            used = ", ".join(rule.name for rule in base.rules.exits) or "none"
+            raise ValueError(f"{axis.key}: the '{axis.owner}' exit is not part of this backtest (its exits: {used})")
+        return rule, rule.name
+    if axis.owner not in SWEEP_SECTIONS:
+        raise ValueError(f"{axis.key}: sweeps can change the settings in {', '.join(SWEEP_SECTIONS)}")
+    if (axis.owner, axis.name) in NOT_SWEEPABLE:
+        raise ValueError(f"{axis.key} sets the out-of-sample split, so it is the same for every combination")
+    return getattr(base.settings, axis.owner), axis.owner
+
+
+def _set_signal_param(setup: BacktestRequest, axis: SweepAxis, value: float) -> BacktestRequest:
+    return replace(setup, params={**setup.params, axis.name: value})
+
+
+def _set_entry_param(setup: BacktestRequest, axis: SweepAxis, value: float) -> BacktestRequest:
+    assert setup.entry is not None, "the sweep names the entry rule first"
+    return replace(setup, entry=RuleChoice(setup.entry.name, {**setup.entry.params, axis.name: value}))
+
+
+def _set_exit_param(setup: BacktestRequest, axis: SweepAxis, value: float) -> BacktestRequest:
+    exits = tuple(
+        RuleChoice(choice.name, {**choice.params, axis.name: value}) if choice.name == axis.owner else choice
+        for choice in setup.exits or ()
+    )
+    return replace(setup, exits=exits)
+
+
+def _set_setting(setup: BacktestRequest, axis: SweepAxis, value: float) -> BacktestRequest:
+    section = {**setup.settings.get(axis.owner, {}), axis.name: value}
+    return replace(setup, settings={**setup.settings, axis.owner: section})
+
+
+# How a combination's value reaches the backtest request, by what the axis names.
+_APPLY = {
+    SweepTarget.SIGNAL: _set_signal_param,
+    SweepTarget.ENTRY: _set_entry_param,
+    SweepTarget.EXIT: _set_exit_param,
+    SweepTarget.SETTINGS: _set_setting,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -506,6 +697,7 @@ class UseCases:
     market: MarketUseCase
     edge: EdgeUseCase
     backtest: BacktestUseCase
+    sweep: SweepUseCase
     chart: ChartUseCase
 
 
@@ -517,7 +709,7 @@ def build_use_cases(
     runner: TaskRunner | None = None,
     rules: RuleCatalog = default_catalog,
 ) -> UseCases:
-    """`runner` runs per-ticker work; pass a `ProcessRunner` to use every core on large universes."""
+    """`runner` runs per-ticker work and sweeps; pass a `ProcessRunner` to use every core."""
     market_data = MarketData(provider, settings)
     task_runner = runner or SequentialRunner()
     return UseCases(
@@ -525,5 +717,6 @@ def build_use_cases(
         market=MarketUseCase(market_data, settings, registry),
         edge=EdgeUseCase(market_data, settings, registry, task_runner),
         backtest=BacktestUseCase(market_data, settings, registry, engines or default_engines(), rules),
+        sweep=SweepUseCase(market_data, settings, registry, task_runner, rules),
         chart=ChartUseCase(market_data, registry),
     )

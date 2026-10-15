@@ -8,16 +8,19 @@ from dataclasses import fields
 import pandas as pd
 
 from tradescan.api import schemas
-from tradescan.backtest.base import Trade
+from tradescan.backtest.base import BacktestConfig, Trade
 from tradescan.backtest.edge import EdgeStats
 from tradescan.backtest.metrics import Metrics
+from tradescan.backtest.oos import Split
 from tradescan.backtest.rules import Rule
+from tradescan.backtest.trade_rules import TradeRules
+from tradescan.backtest.vectorized import VectorizedEngine
 from tradescan.config import SettingsSection
 from tradescan.params import ParamSpec, parameters_of
 from tradescan.regime import MarketRegime
 from tradescan.scanner import ScanHit
 from tradescan.scoring import Scorer
-from tradescan.services import BacktestReport, ChartData, EdgeReport, MarketReport, ScanReport
+from tradescan.services import BacktestReport, ChartData, EdgeReport, MarketReport, ScanReport, SweepReport
 from tradescan.signals.base import Signal
 from tradescan.watchlist import Watchlist
 
@@ -235,40 +238,81 @@ def trade_out(trade: Trade) -> schemas.TradeOut:
     )
 
 
+def _setup_out(ticker: str, signal: Signal, config: BacktestConfig, rules: TradeRules, close: pd.Series) -> dict[str, object]:
+    """The fields a backtest and a sweep share: what was tested, on which data, with which rules."""
+    return {
+        "ticker": ticker,
+        "signal": signal.name,
+        "direction": signal.direction,
+        "description": signal.describe(),
+        "params": signal_params(signal),
+        "start": day(close.index[0]),
+        "end": day(close.index[-1]),
+        "config": schemas.BacktestConfigOut(**{item.name: getattr(config, item.name) for item in fields(config)}),
+        "entry": applied_rule_out(rules.entry),
+        "exits": [applied_rule_out(rule) for rule in rules.exits],
+    }
+
+
+def split_out(split: Split) -> schemas.SplitOut:
+    return schemas.SplitOut(
+        oos_pct=split.oos_pct,
+        in_sample_start=day(split.in_sample[0]),
+        in_sample_end=day(split.in_sample[1]),
+        out_of_sample_start=day(split.out_of_sample[0]),
+        out_of_sample_end=day(split.out_of_sample[1]),
+    )
+
+
 def backtest_out(report: BacktestReport) -> schemas.BacktestOut:
-    config = report.config
     close = report.close
-    buy_hold = close / close.iloc[0] * config.initial_equity
+    buy_hold = close / close.iloc[0] * report.config.initial_equity
     return schemas.BacktestOut(
-        ticker=report.ticker,
-        signal=report.signal.name,
-        direction=report.signal.direction,
-        description=report.signal.describe(),
-        params=signal_params(report.signal),
-        start=day(close.index[0]),
-        end=day(close.index[-1]),
-        config=schemas.BacktestConfigOut(
-            initial_equity=config.initial_equity,
-            risk_pct=config.risk_pct,
-            max_position_pct=config.max_position_pct,
-            lot_size=config.lot_size,
-            atr_period=config.atr_period,
-            atr_mult=config.atr_mult,
-            commission_pct=config.commission_pct,
-            slippage_pct=config.slippage_pct,
-            bars_per_year=config.bars_per_year,
-        ),
-        entry=applied_rule_out(report.rules.entry),
-        exits=[applied_rule_out(rule) for rule in report.rules.exits],
+        **_setup_out(report.ticker, report.signal, report.config, report.rules, close),  # type: ignore[arg-type]
+        split=split_out(report.split) if report.split else None,
         buy_hold=points(buy_hold),
         runs=[
             schemas.EngineRunOut(
                 engine=run.result.engine,
                 metrics=metrics_out(run.metrics),
+                in_sample=metrics_out(run.periods.in_sample) if run.periods else None,
+                out_of_sample=metrics_out(run.periods.out_of_sample) if run.periods else None,
                 equity=points(run.result.equity),
                 trades=[trade_out(trade) for trade in run.result.trades],
             )
             for run in report.runs
+        ],
+    )
+
+
+def sweep_out(report: SweepReport) -> schemas.SweepOut:
+    base = report.base
+    return schemas.SweepOut(
+        **_setup_out(report.ticker, base.signal, base.config, base.rules, report.close),  # type: ignore[arg-type]
+        engine=VectorizedEngine.name,
+        split=split_out(report.split),
+        axes=[
+            schemas.SweepAxisOut(
+                target=item.axis.target,
+                owner=item.axis.owner or None,
+                name=item.axis.name,
+                key=item.axis.key,
+                label=item.spec.label,
+                unit=item.spec.unit,
+                kind=item.spec.kind,
+                current=item.spec.default,  # type: ignore[arg-type]
+                values=list(item.axis.values),
+            )
+            for item in report.parameters
+        ],
+        cells=[
+            schemas.SweepCellOut(
+                values=list(cell.values),
+                in_sample=metrics_out(cell.periods.in_sample) if cell.periods else None,
+                out_of_sample=metrics_out(cell.periods.out_of_sample) if cell.periods else None,
+                error=cell.error,
+            )
+            for cell in report.cells
         ],
     )
 

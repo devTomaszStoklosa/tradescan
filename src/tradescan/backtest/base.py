@@ -35,6 +35,7 @@ class BacktestConfig:
     commission_pct: float = 0.1
     slippage_pct: float = 0.05
     bars_per_year: int = 252
+    oos_pct: float = 30.0  # the last part of the history, reported separately (see `oos`)
 
 
 class ExitReason:

@@ -151,6 +151,10 @@ class BacktestSettings:
     bars_per_year: int = param(
         252, minimum=1, maximum=10_000, step=1, label="Bars per year", help="Annualizes CAGR, Sharpe and Sortino (365 for crypto)"
     )
+    oos_pct: float = param(
+        30.0, minimum=10.0, maximum=50.0, step=5.0, label="Out-of-sample share", unit="% of history",
+        help="The last part of the history, reported separately and left out of tuning",
+    )
 
 
 @dataclass(frozen=True)

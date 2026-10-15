@@ -14,14 +14,14 @@ from starlette.types import Scope
 
 from tradescan import __version__
 from tradescan.api.context import ApiContext
-from tradescan.api.routes import backtest, chart, edge, market, meta, scan, signals, watchlists
+from tradescan.api.routes import backtest, chart, edge, market, meta, scan, signals, sweep, watchlists
 from tradescan.config import Settings
 from tradescan.data.provider import DataProvider
 from tradescan.parallel import TaskRunner
 from tradescan.services import EngineFactory, build_scorer, build_use_cases
 from tradescan.signals.registry import SignalRegistry, default_registry
 
-ROUTERS = (meta, signals, watchlists, scan, market, edge, backtest, chart)
+ROUTERS = (meta, signals, watchlists, scan, market, edge, backtest, sweep, chart)
 
 
 class SpaStaticFiles(StaticFiles):

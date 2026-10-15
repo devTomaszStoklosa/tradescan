@@ -192,6 +192,22 @@ def with_overrides(obj: T, values: Overrides | None, owner: str) -> T:
     return replace(obj, **changes)  # type: ignore[type-var]
 
 
+def check_values(obj: Any, name: str, values: Sequence[Any], owner: str) -> tuple[int | float, ...]:
+    """Validated values for one declared single-number parameter of `obj`, e.g. the points of a sweep.
+
+    Only the declared range and kind are checked; cross-field rules need the other values and are left
+    to `with_overrides`. Lists and weights are refused.
+    """
+    declarations = _declarations(obj)
+    if name not in declarations:
+        known = ", ".join(declarations) or "none"
+        raise ValueError(f"{owner}: unknown or fixed parameter '{name}'. Adjustable: {known}")
+    declaration = declarations[name][0]
+    if declaration.kind not in (ParamKind.INT, ParamKind.FLOAT):
+        raise ValueError(f"{owner}.{name} is not a single number")
+    return tuple(_coerce(value, declaration, None, f"{owner}.{name}") for value in values)
+
+
 def validate(obj: Any, owner: str) -> None:
     """Check that every declared parameter's current value is inside its range (e.g. values from a file)."""
     for name, (declaration, _) in _declarations(obj).items():

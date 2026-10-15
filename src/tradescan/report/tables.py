@@ -9,9 +9,10 @@ from dataclasses import asdict, fields
 import pandas as pd
 
 from tradescan.backtest.base import Trade
+from tradescan.backtest.oos import PeriodMetrics
 from tradescan.scanner import ScanHit
 from tradescan.scoring import Scorer
-from tradescan.services import EdgeRow, EngineRun
+from tradescan.services import EdgeRow, EngineRun, SweepReport
 from tradescan.signals.base import Signal
 
 SCAN_COLUMNS: tuple[str, ...] = (
@@ -100,6 +101,56 @@ def metrics_to_frame(runs: Sequence[EngineRun]) -> pd.DataFrame:
             for run in runs
         }
     )
+
+
+FEW_TRADES = 20  # fewer closed trades than this are too few to trust
+
+
+def periods_to_frame(runs: Sequence[EngineRun]) -> pd.DataFrame:
+    """In-sample and out-of-sample metrics of every engine that has them."""
+    columns = {}
+    for run in runs:
+        if run.periods is None:
+            continue
+        for label, metrics in (("in-sample", run.periods.in_sample), ("out-of-sample", run.periods.out_of_sample)):
+            columns[f"{run.result.engine} {label}"] = {item.name: getattr(metrics, item.name) for item in fields(metrics)}
+    return pd.DataFrame(columns)
+
+
+def sweep_to_frame(report: SweepReport, metric: str, out_of_sample: bool) -> pd.DataFrame:
+    """One period's `metric` per combination: columns are the first axis's values, rows the second's.
+
+    A value from fewer than FEW_TRADES trades is marked with *, a combination that could not run shows "error".
+    """
+    first = report.parameters[0].axis
+    second = report.parameters[1].axis if len(report.parameters) > 1 else None
+    rows: dict[str, dict[str, str]] = {}
+    for cell in report.cells:
+        row = f"{second.name}={cell.values[1]:g}" if second else metric
+        rows.setdefault(row, {})[f"{first.name}={cell.values[0]:g}"] = _sweep_cell(cell.periods, metric, out_of_sample)
+    return pd.DataFrame.from_dict(rows, orient="index")
+
+
+def _sweep_cell(periods: PeriodMetrics | None, metric: str, out_of_sample: bool) -> str:
+    if periods is None:
+        return "error"
+    metrics = periods.out_of_sample if out_of_sample else periods.in_sample
+    value = getattr(metrics, metric)
+    text = "-" if math.isnan(value) else "inf" if math.isinf(value) else f"{value:,.2f}"
+    return f"{text}*" if metrics.trades < FEW_TRADES else text
+
+
+def sweep_cells_frame(report: SweepReport) -> pd.DataFrame:
+    """Every combination with both periods' metrics, one row each (for export)."""
+    records = []
+    for cell in report.cells:
+        record: dict[str, object] = {item.axis.key: value for item, value in zip(report.parameters, cell.values)}
+        record["error"] = cell.error or ""
+        if cell.periods is not None:
+            for prefix, metrics in (("is", cell.periods.in_sample), ("oos", cell.periods.out_of_sample)):
+                record.update({f"{prefix}_{item.name}": getattr(metrics, item.name) for item in fields(metrics)})
+        records.append(record)
+    return pd.DataFrame(records)
 
 
 def trades_to_frame(trades: Sequence[Trade], engine: str = "") -> pd.DataFrame:

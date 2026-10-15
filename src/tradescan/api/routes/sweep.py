@@ -1,0 +1,28 @@
+"""Parameter sweep: one backtest setup over a grid of one or two parameters, in-sample and out-of-sample."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter
+
+from tradescan.api import schemas
+from tradescan.api.context import ApiContext
+from tradescan.api.mappers import sweep_out
+from tradescan.api.routes.backtest import backtest_request
+from tradescan.backtest.sweep import SweepAxis
+from tradescan.services import SweepRequest
+
+
+def build_router(context: ApiContext) -> APIRouter:
+    router = APIRouter(tags=["backtest"])
+
+    @router.post("/sweep", response_model=schemas.SweepOut)
+    def sweep(body: schemas.SweepIn) -> schemas.SweepOut:
+        context.check_signals([body.signal])
+        axes = tuple(
+            SweepAxis(target=axis.target, name=axis.name, values=tuple(axis.values), owner=axis.owner or "")
+            for axis in body.axes
+        )
+        report = context.use_cases.sweep.run(SweepRequest(setup=backtest_request(body, ()), axes=axes))
+        return sweep_out(report)
+
+    return router

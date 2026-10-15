@@ -8,7 +8,10 @@ from tradescan import __version__
 from tradescan.api import schemas
 from tradescan.api.context import ApiContext
 from tradescan.api.mappers import rule_out, section_out
+from tradescan.backtest import sweep
+from tradescan.backtest.oos import MIN_PERIOD_BARS
 from tradescan.config import adjustable_sections
+from tradescan.services import NOT_SWEEPABLE, SWEEP_SECTIONS
 from tradescan.signals.base import Family
 
 
@@ -35,6 +38,15 @@ def build_router(context: ApiContext) -> APIRouter:
             exit_rules=[rule_out(rule) for rule in rules.exits.classes()],
             default_entry=rules.default_entry,
             default_exits=list(rules.default_exits),
+            sweep=schemas.SweepLimitsOut(
+                max_axes=sweep.MAX_AXES,
+                min_values=sweep.MIN_VALUES,
+                max_values=sweep.MAX_VALUES,
+                max_combinations=sweep.MAX_COMBINATIONS,
+                sections=list(SWEEP_SECTIONS),
+                fixed=sorted(f"{section}.{name}" for section, name in NOT_SWEEPABLE),
+                min_period_bars=MIN_PERIOD_BARS,
+            ),
         )
 
     return router
