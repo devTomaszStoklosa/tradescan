@@ -44,7 +44,8 @@ the built UI. The screens:
   signal markers and stop/target lines, the risk plan, the score breakdown and each fired signal's
   history on that ticker.
 - **Backtest**: one signal on one ticker with either or both engines; pick the entry (next open, stop
-  or limit order) and the exits (target, time exit) on top of the ATR stop; the signal's and the rules'
+  or limit order) and the exits (target, time exit, trailing, channel and breakeven stops) on top of the
+  ATR stop; the signal's and the rules'
   parameters are editable; key metrics, equity vs. buy & hold, in-sample vs. out-of-sample metrics,
   trades on the chart and in a sortable table.
 - **Sweep**: the same setup as Backtest over a range of one or two of its parameters (signal, entry,
@@ -98,6 +99,7 @@ tradescan scan -t AAPL,MSFT,PKO.WA --fresh 1 --export exports/hits.csv
 tradescan edge -w etf --family breakout,trend --min-events 30
 tradescan backtest SPY donchian_breakout --engine both
 tradescan backtest SPY connors_rsi2_long --entry limit --exits time --max-hold 5
+tradescan backtest QQQ donchian_breakout --exits trailing,breakeven
 tradescan backtest SPY connors_rsi2_long --oos 20
 tradescan sweep SPY connors_rsi2_long --axis signal.oversold=4:16:2 --axis exit.target.target_r=1,2,3 --metric expectancy_r
 tradescan scan -w crypto --lot-size 0.0001
@@ -169,7 +171,16 @@ ATR stop. Both engines read the same precomputed levels and execute them the sam
 | initial stop (always on) | at `atr_mult` x ATR from the reference price; it sizes the trade and defines 1R |
 | `target` (default) | with a limit order `target_r` R from the reference price |
 | `time` (default) | at the open `max_hold_bars` bars after the entry bar |
+| `trailing` | with a stop `atr_mult` x ATR (of each bar) below the highest high since the entry bar (above the lowest low for shorts) |
+| `channel` | with a stop at the lowest low of the last `period` bars, bars before the entry included (the highest high for shorts) |
+| `breakeven` | with a stop at `lock_r` R from the fill price, once the high since the entry bar (the low for shorts) has reached `trigger_r` R from it; `lock_r` must be below `trigger_r` |
 
+- the trailing, channel and breakeven stops are set at each close for the next bar and only ever tighten.
+  Together with the initial stop and each other, the tightest stop applies, so they only matter once
+  they are tighter than the initial stop. The high since the entry bar includes the entry bar itself,
+  also the part of it before a stop or limit entry filled. A level beyond the close exits at the next open;
+- each trade records why it closed: `stop` (the initial stop), the name of the exit rule that closed it
+  (`target`, `time`, `trailing`, `channel`, `breakeven`), or `open` (still open on the last bar);
 - the size risks `risk_pct` of equity at bar t at the initial stop; signals are ignored while an entry
   order waits or a position is open, and an order that does not fill in time is cancelled;
 - exit orders are placed on the entry bar and checked from the next bar (as backtrader's bracket orders
