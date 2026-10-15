@@ -2,11 +2,20 @@
  * Pinned backtest runs: frozen snapshots of one engine's result, kept in the browser for comparison.
  * A pin keeps what was seen; it is never re-run, so new bars do not change it.
  */
-import type { AppliedRuleOut, BacktestConfigOut, BacktestOut, Direction, MetricsOut, Point } from "../api/client";
+import type { AppliedRuleOut, BacktestConfigOut, BacktestOut, Direction, MetricsOut, Point, SplitOut } from "../api/client";
 import type { BacktestForm } from "./params";
 
 /** One chart and one table stay legible up to this many runs, and the run palette has as many colours. */
 export const MAX_RUNS = 8;
+
+/** The out-of-sample share is missing from runs pinned before out-of-sample results. */
+export type RunConfig = Omit<BacktestConfigOut, "oos_pct"> & Partial<Pick<BacktestConfigOut, "oos_pct">>;
+
+/** The in-sample and out-of-sample periods of a run, with their metrics. */
+export interface RunSplit extends SplitOut {
+  in_sample: MetricsOut;
+  out_of_sample: MetricsOut;
+}
 
 /** Everything that defines a run and its result. */
 export interface RunSnapshot {
@@ -19,12 +28,14 @@ export interface RunSnapshot {
   end: string;
   /** The signal's parameters the run used, as the server reported them. */
   params: Record<string, number | number[]>;
-  /** The stop, costs and account the run used. */
-  config: BacktestConfigOut;
+  /** The stop, costs, account and out-of-sample share the run used. */
+  config: RunConfig;
   /** The entry rule and the exit rules the run used, with their parameters. */
   entry: AppliedRuleOut;
   exits: AppliedRuleOut[];
   metrics: MetricsOut;
+  /** Null for runs pinned before out-of-sample results, or with too short a history to split. */
+  split: RunSplit | null;
   equity: Point[];
   /** Reopens the run on the Backtest page. */
   form: BacktestForm;
@@ -65,6 +76,7 @@ export function snapshotRun(result: BacktestOut, engine: string, form: BacktestF
     entry: result.entry,
     exits: result.exits,
     metrics: run.metrics,
+    split: result.split && run.in_sample && run.out_of_sample ? { ...result.split, in_sample: run.in_sample, out_of_sample: run.out_of_sample } : null,
     equity: run.equity,
     form: { ...form, engines: [engine] },
   };

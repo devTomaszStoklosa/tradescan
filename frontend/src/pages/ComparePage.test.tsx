@@ -81,6 +81,34 @@ describe("ComparePage", () => {
     );
   });
 
+  it("checks every run out-of-sample and switches the metrics to one period", async () => {
+    const old = makeRun(3, { split: null, config: { ...base.config, oos_pct: undefined } }, { name: "old pin" });
+    pin([base, wideStop, old]);
+    renderPage();
+
+    const check = table("Out-of-sample check of the pinned runs");
+    const baseline = within(check).getByRole("row", { name: /baseline/ });
+    const few = " (fewer than 20 trades)"; // read out instead of the asterisk
+    expect(within(baseline).getAllByRole("cell").map((cell) => cell.textContent)).toEqual([
+      "2023-07-03 (30%)",
+      "1.10",
+      `0.20*${few}`,
+      "+0.21 R",
+      `+0.21 R*${few}`,
+      "1.60",
+      `1.60*${few}`,
+      "30",
+      `12*${few}`,
+    ]);
+    expect(within(check).getByRole("row", { name: /old pin/ })).toHaveTextContent("No split: pinned before out-of-sample results");
+
+    await userEvent.click(screen.getByRole("radio", { name: "Out-of-sample" }));
+    const sharpe = within(table("Metrics of the pinned runs, out-of-sample")).getByRole("row", { name: /Sharpe/ });
+    expect(within(sharpe).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["0.20", "0.20", "–"]);
+    // Runs pinned before out-of-sample results have no share, so the parameter differs.
+    expect(within(table("Parameters of the pinned runs")).getByText("Out-of-sample share")).toBeInTheDocument();
+  });
+
   it("hides, renames and removes runs and keeps the change in storage", async () => {
     pin([base, wideStop]);
     renderPage();

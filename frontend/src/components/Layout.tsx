@@ -7,6 +7,7 @@ import { ThemeToggle } from "./ThemeToggle";
 const LINKS = [
   { to: "/", label: "Scanner", end: true },
   { to: "/backtest", label: "Backtest", end: false },
+  { to: "/sweep", label: "Sweep", end: false },
   { to: "/edge", label: "Edge", end: false },
   { to: "/compare", label: "Compare", end: false },
   { to: "/signals", label: "Signals", end: false },

@@ -1,4 +1,4 @@
-import { LineSeries, LineStyle, createChart, type PriceFormat, type Time } from "lightweight-charts";
+import { LineSeries, LineStyle, createChart, createSeriesMarkers, type ISeriesApi, type PriceFormat, type Time } from "lightweight-charts";
 import { useEffect, useRef } from "react";
 
 import type { Point } from "../../api/client";
@@ -17,6 +17,15 @@ export interface EquitySeries {
   axis?: "left" | "right";
 }
 
+/** A labelled point in time, e.g. where the out-of-sample period starts. Drawn on the first series. */
+export interface EquityEvent {
+  time: string;
+  text: string;
+}
+
+// A stable default, so a chart without events is not rebuilt on every render.
+const NO_EVENTS: EquityEvent[] = [];
+
 /** "price" shows whole currency units; "percent" shows returns with one decimal and a % sign. */
 export type EquityFormat = "price" | "percent";
 
@@ -31,11 +40,13 @@ export function EquityChart({
   height = 300,
   format = "price",
   label = "Equity curve",
+  events = NO_EVENTS,
 }: {
   series: EquitySeries[];
   height?: number;
   format?: EquityFormat;
   label?: string;
+  events?: EquityEvent[];
 }) {
   const container = useRef<HTMLDivElement>(null);
   const { resolved } = useTheme();
@@ -53,6 +64,7 @@ export function EquityChart({
       timeScale: { ...base.timeScale, minBarSpacing: 0.01 },
     });
     const styles = getComputedStyle(document.documentElement);
+    const lines: ISeriesApi<"Line">[] = [];
     for (const item of series) {
       const line = chart.addSeries(LineSeries, {
         color: styles.getPropertyValue(item.colorVar).trim() || palette.accent,
@@ -64,6 +76,14 @@ export function EquityChart({
         priceFormat: PRICE_FORMATS[format],
       });
       line.setData(item.points.map((point) => ({ time: point.time as Time, value: point.value })));
+      lines.push(line);
+    }
+    const [first] = lines;
+    if (first && events.length) {
+      createSeriesMarkers(
+        first,
+        events.map((event) => ({ time: event.time as Time, position: "aboveBar" as const, shape: "arrowDown" as const, color: palette.muted, text: event.text })),
+      );
     }
     // autoSize measures the container asynchronously; fit once the real width is known.
     const frame = requestAnimationFrame(() => chart.timeScale().fitContent());
@@ -71,7 +91,7 @@ export function EquityChart({
       cancelAnimationFrame(frame);
       chart.remove();
     };
-  }, [series, resolved, format]);
+  }, [series, resolved, format, events]);
 
   return (
     <div>
