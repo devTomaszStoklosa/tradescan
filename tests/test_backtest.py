@@ -5,7 +5,18 @@ from synthetic import AdverseCloseExit, FixedSignal, RatchetStop, random_walk
 
 from tradescan.backtest.base import BacktestConfig, ExitReason
 from tradescan.backtest.entries import LimitEntry, NextOpenEntry, StopEntry, entry_rules
-from tradescan.backtest.exits import BreakevenStop, ChannelStop, TargetExit, TimeExit, TrailingStop, exit_rules
+from tradescan.backtest.exits import (
+    BreakevenStop,
+    ChannelStop,
+    RsiExit,
+    SmaRevertExit,
+    SmaTrendExit,
+    SupertrendExit,
+    TargetExit,
+    TimeExit,
+    TrailingStop,
+    exit_rules,
+)
 from tradescan.backtest.metrics import compute_metrics
 from tradescan.backtest.rules import Bars
 from tradescan.backtest.trade_rules import TradeRules
@@ -174,6 +185,25 @@ def test_breakeven_stop_exits_at_the_fill_price(engine):
     assert trade.pnl == pytest.approx(0.0)
 
 
+# --- Indicator exits -----------------------------------------------------------------------------------
+
+
+def test_sma_revert_exit_leaves_at_the_open_after_a_close_above_the_average(engine):
+    # The entry bar closes on its 3-bar average (100), so the trade stays; bar 22 closes above it (102 > 100.67).
+    df = _bars({22: (100.0, 102.5, 99.5, 102.0), 23: (103.0, 103.5, 102.0, 103.0)})
+    (trade,) = _run(engine, df, rules=TradeRules(exits=(SmaRevertExit(period=3),))).trades
+    assert (trade.exit_reason, trade.exit_date, trade.exit_price) == ("sma_revert", df.index[23], 103.0)
+    assert trade.r_multiple == pytest.approx(0.75)
+
+
+def test_rsi_exit_closes_a_short_once_rsi_falls_to_the_mirrored_level(engine):
+    # Flat bars keep RSI(2) at 50; bar 22's drop takes it to 0, at or below 100 - 70, so bar 23's open closes the short.
+    df = _bars({22: (100.0, 100.5, 96.5, 97.0), 23: (96.0, 97.0, 95.5, 96.5)})
+    (trade,) = _run(engine, df, side=Direction.SHORT, rules=TradeRules(exits=(RsiExit(period=2, level=70),))).trades
+    assert (trade.exit_reason, trade.exit_date, trade.exit_price) == ("rsi", df.index[23], 96.0)
+    assert trade.pnl == pytest.approx(1_000.0) and trade.r_multiple == pytest.approx(1.0)
+
+
 def test_unfilled_orders_expire_and_signals_wait_for_them(engine):
     # The 99 buy-limit is out of reach on bars 21 and 22 and reachable from bar 23 on.
     df = _bars({21: (100.0, 101.0, 99.5, 100.0), 22: (100.0, 101.0, 99.5, 100.0)})
@@ -263,10 +293,16 @@ EXITS = [(cls(),) for cls in exit_rules.classes()] + [
     (TargetExit(target_r=1.5), TimeExit(max_hold_bars=12)),
     (TrailingStop(atr_mult=1.5), TargetExit(target_r=3.0)),
     (BreakevenStop(trigger_r=0.5, lock_r=0.1), ChannelStop(period=5), TimeExit(max_hold_bars=30)),
+    (RsiExit(), TimeExit(max_hold_bars=10)),
+    (SmaTrendExit(), TrailingStop(atr_mult=1.5)),
+    (SupertrendExit(), SmaRevertExit(period=10), TargetExit(target_r=3.0)),
     (RatchetStop(),),
     (AdverseCloseExit(),),
     (RatchetStop(atr_mult=1.0), TargetExit(target_r=3.0), TimeExit(max_hold_bars=30)),
 ]
+
+# Rules that must close some of the trades in the engine check whenever they are among its exits.
+MUST_CLOSE = (TrailingStop, ChannelStop, BreakevenStop, RsiExit, SmaRevertExit, SmaTrendExit, SupertrendExit)
 
 ENGINE_CHECK_CONFIG = BacktestConfig(commission_pct=0.1, slippage_pct=0.05)
 
@@ -290,5 +326,5 @@ def test_engines_match_for_every_exit_rule(exits, entry, signal_name):
     if any(isinstance(rule, AdverseCloseExit) for rule in exits):
         assert "signal" in reasons
     for rule in exits:
-        if isinstance(rule, TrailingStop | ChannelStop | BreakevenStop):
+        if isinstance(rule, MUST_CLOSE):
             assert rule.name in reasons

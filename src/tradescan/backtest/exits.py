@@ -19,6 +19,7 @@ import pandas as pd
 
 from tradescan.backtest.base import ExitReason
 from tradescan.backtest.rules import Bars, Rule, RuleRegistry
+from tradescan.indicators import rsi, sma, supertrend
 from tradescan.params import param
 from tradescan.signals.base import Direction
 
@@ -282,3 +283,91 @@ class _Breakeven(_Ratchet):
 
     def _candidate(self, index: int) -> float:
         return self._lock if self._sign * (self._best.update(index) - self._trigger) >= 0 else math.nan
+
+
+class _ConditionExit(ExitRule):
+    """An exit at the next open after every close where the rule's condition holds, from the entry bar on.
+
+    The condition is computed for all bars once per run. Bars where it cannot be computed yet never exit.
+    """
+
+    def prepare(self, bars: Bars, direction: Direction) -> TrackerFactory:
+        exits = self._exits(bars, direction)
+        return lambda trade: _ExitWhen(exits, self.name)
+
+    @abstractmethod
+    def _exits(self, bars: Bars, direction: Direction) -> np.ndarray:
+        """Causal booleans: True where the close of that bar calls for an exit."""
+
+
+@dataclass(frozen=True, eq=False)
+class _ExitWhen:
+    exits: np.ndarray
+    reason: str
+
+    def orders(self, index: int) -> ExitOrders:
+        return ExitOrders(at_open=self.reason) if self.exits[index] else NO_ORDERS
+
+
+@exit_rules.register
+@dataclass(frozen=True)
+class RsiExit(_ConditionExit):
+    period: int = param(2, minimum=2, maximum=50, step=1, label="RSI period", unit="bars")
+    level: float = param(
+        70.0, minimum=50.0, maximum=99.0, step=1.0, label="Exit level",
+        help="Longs exit once RSI closes at or above it, shorts once it closes at or below 100 minus it",
+    )
+    name = "rsi"
+    label = "RSI exit"
+    description = (
+        "Exit at the next open once RSI({period}) closes at or above {level:g} (at or below 100 minus that for shorts)"
+    )
+
+    def _exits(self, bars: Bars, direction: Direction) -> np.ndarray:
+        values = rsi(pd.Series(bars.close), self.period)
+        exits = values >= self.level if direction is Direction.LONG else values <= 100.0 - self.level
+        return exits.to_numpy(dtype=bool)
+
+
+def _close_beyond_sma(bars: Bars, period: int, sign: float) -> np.ndarray:
+    """True where the close is above SMA(`period`) for a sign of +1, below it for -1."""
+    close = pd.Series(bars.close)
+    return (sign * (close - sma(close, period)) > 0).to_numpy(dtype=bool)
+
+
+@exit_rules.register
+@dataclass(frozen=True)
+class SmaRevertExit(_ConditionExit):
+    period: int = param(5, minimum=2, maximum=200, step=1, label="SMA length", unit="bars")
+    name = "sma_revert"
+    label = "SMA reversion exit"
+    description = "Exit at the next open once the close is above SMA({period}) (below it for shorts)"
+
+    def _exits(self, bars: Bars, direction: Direction) -> np.ndarray:
+        return _close_beyond_sma(bars, self.period, direction.sign)
+
+
+@exit_rules.register
+@dataclass(frozen=True)
+class SmaTrendExit(_ConditionExit):
+    period: int = param(50, minimum=2, maximum=400, step=1, label="SMA length", unit="bars")
+    name = "sma_trend"
+    label = "SMA trend exit"
+    description = "Exit at the next open once the close is below SMA({period}) (above it for shorts)"
+
+    def _exits(self, bars: Bars, direction: Direction) -> np.ndarray:
+        return _close_beyond_sma(bars, self.period, -direction.sign)
+
+
+@exit_rules.register
+@dataclass(frozen=True)
+class SupertrendExit(_ConditionExit):
+    period: int = param(10, minimum=2, maximum=100, step=1, label="ATR period", unit="bars")
+    mult: float = param(3.0, minimum=0.5, maximum=10.0, step=0.1, label="ATR multiple")
+    name = "supertrend"
+    label = "Supertrend exit"
+    description = "Exit at the next open once Supertrend({period}, {mult:g}) points against the trade"
+
+    def _exits(self, bars: Bars, direction: Direction) -> np.ndarray:
+        frame = pd.DataFrame({"high": bars.high, "low": bars.low, "close": bars.close})
+        return (supertrend(frame, self.period, self.mult)["direction"] == -direction.sign).to_numpy(dtype=bool)

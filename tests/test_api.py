@@ -33,7 +33,9 @@ def test_meta_endpoints(client):
     assert "cache_dir" not in str(config["sections"])
     assert set(config["engines"]) == {"vectorized", "cerebro"}
     assert [rule["name"] for rule in config["entry_rules"]] == ["next_open", "stop", "limit"]
-    assert [rule["name"] for rule in config["exit_rules"]] == ["target", "time", "trailing", "channel", "breakeven"]
+    assert [rule["name"] for rule in config["exit_rules"]] == [
+        "target", "time", "trailing", "channel", "breakeven", "rsi", "sma_revert", "sma_trend", "supertrend"
+    ]
     assert (config["default_entry"], config["default_exits"]) == ("next_open", ["target", "time"])
     limit = config["entry_rules"][2]
     assert [param["name"] for param in limit["params"]] == ["offset_atr", "valid_bars"]
@@ -211,6 +213,19 @@ def test_backtest_with_moving_stops(client):
 
     invalid = client.post("/api/backtest", json={**body, "exits": [{"name": "breakeven", "params": {"lock_r": 1}}]})
     assert invalid.status_code == 400 and "must be below the trigger" in invalid.text
+
+
+def test_backtest_with_indicator_exits(client):
+    exits = [{"name": "rsi", "params": {"period": 3, "level": 65}}, {"name": "sma_trend", "params": {"period": 20}}]
+    response = client.post("/api/backtest", json={"ticker": "AAA", "signal": "connors_rsi2_long", "exits": exits})
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert [rule["description"] for rule in data["exits"]] == [
+        "Exit at the next open once RSI(3) closes at or above 65 (at or below 100 minus that for shorts)",
+        "Exit at the next open once the close is below SMA(20) (above it for shorts)",
+    ]
+    reasons = {trade["exit_reason"] for trade in data["runs"][0]["trades"]}
+    assert "rsi" in reasons and reasons <= {"stop", "rsi", "sma_trend", "open"}
 
 
 def test_backtest_reports_the_split(client):
