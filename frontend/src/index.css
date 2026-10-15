@@ -49,6 +49,11 @@
   --run-6: #008300;
   --run-7: #4a3aa7;
   --run-8: #e34948;
+  /* Sweep heatmaps: a diverging blue (good) / red (bad) pair around a neutral grey, light enough for dark text. */
+  --heat-mid: #f0f2f5;
+  --heat-good: #86b6ef;
+  --heat-bad: #f4a09c;
+  --heat-hatch: rgb(100 116 139 / 0.45);
 }
 
 :root[data-theme="dark"] {
@@ -82,6 +87,10 @@
   --run-6: #008300;
   --run-7: #9085e9;
   --run-8: #e66767;
+  --heat-mid: #19212c;
+  --heat-good: #1c5cab;
+  --heat-bad: #a8383a;
+  --heat-hatch: rgb(139 152 168 / 0.45);
 }
 
 html,
@@ -103,6 +112,15 @@ body {
 
 .heat {
   background: color-mix(in oklab, var(--heat-color) calc(var(--heat) * 1%), transparent);
+}
+
+/* A sweep cell: --cell-color mixed into the neutral by --cell-strength (0-1); hatched when it has too few trades. */
+.sweep-cell {
+  background-color: color-mix(in oklab, var(--cell-color, var(--heat-mid)) calc(var(--cell-strength, 0) * 100%), var(--heat-mid));
+}
+
+.sweep-cell[data-few] {
+  background-image: repeating-linear-gradient(45deg, var(--heat-hatch) 0 1px, transparent 1px 6px);
 }
 
 :focus-visible {

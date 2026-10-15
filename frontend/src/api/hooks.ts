@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { api, type BacktestIn, type ChartIn, type EdgeIn, type ScanIn } from "./client";
+import { api, type BacktestIn, type ChartIn, type EdgeIn, type ScanIn, type SweepIn } from "./client";
 
 const FIVE_MINUTES = 5 * 60_000;
 
@@ -32,6 +32,15 @@ export const useBacktest = (body: BacktestIn | null) =>
   useQuery({
     queryKey: ["backtest", body],
     queryFn: () => api.backtest(body as BacktestIn),
+    enabled: body !== null,
+    staleTime: FIVE_MINUTES,
+    retry: false,
+  });
+
+export const useSweep = (body: SweepIn | null) =>
+  useQuery({
+    queryKey: ["sweep", body],
+    queryFn: () => api.sweep(body as SweepIn),
     enabled: body !== null,
     staleTime: FIVE_MINUTES,
     retry: false,

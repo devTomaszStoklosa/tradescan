@@ -4,7 +4,7 @@
  * Parameter overrides travel as `set.<section>.<name>` and `sig.<signal>.<name>`, a backtest's rules as
  * `entry=<rule>`, `exit=<rule>,<rule>` (`none` for no exits) and `en.<rule>.<name>` / `ex.<rule>.<name>` (see overrides.ts).
  */
-import type { BacktestIn, Direction, EdgeIn, Family, ScanIn } from "../api/client";
+import type { BacktestIn, BacktestSetupIn, Direction, EdgeIn, Family, ScanIn } from "../api/client";
 import {
   ENTRY_PREFIX,
   EXIT_PREFIX,
@@ -45,14 +45,18 @@ export interface EdgeForm {
   signalParams: Overrides;
 }
 
-export interface BacktestForm extends TradeRulesForm {
+/** What one backtest tests: shared by the Backtest and the Sweep page. */
+export interface BacktestSetup extends TradeRulesForm {
   ticker: string;
   signal: string;
-  engines: string[];
   period: string;
   settings: Overrides;
   /** Parameters of the selected signal. */
   signalParams: Values;
+}
+
+export interface BacktestForm extends BacktestSetup {
+  engines: string[];
 }
 
 type SignalParamsIn = NonNullable<ScanIn["signal_params"]>;
@@ -192,6 +196,10 @@ export function edgeBody(form: EdgeForm): EdgeIn | null {
 /** Rules the URL leaves out are the server's defaults. */
 export function readBacktestForm(params: URLSearchParams, defaults: RuleDefaults): BacktestForm {
   const engines = list(params.get("eng"));
+  return { ...readBacktestSetup(params, defaults), engines: engines.length ? engines : ["vectorized"] };
+}
+
+export function readBacktestSetup(params: URLSearchParams, defaults: RuleDefaults): BacktestSetup {
   const signal = params.get("signal") ?? "";
   const entry = params.get("entry") || defaults.default_entry;
   const exitList = params.get("exit");
@@ -200,7 +208,6 @@ export function readBacktestForm(params: URLSearchParams, defaults: RuleDefaults
   return {
     ticker: (params.get("ticker") ?? "").toUpperCase(),
     signal,
-    engines: engines.length ? engines : ["vectorized"],
     period: params.get("p") ?? "",
     settings,
     signalParams: (signal && readOverrides(params, SIGNALS_PREFIX)[signal]) || {},
@@ -213,10 +220,15 @@ export function readBacktestForm(params: URLSearchParams, defaults: RuleDefaults
 
 /** With `defaults`, rules equal to them are left out, so unchanged links stay short. */
 export function writeBacktestForm(form: BacktestForm, defaults?: RuleDefaults): URLSearchParams {
+  return writeBacktestSetup(form, defaults, form.engines);
+}
+
+/** `engines` belong to a backtest only: a sweep always runs on one engine. */
+export function writeBacktestSetup(form: BacktestSetup, defaults?: RuleDefaults, engines: string[] = []): URLSearchParams {
   const params = new URLSearchParams();
   setIf(params, "ticker", form.ticker.trim().toUpperCase());
   setIf(params, "signal", form.signal);
-  setIf(params, "eng", form.engines.join(","));
+  setIf(params, "eng", engines.join(","));
   setIf(params, "p", form.period);
   if (form.entry !== defaults?.default_entry) setIf(params, "entry", form.entry);
   if (!defaults || !sameList(form.exits, defaults.default_exits)) params.set("exit", form.exits.join(",") || "none");
@@ -229,11 +241,16 @@ export function writeBacktestForm(form: BacktestForm, defaults?: RuleDefaults): 
 
 /** The backtest request without the account, which the page adds from browser storage. */
 export function backtestBody(form: BacktestForm): BacktestIn | null {
-  if (!form.ticker.trim() || !form.signal || !form.engines.length) return null;
+  const setup = setupBody(form);
+  return setup && form.engines.length ? { ...setup, engines: form.engines } : null;
+}
+
+/** The setup part of a backtest or sweep request; null until a ticker and a signal are chosen. */
+export function setupBody(form: BacktestSetup): BacktestSetupIn | null {
+  if (!form.ticker.trim() || !form.signal) return null;
   return {
     ticker: form.ticker.trim().toUpperCase(),
     signal: form.signal,
-    engines: form.engines,
     period: form.period || null,
     params: form.signalParams as SignalParamsIn[string],
     settings: form.settings,

@@ -1,4 +1,16 @@
-import type { AppliedRuleOut, BacktestOut, ConfigOut, HitOut, MetricsOut, ParamSpecOut, RuleOut, ScanOut, SignalOut, WatchlistOut } from "../api/client";
+import type {
+  AppliedRuleOut,
+  BacktestOut,
+  ConfigOut,
+  HitOut,
+  MetricsOut,
+  ParamSpecOut,
+  RuleOut,
+  ScanOut,
+  SignalOut,
+  SweepOut,
+  WatchlistOut,
+} from "../api/client";
 import { formatTemplate } from "../lib/overrides";
 import type { BacktestForm } from "../lib/params";
 import { toPinnedRun, type PinnedRun, type RunSnapshot } from "../lib/runs";
@@ -117,6 +129,7 @@ export const config: ConfigOut = {
       params: [
         spec("commission_pct", "Commission", 0.1, [0, 5, 0.01], "float", { unit: "%" }),
         spec("slippage_pct", "Slippage", 0.05, [0, 5, 0.01], "float", { unit: "%" }),
+        spec("oos_pct", "Out-of-sample share", 30, [10, 50, 5], "float", { unit: "% of history" }),
       ],
     },
   ],
@@ -126,6 +139,15 @@ export const config: ConfigOut = {
   exit_rules: exitRules,
   default_entry: "next_open",
   default_exits: ["target", "time"],
+  sweep: {
+    max_axes: 2,
+    min_values: 2,
+    max_values: 50,
+    max_combinations: 200,
+    sections: ["account", "risk", "backtest"],
+    fixed: ["backtest.oos_pct"],
+    min_period_bars: 60,
+  },
 };
 
 /** A trimmed copy of what /api/signals returns. */
@@ -248,9 +270,17 @@ export const backtestResult: BacktestOut = {
     commission_pct: 0.1,
     slippage_pct: 0.05,
     bars_per_year: 252,
+    oos_pct: 30,
   },
   entry: appliedRule(entryRules[0]!),
   exits: exitRules.map((rule) => appliedRule(rule)),
+  split: {
+    oos_pct: 30,
+    in_sample_start: "2016-01-04",
+    in_sample_end: "2023-06-30",
+    out_of_sample_start: "2023-07-03",
+    out_of_sample_end: "2026-10-13",
+  },
   buy_hold: [
     { time: "2016-01-04", value: 100000 },
     { time: "2026-10-13", value: 130200 },
@@ -259,6 +289,8 @@ export const backtestResult: BacktestOut = {
     {
       engine: "vectorized",
       metrics: makeMetrics(),
+      in_sample: makeMetrics({ sharpe: 1.1, trades: 30 }),
+      out_of_sample: makeMetrics({ sharpe: 0.2, trades: 12 }),
       equity: [
         { time: "2016-01-04", value: 100000 },
         { time: "2021-06-01", value: 105000.123 },
@@ -297,9 +329,45 @@ export function makeRun(slot: number, overrides: Partial<RunSnapshot> = {}, extr
     entry: backtestResult.entry,
     exits: backtestResult.exits,
     metrics: makeMetrics(),
+    split: { ...backtestResult.split!, in_sample: makeMetrics({ sharpe: 1.1, trades: 30 }), out_of_sample: makeMetrics({ sharpe: 0.2, trades: 12 }) },
     equity: backtestResult.runs[0]!.equity,
     form: backtestForm,
     ...overrides,
   };
   return { ...toPinnedRun(snapshot, new Date("2026-10-14T09:00:00Z")), id: `run-${slot}`, slot, ...extra };
 }
+
+const sweepCell = (values: number[], sharpe: [number, number], trades: [number, number] = [30, 25]) => ({
+  values,
+  in_sample: makeMetrics({ sharpe: sharpe[0], trades: trades[0] }),
+  out_of_sample: makeMetrics({ sharpe: sharpe[1], trades: trades[1] }),
+  error: null,
+});
+
+/** A 3 × 2 sweep of the RSI2 setup: oversold 5/10/15 by target 2R/3R, one combination failed. */
+export const sweepResult: SweepOut = {
+  ticker: "SPY",
+  signal: "connors_rsi2_long",
+  direction: "long",
+  description: backtestResult.description,
+  params: backtestResult.params,
+  start: backtestResult.start,
+  end: backtestResult.end,
+  config: backtestResult.config,
+  entry: backtestResult.entry,
+  exits: backtestResult.exits,
+  engine: "vectorized",
+  split: backtestResult.split!,
+  axes: [
+    { target: "signal", owner: null, name: "oversold", key: "signal.oversold", label: "Oversold level", unit: "", kind: "float", current: 10, values: [5, 10, 15] },
+    { target: "exit", owner: "target", name: "target_r", key: "exit.target.target_r", label: "Distance", unit: "R", kind: "float", current: 2, values: [2, 3] },
+  ],
+  cells: [
+    sweepCell([5, 2], [0.4, 0.1]),
+    sweepCell([5, 3], [0.6, -0.2]),
+    sweepCell([10, 2], [0.9, 0.5]),
+    sweepCell([10, 3], [1.4, 0.3], [30, 8]),
+    sweepCell([15, 2], [0.7, 0.4]),
+    { values: [15, 3], in_sample: null, out_of_sample: null, error: "connors_rsi2_long: test failure" },
+  ],
+};

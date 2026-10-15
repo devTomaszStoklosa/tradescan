@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import type { BacktestOut, EngineRunOut, MetricsOut, TradeOut } from "../api/client";
 import { bestIndexes, metricValue, type MetricKey } from "../lib/compare";
-import { fmtNumber, fmtPct, fmtPrice, fmtSigned, fmtSize, tone } from "../lib/format";
+import { DASH, fmtNumber, fmtPct, fmtPrice, fmtSigned, fmtSize, tone } from "../lib/format";
 import { DataTable, type Column } from "./DataTable";
 import { StatTile } from "./ui";
 
@@ -73,10 +73,11 @@ export function enginesAgree(runs: EngineRunOut[]): boolean {
 export interface MetricsColumn {
   key: string;
   header: ReactNode;
-  metrics: MetricsOut;
+  /** Null when the column has no metrics, e.g. a run pinned before out-of-sample results; shown as dashes. */
+  metrics: MetricsOut | null;
 }
 
-/** One column per engine or run; with `highlightBest`, the best value of each ranked metric is marked. */
+/** One column per engine, run or period; with `highlightBest`, the best value of each ranked metric is marked. */
 export function MetricsTable({ columns, caption, highlightBest = false }: { columns: MetricsColumn[]; caption: string; highlightBest?: boolean }) {
   // `relative` keeps the absolutely positioned screen-reader labels inside the scroll area on narrow screens.
   return (
@@ -97,7 +98,8 @@ export function MetricsTable({ columns, caption, highlightBest = false }: { colu
         </thead>
         <tbody>
           {METRICS.map((metric) => {
-            const best = highlightBest && metric.ranked ? bestIndexes(columns.map((column) => metricValue(column.metrics, metric.key))) : null;
+            const values = columns.map((column) => (column.metrics ? metricValue(column.metrics, metric.key) : null));
+            const best = highlightBest && metric.ranked ? bestIndexes(values) : null;
             return (
               <tr key={metric.key} className="border-b border-line last:border-0">
                 <th scope="row" className="sticky left-0 bg-panel px-3 py-1.5 text-left font-normal whitespace-nowrap text-muted">
@@ -105,7 +107,7 @@ export function MetricsTable({ columns, caption, highlightBest = false }: { colu
                 </th>
                 {columns.map((column, index) => (
                   <td key={column.key} className={`num px-3 py-1.5 text-right whitespace-nowrap ${best?.has(index) ? "bg-up/10 font-semibold" : ""}`}>
-                    {metric.format(column.metrics)}
+                    {column.metrics ? metric.format(column.metrics) : DASH}
                     {best?.has(index) && <span className="sr-only"> (best)</span>}
                   </td>
                 ))}

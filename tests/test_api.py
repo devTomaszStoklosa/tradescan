@@ -196,6 +196,64 @@ def test_backtest_entry_and_exit_rules(client):
     assert [trade["entry_date"] for trade in trades] != [trade["entry_date"] for trade in default["runs"][0]["trades"]]
 
 
+def test_backtest_reports_the_split(client):
+    body = {"ticker": "AAA", "signal": "connors_rsi2_long", "settings": {"backtest": {"oos_pct": 20}}}
+    data = client.post("/api/backtest", json=body).json()
+    assert data["config"]["oos_pct"] == 20
+    split = data["split"]
+    assert split["oos_pct"] == 20 and split["in_sample_start"] == data["start"] and split["out_of_sample_end"] == data["end"]
+    assert split["in_sample_end"] < split["out_of_sample_start"]
+    run = data["runs"][0]
+    assert run["in_sample"]["trades"] > 0 and run["out_of_sample"]["trades"] > 0
+    assert client.post("/api/backtest", json={**body, "settings": {"backtest": {"oos_pct": 60}}}).status_code == 400
+
+
+def test_sweep(client):
+    axes = [
+        {"target": "signal", "name": "oversold", "values": [10, 20]},
+        {"target": "exit", "owner": "target", "name": "target_r", "values": [1.5, 2, 3]},
+    ]
+    response = client.post("/api/sweep", json={"ticker": "aaa", "signal": "connors_rsi2_long", "axes": axes})
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["ticker"] == "AAA" and data["engine"] == "vectorized" and data["split"]["oos_pct"] == 30
+    first, second = data["axes"]
+    assert (first["key"], first["label"], first["kind"], first["current"], first["values"]) == (
+        "signal.oversold", "Oversold level", "float", 10, [10, 20]
+    )  # fmt: skip
+    assert (second["key"], second["owner"], second["unit"]) == ("exit.target.target_r", "target", "R")
+    assert [cell["values"] for cell in data["cells"]] == [[10, 1.5], [10, 2], [10, 3], [20, 1.5], [20, 2], [20, 3]]
+    assert all(cell["in_sample"]["trades"] > 0 and cell["out_of_sample"] and cell["error"] is None for cell in data["cells"])
+
+    # A cell is the backtest of its combination, out-of-sample metrics included.
+    body = {"ticker": "AAA", "signal": "connors_rsi2_long", "params": {"oversold": 20}, "exits": [{"name": "target"}, {"name": "time"}]}
+    single = client.post("/api/backtest", json=body).json()["runs"][0]
+    assert data["cells"][4]["out_of_sample"] == single["out_of_sample"]
+    assert data["cells"][4]["in_sample"] == single["in_sample"]
+
+
+def test_sweep_limits_and_errors(client):
+    limits = client.get("/api/config").json()["sweep"]
+    assert limits == {
+        "max_axes": 2, "min_values": 2, "max_values": 50, "max_combinations": 200,
+        "sections": ["account", "risk", "backtest"], "fixed": ["backtest.oos_pct"], "min_period_bars": 60,
+    }  # fmt: skip
+
+    def sweep(*axes, **extra):
+        return client.post("/api/sweep", json={"ticker": "AAA", "signal": "golden_cross", "axes": list(axes), **extra})
+
+    fast = {"target": "signal", "name": "fast", "values": list(range(150, 251, 50))}
+    cells = sweep(fast).json()["cells"]
+    assert [cell["error"] is None for cell in cells] == [True, False, False]
+    assert sweep({**fast, "values": list(range(2, 17))}, {**fast, "name": "slow", "values": list(range(300, 314))}).status_code == 400
+    assert sweep({**fast, "values": [1, 2]}).status_code == 400
+    assert sweep({**fast, "values": [50]}).status_code == 422
+    assert sweep({"target": "settings", "owner": "backtest", "name": "oos_pct", "values": [20, 30]}).status_code == 400
+    assert sweep({"target": "nope", "name": "fast", "values": [5, 6]}).status_code == 422
+    assert sweep(fast, engines=["cerebro"]).status_code == 422  # engines belong to backtests
+    assert client.post("/api/sweep", json={"ticker": "AAA", "signal": "nope", "axes": [fast]}).status_code == 400
+
+
 def test_static_ui_with_spa_fallback(watchlists, tmp_path):
     dist = tmp_path / "dist"
     dist.mkdir()

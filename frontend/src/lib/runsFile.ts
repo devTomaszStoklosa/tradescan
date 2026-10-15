@@ -1,15 +1,15 @@
 /**
  * Pinned runs on disk. Browser storage and the JSON export use the same format:
  * `{version, runs}`, with each equity curve as two arrays (dates, values rounded to cents),
- * about half the size of one object per point. Version 1 files, from before entry and exit rules,
- * are upgraded when read.
+ * about half the size of one object per point. Older files are upgraded when read: version 1 is from
+ * before entry and exit rules, version 2 from before out-of-sample results.
  */
 import type { AppliedRuleOut, MetricsOut } from "../api/client";
 import { formatTemplate, type Overrides } from "./overrides";
 import { moveLegacyExitSettings } from "./rules";
 import { MAX_RUNS, type PinnedRun } from "./runs";
 
-export const RUNS_FILE_VERSION = 2;
+export const RUNS_FILE_VERSION = 3;
 
 interface StoredEquity {
   time: string[];
@@ -64,6 +64,13 @@ const form: Check = (value) =>
   arrayOf(text)(value.exits) &&
   recordOf(recordOf(paramValue))(value.exitParams);
 
+const split: Check = (value) =>
+  isRecord(value) &&
+  finite(value.oos_pct) &&
+  ["in_sample_start", "in_sample_end", "out_of_sample_start", "out_of_sample_end"].every((key) => text(value[key])) &&
+  metrics(value.in_sample) &&
+  metrics(value.out_of_sample);
+
 const appliedRule: Check = (value) =>
   isRecord(value) && text(value.name) && text(value.label) && text(value.description) && recordOf(oneOf(finite, arrayOf(finite)))(value.params);
 
@@ -85,6 +92,7 @@ const RUN_FIELDS: Record<keyof StoredRun, Check> = {
   entry: appliedRule,
   exits: arrayOf(appliedRule),
   metrics,
+  split: oneOf((value) => value === null, split),
   equity,
   form,
 };
@@ -128,12 +136,22 @@ function upgradeV1(value: unknown): unknown {
   };
 }
 
+// --- Version 2: runs had no out-of-sample results, and cannot get them without a rerun --------------
+
+const upgradeV2 = (value: unknown): unknown => (isRecord(value) ? { ...value, split: null } : value);
+
+const UPGRADES: Record<number, (value: unknown) => unknown> = {
+  1: (value) => upgradeV2(upgradeV1(value)),
+  2: upgradeV2,
+  [RUNS_FILE_VERSION]: (value) => value,
+};
+
 /** Runs from parsed JSON; throws an Error naming the first problem. */
 export function decodeRuns(data: unknown): PinnedRun[] {
   if (!isRecord(data) || !Array.isArray(data.runs)) throw new Error("This is not a tradescan runs file");
-  if (data.version === 1) return data.runs.map((run, index) => decodeRun(upgradeV1(run), index));
-  if (data.version !== RUNS_FILE_VERSION) throw new Error(`Unsupported runs file version: ${String(data.version)}`);
-  return data.runs.map(decodeRun);
+  const upgrade = typeof data.version === "number" ? UPGRADES[data.version] : undefined;
+  if (!upgrade) throw new Error(`Unsupported runs file version: ${String(data.version)}`);
+  return data.runs.map((run, index) => decodeRun(upgrade(run), index));
 }
 
 export function parseRunsFile(content: string): PinnedRun[] {

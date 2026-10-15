@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it, vi } from "vitest";
@@ -64,6 +64,29 @@ describe("BacktestPage pinning", () => {
     await userEvent.click(screen.getByRole("button", { name: "Unpin run" }));
     expect(storedRuns()).toHaveLength(0);
     expect(screen.getByRole("button", { name: "Pin run" })).toBeInTheDocument();
+  });
+});
+
+describe("BacktestPage out-of-sample results", () => {
+  it("shows both periods next to the full history and links the setup to a sweep", async () => {
+    renderPage("/backtest?ticker=SPY&signal=connors_rsi2_long&sig.connors_rsi2_long.oversold=15&set.backtest.oos_pct=20");
+    const periods = await screen.findByRole("table", { name: "Metrics of the full history and of the in-sample and out-of-sample periods" });
+    const sharpe = within(periods).getByRole("row", { name: /Sharpe/ });
+    expect(within(sharpe).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["0.80", "1.10", "0.20"]);
+    expect(screen.getByText("Out-of-sample: only 12 trades, too few to trust the metrics.")).toBeInTheDocument();
+    expect(backtestBodies().at(-1)).toMatchObject({ settings: { backtest: { oos_pct: 20 } } });
+    expect(screen.getByLabelText("Out-of-sample share (% of history)")).toHaveValue(20);
+    expect(screen.getByRole("link", { name: "Sweep parameters of this setup →" })).toHaveAttribute(
+      "href",
+      "/sweep?ticker=SPY&signal=connors_rsi2_long&set.backtest.oos_pct=20&sig.connors_rsi2_long.oversold=15",
+    );
+  });
+
+  it("explains a missing split", async () => {
+    RESPONSES["/backtest"] = { ...backtestResult, split: null, runs: backtestResult.runs.map((run) => ({ ...run, in_sample: null, out_of_sample: null })) };
+    renderPage("/backtest?ticker=SPY&signal=connors_rsi2_long");
+    expect(await screen.findByText(/The history is too short to split/)).toBeInTheDocument();
+    RESPONSES["/backtest"] = backtestResult;
   });
 });
 

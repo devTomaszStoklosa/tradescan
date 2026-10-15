@@ -6,6 +6,8 @@ export type AppliedRuleOut = Schemas["AppliedRuleOut"];
 export type BacktestConfigOut = Schemas["BacktestConfigOut"];
 export type BacktestIn = Schemas["BacktestIn"];
 export type BacktestOut = Schemas["BacktestOut"];
+/** What a backtest and a sweep share. */
+export type BacktestSetupIn = Omit<BacktestIn, "engines">;
 export type Candle = Schemas["Candle"];
 export type ChartIn = Schemas["ChartIn"];
 export type ChartOut = Schemas["ChartOut"];
@@ -29,6 +31,14 @@ export type ScanIn = Schemas["ScanIn"];
 export type ScanOut = Schemas["ScanOut"];
 export type SettingsSectionOut = Schemas["SettingsSectionOut"];
 export type SignalOut = Schemas["SignalOut"];
+export type SplitOut = Schemas["SplitOut"];
+export type SweepAxisIn = Schemas["SweepAxisIn"];
+export type SweepAxisOut = Schemas["SweepAxisOut"];
+export type SweepCellOut = Schemas["SweepCellOut"];
+export type SweepIn = Schemas["SweepIn"];
+export type SweepLimitsOut = Schemas["SweepLimitsOut"];
+export type SweepOut = Schemas["SweepOut"];
+export type SweepTarget = Schemas["SweepTarget"];
 export type TradeOut = Schemas["TradeOut"];
 export type WatchlistOut = Schemas["WatchlistOut"];
 
@@ -88,6 +98,7 @@ export const api = {
   scan: (body: ScanIn) => post<ScanOut>("/scan", body),
   edge: (body: EdgeIn) => post<EdgeOut>("/edge", body),
   backtest: (body: BacktestIn) => post<BacktestOut>("/backtest", body),
+  sweep: (body: SweepIn) => post<SweepOut>("/sweep", body),
   chart: (body: ChartIn) => post<ChartOut>("/chart", body),
 };
 

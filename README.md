@@ -14,6 +14,7 @@ Trading signal scanner for daily bars: **vectorized pandas signals on yfinance d
 - historical edge of each signal: win rate and forward return vs. the average bar
 - market regime: benchmark vs. SMA200, breadth, new highs/lows
 - two backtest engines that produce identical trades (pandas for speed, Cerebro as reference)
+- an out-of-sample check on every backtest, and parameter sweeps shown as in-sample and out-of-sample heatmaps
 - a React web UI on top of a small FastAPI server (`tradescan serve`)
 
 > Not investment advice. This is a research tool; every number it prints is a historical statistic.
@@ -44,10 +45,15 @@ the built UI. The screens:
   history on that ticker.
 - **Backtest**: one signal on one ticker with either or both engines; pick the entry (next open, stop
   or limit order) and the exits (target, time exit) on top of the ATR stop; the signal's and the rules'
-  parameters are editable; key metrics, equity vs. buy & hold, trades on the chart and in a sortable table.
+  parameters are editable; key metrics, equity vs. buy & hold, in-sample vs. out-of-sample metrics,
+  trades on the chart and in a sortable table.
+- **Sweep**: the same setup as Backtest over a range of one or two of its parameters (signal, entry,
+  exits, stop or costs), as two heatmaps of a metric you pick: in-sample and out-of-sample. Click a cell
+  for its metrics, the average of its neighbours, and a link that opens it on the Backtest page.
 - **Edge**: signal statistics across a watchlist at several horizons, coloured by edge.
 - **Compare**: backtest runs pinned with **Pin run** on the Backtest page, side by side: the parameters
-  that differ, every metric with the best value highlighted, and the return curves on one chart.
+  that differ, an out-of-sample check (key metrics in-sample next to out-of-sample), every metric of the
+  full history or of one period with the best value highlighted, and the return curves on one chart.
 - **Signals**: the signal library with families, weights, rules and each parameter's default and range.
 
 Scanner and Edge have an **Advanced settings** panel with every other parameter (see
@@ -59,7 +65,8 @@ Up to 8 runs can be pinned. A pinned run is a snapshot: it keeps the result you 
 arrive, and **Open in Backtest** runs it again with today's data and the account currently set in the
 header. Pinned runs live in this browser only (clearing site data deletes them), so use **Export JSON**
 as a backup or to move them to another browser, and **Import JSON** to bring them back. Runs with fewer
-than 20 trades are flagged, because their metrics are mostly noise.
+than 20 trades are flagged, because their metrics are mostly noise. Runs pinned before out-of-sample
+results existed have none, since a pin is never re-run.
 
 > The API has no authentication. `serve` binds to 127.0.0.1; do not expose it to a network.
 
@@ -91,6 +98,8 @@ tradescan scan -t AAPL,MSFT,PKO.WA --fresh 1 --export exports/hits.csv
 tradescan edge -w etf --family breakout,trend --min-events 30
 tradescan backtest SPY donchian_breakout --engine both
 tradescan backtest SPY connors_rsi2_long --entry limit --exits time --max-hold 5
+tradescan backtest SPY connors_rsi2_long --oos 20
+tradescan sweep SPY connors_rsi2_long --axis signal.oversold=4:16:2 --axis exit.target.target_r=1,2,3 --metric expectancy_r
 tradescan scan -w crypto --lot-size 0.0001
 tradescan update-universes
 ```
@@ -100,7 +109,8 @@ tradescan update-universes
 | `scan` | Signals that fired within the last `--fresh` bars, scored and ranked, with stop/target/size and the edge of the most recent signal on that ticker. |
 | `market` | Regime label (risk-on / neutral / risk-off) from the benchmark trend and watchlist breadth. |
 | `edge` | For each signal, pooled across the watchlist: events, win rate, average and edge vs. baseline at several horizons. |
-| `backtest` | One signal on one ticker with the pandas engine, Cerebro, or `both` side by side. `--entry` picks the entry rule, `--exits` the exit rules (`none` keeps only the stop). |
+| `backtest` | One signal on one ticker with the pandas engine, Cerebro, or `both` side by side, plus its in-sample and out-of-sample metrics. `--entry` picks the entry rule, `--exits` the exit rules (`none` keeps only the stop), `--oos` the out-of-sample share. |
+| `sweep` | The `backtest` setup over one or two `--axis` parameters (`target[.owner].name=FROM:TO:STEP` or `=V1,V2,...`), as in-sample and out-of-sample grids of `--metric`; `--export` saves every combination. |
 | `list-signals` | All signals with family, direction, scoring weight and rule. |
 | `update-universes` | Refresh the `sp500` and `nasdaq100` watchlists from Wikipedia's constituent tables (`--only sp500`). |
 | `serve` | Web UI and HTTP API. |
@@ -170,6 +180,25 @@ ATR stop. Both engines read the same precomputed levels and execute them the sam
 Metrics: total return, CAGR, Sharpe, Sortino, max drawdown, win rate, profit factor, expectancy in R,
 SQN, exposure, buy & hold.
 
+**Out-of-sample split.** Every backtest also reports its metrics for two periods, split at
+`backtest.oos_pct` (default 30%) from the end of the history:
+
+- in-sample: the engine only gets the bars before the split, so nothing after it can influence the result;
+- out-of-sample: the engine gets the full history, so indicators are warmed up, but the signal only fires
+  from the split on; the period starts with fresh equity and its metrics start at the split bar.
+
+Each period needs at least 60 bars; with less history the split is left out. Tune on the in-sample
+period and treat the out-of-sample one as the check: a setting that only works in-sample is fitted to
+the past.
+
+**Sweeps.** A sweep runs one setup for every combination of one or two parameters' values (at most 200
+combinations, 2–50 values per parameter), each on both periods, with the pandas engine on all CPU
+cores. Any single-number parameter of the signal, the entry rule, the setup's exit rules or the
+`account`, `risk` and `backtest` settings can be swept; the out-of-sample share cannot, since it defines
+the split. A combination that breaks a rule between parameters (for example a fast average that is not
+shorter than the slow one) is shown as failed and the others still run. On 10 years of daily bars a
+sweep of 200 combinations takes a few seconds.
+
 ## Configuration
 
 `config/settings.toml` holds account size, risk per trade, ATR stop multiple, targets, freshness,
@@ -189,16 +218,20 @@ rules; a single run can override any of them without touching the file:
 - through the API: `"settings": {"risk": {"atr_mult": 3}}` and
   `"signal_params": {"connors_rsi2_long": {"oversold": 15}}` (a backtest takes its signal's values as
   `"params"`, and its rules as `"entry": {"name": "limit", "params": {"offset_atr": 1}}` and
-  `"exits": [{"name": "target", "params": {"target_r": 3}}]`); `/api/config` lists the settings and
-  the rules, `/api/signals` the signals, each parameter with its range;
-- on the CLI, through the existing flags (`--atr-mult`, `--fresh`, `--equity`, `--target-r`, ...).
+  `"exits": [{"name": "target", "params": {"target_r": 3}}]`), and a sweep its parameters as
+  `"axes": [{"target": "exit", "owner": "target", "name": "target_r", "values": [1, 2, 3]}]`);
+  `/api/config` lists the settings, the rules and the sweep limits, `/api/signals` the signals, each
+  parameter with its range;
+- on the CLI, through the existing flags (`--atr-mult`, `--fresh`, `--equity`, `--target-r`, `--oos`, ...).
 
 Values outside the range, unknown names and anything that is not a parameter (paths, cache settings)
 are refused. Signal descriptions are filled in from the values in use, so "RSI(3) < 15" always
 describes the rule that ran.
 
 > Every adjustable setting is also a way to fit the past. Compare variations over a long history and
-> several tickers, and distrust a setting that only works within a narrow range.
+> several tickers, and distrust a setting that only works within a narrow range: a sweep's heatmaps show
+> both. Looking at the out-of-sample results again and again while tuning slowly turns them into
+> in-sample results too.
 
 ## Extending
 

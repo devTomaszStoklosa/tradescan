@@ -1,49 +1,23 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 import type { BacktestOut, ConfigOut, SignalOut } from "../api/client";
 import { useBacktest, useChart, useConfig, useSignals } from "../api/hooks";
 import { KeyMetrics, MetricsComparison, TradesTable } from "../components/BacktestResults";
-import { EquityChart, type EquitySeries } from "../components/charts/EquityChart";
+import { BacktestSetupFields } from "../components/BacktestSetupFields";
+import { EquityChart, type EquityEvent, type EquitySeries } from "../components/charts/EquityChart";
 import { PriceChart, type ChartMarker } from "../components/charts/PriceChart";
-import { ParamFields, SectionFields } from "../components/ParamFields";
+import { PeriodsPanel } from "../components/OutOfSample";
 import { PinRunButton } from "../components/PinRunButton";
-import { FAMILY_LABELS } from "../components/SignalChip";
-import { EntryFields, ExitFields, GroupHeading } from "../components/TradeRuleFields";
-import { Button, DirectionBadge, EmptyState, ErrorBox, Field, Input, Loading, PageHeader, Panel, Segmented, Select, ToggleChip } from "../components/ui";
-import { BACKTEST_FIELDS, BACKTEST_SECTIONS, PERIODS } from "../lib/choices";
+import { Button, DirectionBadge, EmptyState, ErrorBox, Field, Loading, PageHeader, Panel, Segmented, ToggleChip } from "../components/ui";
 import { downloadCsv } from "../lib/csv";
 import { fmtNumber } from "../lib/format";
-import { countChanges, describeSignal, hasProblems, pickSections, sectionSpecs, type Overrides } from "../lib/overrides";
 import { backtestBody, readBacktestForm, writeBacktestForm, type BacktestForm } from "../lib/params";
-import { countRuleChanges, defaultRules, hasRuleProblems } from "../lib/rules";
+import { hasSetupProblems, resetSetup, setupChanges } from "../lib/setup";
+import { newSweepForm, writeSweepForm } from "../lib/sweep";
 import { useAccount, withAccount } from "../state/account";
 
 const ENGINE_COLORS = ["--accent", "--warn"];
-
-function SignalSelect({ value, onChange, signals }: { value: string; onChange: (value: string) => void; signals: SignalOut[] }) {
-  const groups = useMemo(() => {
-    const byFamily = new Map<string, SignalOut[]>();
-    for (const signal of signals) byFamily.set(signal.family, [...(byFamily.get(signal.family) ?? []), signal]);
-    return [...byFamily.entries()];
-  }, [signals]);
-  return (
-    <Select value={value} onChange={(event) => onChange(event.target.value)} required>
-      <option value="" disabled>
-        Choose a signal…
-      </option>
-      {groups.map(([family, items]) => (
-        <optgroup key={family} label={FAMILY_LABELS[family as SignalOut["family"]]}>
-          {items.map((signal) => (
-            <option key={signal.name} value={signal.name} title={signal.description}>
-              {signal.name} ({signal.direction})
-            </option>
-          ))}
-        </optgroup>
-      ))}
-    </Select>
-  );
-}
 
 function BacktestFormPanel({
   initial,
@@ -60,19 +34,10 @@ function BacktestFormPanel({
 }) {
   const [draft, setDraft] = useState(initial);
   useEffect(() => setDraft(initial), [initial]);
-  const set = <K extends keyof BacktestForm>(key: K, value: BacktestForm[K]) => setDraft({ ...draft, [key]: value });
   const toggleEngine = (engine: string) =>
-    set("engines", draft.engines.includes(engine) ? draft.engines.filter((item) => item !== engine) : [...draft.engines, engine]);
-  const selected = signals.find((signal) => signal.name === draft.signal);
-  const sections = pickSections(config.sections, BACKTEST_SECTIONS);
-  const [stop, costs] = BACKTEST_SECTIONS.map((name) => sections.find((section) => section.name === name));
-  const setSettings = (settings: Overrides) => set("settings", settings);
-  const changes = countChanges(draft.settings) + Object.keys(draft.signalParams).length + countRuleChanges(draft, config);
-  const invalid =
-    !backtestBody(draft) ||
-    hasProblems(draft.settings, sectionSpecs(sections)) ||
-    hasRuleProblems(draft, config) ||
-    (selected !== undefined && hasProblems({ [selected.name]: draft.signalParams }, { [selected.name]: selected.params }));
+    setDraft({ ...draft, engines: draft.engines.includes(engine) ? draft.engines.filter((item) => item !== engine) : [...draft.engines, engine] });
+  const changes = setupChanges(draft, config);
+  const invalid = !draft.engines.length || hasSetupProblems(draft, config, signals);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -82,60 +47,7 @@ function BacktestFormPanel({
   return (
     <Panel>
       <form onSubmit={submit} noValidate className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)_8rem]">
-          <Field label="Ticker">
-            <Input value={draft.ticker} placeholder="SPY" required onChange={(event) => set("ticker", event.target.value.toUpperCase())} />
-          </Field>
-          <Field label="Signal" hint={selected ? describeSignal(selected, draft.signalParams) : undefined}>
-            {/* Parameters belong to one signal, so switching signals starts from its defaults. */}
-            <SignalSelect value={draft.signal} onChange={(signal) => setDraft({ ...draft, signal, signalParams: {} })} signals={signals} />
-          </Field>
-          <Field label="History">
-            <Select value={draft.period} onChange={(event) => set("period", event.target.value)}>
-              <option value="">default ({config.backtest_period})</option>
-              {PERIODS.map((period) => (
-                <option key={period} value={period}>
-                  {period}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </div>
-        {selected && (
-          <section className="space-y-2">
-            <h2 className="text-sm font-semibold">Signal parameters</h2>
-            <ParamFields specs={selected.params} values={draft.signalParams} onChange={(signalParams) => set("signalParams", signalParams)} />
-          </section>
-        )}
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold">Trade rules</h2>
-          <div className="grid gap-x-6 gap-y-4 md:grid-cols-2 lg:grid-cols-3">
-            <EntryFields
-              rules={config.entry_rules}
-              entry={draft.entry}
-              params={draft.entryParams}
-              onChange={(entry, entryParams) => setDraft({ ...draft, entry, entryParams })}
-            />
-            {stop && (
-              <div className="space-y-2">
-                <GroupHeading>Initial stop (sizes every trade)</GroupHeading>
-                <SectionFields section={stop} overrides={draft.settings} onChange={setSettings} only={BACKTEST_FIELDS.risk} className="grid grid-cols-2 gap-3" />
-              </div>
-            )}
-            <ExitFields
-              rules={config.exit_rules}
-              exits={draft.exits}
-              params={draft.exitParams}
-              onChange={(exits, exitParams) => setDraft({ ...draft, exits, exitParams })}
-            />
-          </div>
-          {costs && (
-            <div className="space-y-2">
-              <GroupHeading>Costs and metrics</GroupHeading>
-              <SectionFields section={costs} overrides={draft.settings} onChange={setSettings} />
-            </div>
-          )}
-        </section>
+        <BacktestSetupFields draft={draft} onChange={setDraft} config={config} signals={signals} />
         <div className="flex flex-wrap items-end justify-between gap-3">
           <Field label="Engines">
             <div className="flex gap-1.5 py-1">
@@ -148,7 +60,7 @@ function BacktestFormPanel({
           </Field>
           <div className="flex items-center gap-2">
             {changes > 0 && (
-              <Button variant="ghost" onClick={() => setDraft({ ...draft, settings: {}, signalParams: {}, ...defaultRules(config) })}>
+              <Button variant="ghost" onClick={() => setDraft(resetSetup(draft, config))}>
                 Reset {changes} changed
               </Button>
             )}
@@ -162,7 +74,7 @@ function BacktestFormPanel({
   );
 }
 
-function BacktestView({ result, form }: { result: BacktestOut; form: BacktestForm }) {
+function BacktestView({ result, form, config }: { result: BacktestOut; form: BacktestForm; config: ConfigOut }) {
   const [engine, setEngine] = useState(result.runs[0]?.engine ?? "");
   useEffect(() => setEngine(result.runs[0]?.engine ?? ""), [result]);
   const run = result.runs.find((item) => item.engine === engine) ?? result.runs[0];
@@ -182,6 +94,11 @@ function BacktestView({ result, form }: { result: BacktestOut; form: BacktestFor
     [result],
   );
 
+  const splitEvents = useMemo<EquityEvent[]>(
+    () => (result.split ? [{ time: result.split.out_of_sample_start, text: "out-of-sample" }] : []),
+    [result.split],
+  );
+
   const markers = useMemo<ChartMarker[]>(() => {
     if (!run) return [];
     const long = result.direction === "long";
@@ -192,7 +109,7 @@ function BacktestView({ result, form }: { result: BacktestOut; form: BacktestFor
   }, [run, result.direction]);
 
   if (!run) return null;
-  const { config } = result;
+  const used = result.config;
   const exits = result.exits.map((exit) => exit.description).join("; ") || "none, only the stop";
   return (
     <div className="space-y-4">
@@ -207,12 +124,15 @@ function BacktestView({ result, form }: { result: BacktestOut; form: BacktestFor
           </div>
         </div>
         <p className="text-muted">
-          {result.start} → {result.end} · risk {fmtNumber(config.risk_pct, 2)}%, max position {fmtNumber(config.max_position_pct, 0)}% · costs{" "}
-          {fmtNumber(config.commission_pct, 2)}% + {fmtNumber(config.slippage_pct, 2)}%
+          {result.start} → {result.end} · risk {fmtNumber(used.risk_pct, 2)}%, max position {fmtNumber(used.max_position_pct, 0)}% · costs{" "}
+          {fmtNumber(used.commission_pct, 2)}% + {fmtNumber(used.slippage_pct, 2)}%
         </p>
         <p className="text-muted">
-          Entry: {result.entry.description} · initial stop {fmtNumber(config.atr_mult, 2)} × ATR({config.atr_period}) · exits: {exits}
+          Entry: {result.entry.description} · initial stop {fmtNumber(used.atr_mult, 2)} × ATR({used.atr_period}) · exits: {exits}
         </p>
+        <Link to={`/sweep?${writeSweepForm(newSweepForm(form), config).toString()}`} className="inline-block text-accent hover:underline">
+          Sweep parameters of this setup →
+        </Link>
       </div>
       {result.runs.length > 1 && (
         <Segmented label="Engine" value={engine} onChange={setEngine} options={result.runs.map((item) => ({ value: item.engine, label: item.engine }))} />
@@ -221,10 +141,11 @@ function BacktestView({ result, form }: { result: BacktestOut; form: BacktestFor
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <Panel>
           <h2 className="mb-2 text-sm font-semibold">Equity</h2>
-          <EquityChart series={equitySeries} />
+          <EquityChart series={equitySeries} events={splitEvents} />
         </Panel>
         <MetricsComparison result={result} />
       </div>
+      <PeriodsPanel run={run} split={result.split} start={result.start} end={result.end} />
       <Panel>
         <h2 className="mb-2 text-sm font-semibold">Trades on the chart</h2>
         {chart.isLoading && <Loading message="Loading chart…" />}
@@ -288,7 +209,7 @@ export function BacktestPage() {
       )}
       {backtest.isLoading && <Loading message="Downloading history and running the backtest…" />}
       {backtest.isError && <ErrorBox error={backtest.error} onRetry={() => backtest.refetch()} />}
-      {backtest.data && <BacktestView result={backtest.data} form={form} />}
+      {backtest.data && <BacktestView result={backtest.data} form={form} config={defaults} />}
     </>
   );
 }

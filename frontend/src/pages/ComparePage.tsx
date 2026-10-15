@@ -4,13 +4,24 @@ import { Link } from "react-router";
 import { useConfig, useSignals } from "../api/hooks";
 import { MetricsTable } from "../components/BacktestResults";
 import { EquityChart, type EquitySeries } from "../components/charts/EquityChart";
+import { OutOfSampleTable } from "../components/OutOfSample";
 import { ParameterDiffTable } from "../components/ParameterDiffTable";
 import { RunCard, RunLabel } from "../components/RunCard";
-import { Button, EmptyState, ErrorBox, PageHeader, Panel } from "../components/ui";
+import { Button, EmptyState, ErrorBox, PageHeader, Panel, Segmented } from "../components/ui";
 import { parameterRows, returnCurve } from "../lib/compare";
 import { downloadFile } from "../lib/csv";
-import { MAX_RUNS, runColorVar, type MergeResult } from "../lib/runs";
+import { MAX_RUNS, runColorVar, type MergeResult, type PinnedRun } from "../lib/runs";
 import { usePinnedRuns } from "../state/pinnedRuns";
+
+type Period = "full" | "in_sample" | "out_of_sample";
+
+const PERIODS: { value: Period; label: string }[] = [
+  { value: "full", label: "Full history" },
+  { value: "in_sample", label: "In-sample" },
+  { value: "out_of_sample", label: "Out-of-sample" },
+];
+
+const periodMetrics = (run: PinnedRun, period: Period) => (period === "full" ? run.metrics : (run.split?.[period] ?? null));
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
@@ -28,10 +39,14 @@ export function ComparePage() {
   const signals = useSignals();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const [period, setPeriod] = useState<Period>("full");
 
   const visible = useMemo(() => runs.filter((run) => !run.hidden), [runs]);
   const rows = useMemo(() => parameterRows(visible, config.data?.sections, signals.data, config.data), [visible, config.data, signals.data]);
-  const columns = useMemo(() => visible.map((run) => ({ key: run.id, header: <RunLabel run={run} />, metrics: run.metrics })), [visible]);
+  const columns = useMemo(
+    () => visible.map((run) => ({ key: run.id, header: <RunLabel run={run} />, metrics: periodMetrics(run, period) })),
+    [visible, period],
+  );
   const series = useMemo<EquitySeries[]>(
     () => visible.map((run) => ({ label: `#${run.slot} ${run.name}`, points: returnCurve(run.equity), colorVar: runColorVar(run) })),
     [visible],
@@ -102,9 +117,18 @@ export function ComparePage() {
                 <ParameterDiffTable runs={visible} rows={rows} />
               </Panel>
               <section className="space-y-2">
-                <h2 className="text-sm font-semibold">Metrics</h2>
-                <MetricsTable columns={columns} caption="Metrics of the pinned runs" highlightBest />
-                <p className="text-xs text-muted">The best value of each ranked metric is highlighted.</p>
+                <h2 className="text-sm font-semibold">Out-of-sample check</h2>
+                <OutOfSampleTable runs={visible} />
+              </section>
+              <section className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold">Metrics</h2>
+                  <Segmented label="Period" value={period} onChange={setPeriod} options={PERIODS} />
+                </div>
+                <MetricsTable columns={columns} caption={period === "full" ? "Metrics of the pinned runs" : `Metrics of the pinned runs, ${period === "in_sample" ? "in-sample" : "out-of-sample"}`} highlightBest />
+                <p className="text-xs text-muted">
+                  The best value of each ranked metric is highlighted.{period !== "full" && " Runs without a split show dashes."}
+                </p>
               </section>
               <Panel>
                 <h2 className="mb-2 text-sm font-semibold">Return since the first bar</h2>

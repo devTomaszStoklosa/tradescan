@@ -18,6 +18,13 @@ describe("snapshotRun", () => {
   it("returns null for an engine that did not run", () => {
     expect(snapshotRun(backtestResult, "cerebro", backtestForm)).toBeNull();
   });
+
+  it("keeps the in-sample and out-of-sample results with their dates", () => {
+    const snapshot = snapshotRun(backtestResult, "vectorized", backtestForm);
+    expect(snapshot?.split).toMatchObject({ oos_pct: 30, out_of_sample_start: "2023-07-03", in_sample: { sharpe: 1.1 }, out_of_sample: { sharpe: 0.2 } });
+    const short = { ...backtestResult, split: null, runs: backtestResult.runs.map((run) => ({ ...run, in_sample: null, out_of_sample: null })) };
+    expect(snapshotRun(short, "vectorized", backtestForm)?.split).toBeNull();
+  });
 });
 
 describe("runKey", () => {
@@ -28,6 +35,7 @@ describe("runKey", () => {
     expect(runKey(makeRun(1, { params: { ...run.params, oversold: 15 } }))).not.toBe(runKey(run));
     expect(runKey(makeRun(1, { config: { ...run.config, atr_mult: 3 } }))).not.toBe(runKey(run));
     expect(runKey(makeRun(1, { end: "2026-10-14" }))).not.toBe(runKey(run));
+    expect(runKey(makeRun(1, { config: { ...run.config, oos_pct: 20 } }))).not.toBe(runKey(run));
   });
 
   it("tells runs apart by their entry and exit rules", () => {
@@ -88,6 +96,15 @@ describe("runs file", () => {
     expect(runKey(run!)).toBe(runKey(makeRun(1, { exits: [appliedRule(exitRules[0]!, { target_r: 3 }), appliedRule(exitRules[1]!)] })));
   });
 
+  it("upgrades version 2 runs, which have no out-of-sample results", () => {
+    const { split: _split, ...current } = encodeRuns([makeRun(1)]).runs[0]!;
+    const { oos_pct: _oos, ...config } = current.config;
+    const [run] = decodeRuns({ version: 2, runs: [{ ...current, config }] });
+    expect(run!.split).toBeNull();
+    expect(run!.config).not.toHaveProperty("oos_pct");
+    expect(run!.metrics).toEqual(makeRun(1).metrics);
+  });
+
   it("drops fields it does not know", () => {
     const file = encodeRuns([makeRun(1)]);
     const [decoded] = decodeRuns({ ...file, runs: [{ ...file.runs[0], extra: "x" }] });
@@ -104,6 +121,11 @@ describe("runs file", () => {
       "uneven equity arrays",
       JSON.stringify({ version: 2, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], equity: { time: ["2020-01-01"], value: [] } }] }),
       'Run 1 has an invalid "equity"',
+    ],
+    [
+      "a split without metrics",
+      JSON.stringify({ version: 3, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], split: { ...makeRun(1).split, out_of_sample: null } }] }),
+      'Run 1 has an invalid "split"',
     ],
     ["a bad rule", JSON.stringify({ version: 2, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], exits: [{ name: "target" }] }] }), 'Run 1 has an invalid "exits"'],
     [

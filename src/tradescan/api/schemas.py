@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from tradescan.backtest.sweep import MAX_VALUES, MIN_VALUES, SweepTarget
 from tradescan.params import ParamKind
 from tradescan.signals.base import Direction, Family
 
@@ -75,17 +76,37 @@ class RuleIn(_Request):
     params: SignalParamsIn = Field(default_factory=dict, description="The rule's parameters, e.g. {\"target_r\": 3}")
 
 
-class BacktestIn(_Request):
+class BacktestSetupIn(_Request):
+    """One backtest's setup, shared by a backtest and a sweep."""
+
     ticker: str = Field(min_length=1)
     signal: str
-    engines: list[str] = Field(default_factory=lambda: ["vectorized"], min_length=1)
     params: SignalParamsIn = Field(default_factory=dict, description="The signal's parameters, e.g. {\"period\": 30}")
-    settings: SettingsIn = _SETTINGS
+    settings: SettingsIn = Field(
+        default_factory=dict,
+        description='Per-run overrides by settings section, e.g. {"risk": {"atr_mult": 3}}; '
+        "backtest.oos_pct sets the out-of-sample share",
+    )
     entry: RuleIn | None = Field(None, description="Entry rule; omit for the default entry")
     exits: list[RuleIn] | None = Field(
         None, description="Exit rules on top of the initial stop; omit for the default exits, [] for the stop only"
     )
     period: str | None = None
+
+
+class BacktestIn(BacktestSetupIn):
+    engines: list[str] = Field(default_factory=lambda: ["vectorized"], min_length=1)
+
+
+class SweepAxisIn(_Request):
+    target: SweepTarget = Field(description="What holds the parameter: the signal, the entry rule, an exit rule or a settings section")
+    owner: str | None = Field(None, description="The exit rule or settings section; omit for the signal and the entry rule")
+    name: str = Field(description="The parameter, e.g. oversold")
+    values: list[float] = Field(min_length=MIN_VALUES, max_length=MAX_VALUES, description="The values to try, in order")
+
+
+class SweepIn(BacktestSetupIn):
+    axes: list[SweepAxisIn] = Field(min_length=1, description="One or two parameters; the first changes slowest")
 
 
 class ChartIn(_Request):
@@ -147,6 +168,16 @@ class WatchlistOut(BaseModel):
     benchmark: str | None
 
 
+class SweepLimitsOut(BaseModel):
+    max_axes: int
+    min_values: int
+    max_values: int
+    max_combinations: int
+    sections: list[str] = Field(description="Settings sections whose parameters a sweep can change")
+    fixed: list[str] = Field(description="section.name of settings a sweep cannot change")
+    min_period_bars: int = Field(description="Bars each period needs for an in-sample/out-of-sample split")
+
+
 class ConfigOut(BaseModel):
     version: str
     scan_period: str
@@ -159,6 +190,7 @@ class ConfigOut(BaseModel):
     exit_rules: list[RuleOut]
     default_entry: str
     default_exits: list[str]
+    sweep: SweepLimitsOut
 
 
 class RegimeOut(BaseModel):
@@ -305,6 +337,8 @@ class TradeOut(BaseModel):
 class EngineRunOut(BaseModel):
     engine: str
     metrics: MetricsOut
+    in_sample: MetricsOut | None = Field(description="The run on the history before the split; null without a split")
+    out_of_sample: MetricsOut | None = Field(description="The run from the split on, with fresh equity; null without a split")
     equity: list[Point]
     trades: list[TradeOut]
 
@@ -319,6 +353,7 @@ class BacktestConfigOut(BaseModel):
     commission_pct: float
     slippage_pct: float
     bars_per_year: int
+    oos_pct: float
 
 
 class AppliedRuleOut(BaseModel):
@@ -328,7 +363,15 @@ class AppliedRuleOut(BaseModel):
     params: dict[str, float | list[float]] = Field(description="The rule's parameters used in this run")
 
 
-class BacktestOut(BaseModel):
+class SplitOut(BaseModel):
+    oos_pct: float
+    in_sample_start: str
+    in_sample_end: str
+    out_of_sample_start: str
+    out_of_sample_end: str
+
+
+class BacktestSetupOut(BaseModel):
     ticker: str
     signal: str
     direction: Direction
@@ -339,8 +382,38 @@ class BacktestOut(BaseModel):
     config: BacktestConfigOut
     entry: AppliedRuleOut
     exits: list[AppliedRuleOut] = Field(description="Exit rules on top of the initial stop, in the order given")
+
+
+class BacktestOut(BacktestSetupOut):
+    split: SplitOut | None = Field(description="The in-sample/out-of-sample split; null when the history is too short")
     buy_hold: list[Point]
     runs: list[EngineRunOut]
+
+
+class SweepAxisOut(BaseModel):
+    target: SweepTarget
+    owner: str | None
+    name: str
+    key: str = Field(description="target[.owner].name")
+    label: str
+    unit: str
+    kind: ParamKind
+    current: float = Field(description="The value in the setup the sweep started from")
+    values: list[float]
+
+
+class SweepCellOut(BaseModel):
+    values: list[float] = Field(description="One value per axis, in axis order")
+    in_sample: MetricsOut | None
+    out_of_sample: MetricsOut | None
+    error: str | None = Field(description="Why this combination could not run, e.g. a rule between two parameters")
+
+
+class SweepOut(BacktestSetupOut):
+    engine: str = Field(description="Sweeps run on this engine")
+    split: SplitOut
+    axes: list[SweepAxisOut]
+    cells: list[SweepCellOut] = Field(description="Every combination; the first axis changes slowest")
 
 
 # ---------------------------------------------------------------------------

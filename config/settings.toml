@@ -62,4 +62,5 @@ period = "10y"           # history used by `backtest` and `edge`
 commission_pct = 0.1
 slippage_pct = 0.05
 bars_per_year = 252
+oos_pct = 30.0           # last % of the history reported as out-of-sample (left out of tuning)
 # Entry and exit rules (target, time exit, ...) and their parameters are chosen per backtest.
