@@ -102,5 +102,5 @@ def test_sweep_float_ranges_have_no_rounding_noise():
 def test_errors_are_reported_not_raised(provider):
     assert cli.main(["backtest", "AAA", "no_such_signal"]) == 2
     assert cli.main(["backtest", "AAA", "golden_cross", "--exits", "time", "--target-r", "3"]) == 2
-    assert cli.main(["backtest", "AAA", "golden_cross", "--exits", "trailing"]) == 2
+    assert cli.main(["backtest", "AAA", "golden_cross", "--exits", "nope"]) == 2
     assert cli.main(["scan", "--watchlist", "missing-list"]) == 2

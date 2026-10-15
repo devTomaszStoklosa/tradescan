@@ -8,10 +8,14 @@ trade. New rules plug in with `@exit_rules.register`.
 
 from __future__ import annotations
 
-from abc import abstractmethod
+import math
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
+
+import numpy as np
+import pandas as pd
 
 from tradescan.backtest.base import ExitReason
 from tradescan.backtest.rules import Bars, Rule, RuleRegistry
@@ -142,3 +146,139 @@ class _TimeLimit:
 
     def orders(self, index: int) -> ExitOrders:
         return ExitOrders(at_open=ExitReason.TIME) if index + 1 >= self.exit_index else NO_ORDERS
+
+
+class _Ratchet(ABC):
+    """A stop that only tightens: at every close it moves to the level the rule asks for, if that is tighter.
+
+    The exit reason is the rule's name. Until the rule asks for a finite level the tracker places no stop.
+    """
+
+    def __init__(self, sign: float, reason: str) -> None:
+        self._sign, self._reason = sign, reason
+        self._level: float | None = None
+
+    def orders(self, index: int) -> ExitOrders:
+        candidate = self._candidate(index)
+        if math.isfinite(candidate) and (self._level is None or self._sign * (candidate - self._level) > 0):
+            self._level = candidate
+        return NO_ORDERS if self._level is None else ExitOrders(stop=self._level, stop_reason=self._reason)
+
+    @abstractmethod
+    def _candidate(self, index: int) -> float:
+        """The stop level the close of bar `index` asks for; NaN for none."""
+
+
+class _BestPrice:
+    """The highest high (lowest low for shorts) from the entry bar up to the current close."""
+
+    def __init__(self, prices: np.ndarray, sign: float) -> None:
+        self._prices, self._sign = prices, sign
+        self.value = math.nan
+
+    def update(self, index: int) -> float:
+        price = float(self._prices[index])
+        if math.isnan(self.value) or self._sign * (price - self.value) > 0:
+            self.value = price
+        return self.value
+
+
+def _best_prices(bars: Bars, direction: Direction) -> np.ndarray:
+    return bars.high if direction is Direction.LONG else bars.low
+
+
+@exit_rules.register
+@dataclass(frozen=True)
+class TrailingStop(ExitRule):
+    atr_mult: float = param(
+        3.0, minimum=0.5, maximum=20.0, step=0.25, label="Distance", unit="ATR",
+        help="From the highest high since the entry bar (the lowest low for shorts), in ATRs of the current bar",
+    )
+    name = "trailing"
+    label = "Trailing stop"
+    description = (
+        "Stop {atr_mult:g} ATR below the highest high since the entry bar (above the lowest low for shorts), "
+        "only tightening"
+    )
+
+    def prepare(self, bars: Bars, direction: Direction) -> TrackerFactory:
+        distance = direction.sign * self.atr_mult * bars.atr
+        prices = _best_prices(bars, direction)
+        return lambda trade: _Trailing(_BestPrice(prices, direction.sign), distance, direction.sign, self.name)
+
+
+class _Trailing(_Ratchet):
+    def __init__(self, best: _BestPrice, distance: np.ndarray, sign: float, reason: str) -> None:
+        super().__init__(sign, reason)
+        self._best, self._distance = best, distance
+
+    def _candidate(self, index: int) -> float:
+        return self._best.update(index) - float(self._distance[index])
+
+
+@exit_rules.register
+@dataclass(frozen=True)
+class ChannelStop(ExitRule):
+    period: int = param(
+        10, minimum=2, maximum=250, step=1, label="Lookback", unit="bars",
+        help="The current bar and the ones before it, bars before the entry included",
+    )
+    name = "channel"
+    label = "Channel stop"
+    description = "Stop at the lowest low of the last {period} bars (the highest high for shorts), only tightening"
+
+    def prepare(self, bars: Bars, direction: Direction) -> TrackerFactory:
+        window = pd.Series(bars.low if direction is Direction.LONG else bars.high).rolling(self.period, min_periods=1)
+        channel = (window.min() if direction is Direction.LONG else window.max()).to_numpy(dtype=float)
+        return lambda trade: _Channel(channel, direction.sign, self.name)
+
+
+class _Channel(_Ratchet):
+    def __init__(self, channel: np.ndarray, sign: float, reason: str) -> None:
+        super().__init__(sign, reason)
+        self._channel = channel
+
+    def _candidate(self, index: int) -> float:
+        return float(self._channel[index])
+
+
+@exit_rules.register
+@dataclass(frozen=True)
+class BreakevenStop(ExitRule):
+    trigger_r: float = param(
+        1.0, minimum=0.25, maximum=20.0, step=0.25, label="Trigger", unit="R",
+        help="Gain from the fill price that the high since the entry bar (the low for shorts) has to reach",
+    )
+    lock_r: float = param(
+        0.0, minimum=0.0, maximum=10.0, step=0.05, label="Lock in", unit="R",
+        help="Where the stop moves, measured from the fill price; below the trigger",
+    )
+    name = "breakeven"
+    label = "Breakeven stop"
+    description = "Once the gain reaches {trigger_r:g}R from the fill, stop at {lock_r:g}R from the fill"
+
+    def __post_init__(self) -> None:
+        if self.lock_r >= self.trigger_r:
+            raise ValueError(
+                f"{self.name}: the locked-in gain ({self.lock_r:g}R) must be below the trigger ({self.trigger_r:g}R)"
+            )
+
+    def prepare(self, bars: Bars, direction: Direction) -> TrackerFactory:
+        prices = _best_prices(bars, direction)
+
+        def track(trade: OpenTrade) -> ExitTracker:
+            sign = trade.direction.sign
+            trigger = trade.entry_price + sign * self.trigger_r * trade.risk
+            lock = trade.entry_price + sign * self.lock_r * trade.risk
+            return _Breakeven(_BestPrice(prices, sign), trigger, lock, sign, self.name)
+
+        return track
+
+
+class _Breakeven(_Ratchet):
+    def __init__(self, best: _BestPrice, trigger: float, lock: float, sign: float, reason: str) -> None:
+        super().__init__(sign, reason)
+        self._best, self._trigger, self._lock = best, trigger, lock
+
+    def _candidate(self, index: int) -> float:
+        return self._lock if self._sign * (self._best.update(index) - self._trigger) >= 0 else math.nan
