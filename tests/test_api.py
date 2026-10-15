@@ -33,7 +33,7 @@ def test_meta_endpoints(client):
     assert "cache_dir" not in str(config["sections"])
     assert set(config["engines"]) == {"vectorized", "cerebro"}
     assert [rule["name"] for rule in config["entry_rules"]] == ["next_open", "stop", "limit"]
-    assert [rule["name"] for rule in config["exit_rules"]] == ["target", "time"]
+    assert [rule["name"] for rule in config["exit_rules"]] == ["target", "time", "trailing", "channel", "breakeven"]
     assert (config["default_entry"], config["default_exits"]) == ("next_open", ["target", "time"])
     limit = config["entry_rules"][2]
     assert [param["name"] for param in limit["params"]] == ["offset_atr", "valid_bars"]
@@ -121,7 +121,7 @@ def test_signal_parameters_change_results(client):
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "settings": {"backtest": {"target_r": 3}}}),
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "entry": {"name": "nope"}}),
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "entry": {"name": "limit", "params": {"valid_bars": 0}}}),
-        ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "exits": [{"name": "trailing"}]}),
+        ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "exits": [{"name": "nope"}]}),
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "exits": [{"name": "time"}, {"name": "time"}]}),
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "exits": [{"name": "target", "params": {"max_hold_bars": 5}}]}),
         ("/api/chart", {"ticker": "AAA", "signals": ["golden_cross"], "signal_params": {"golden_cross": {"slow": 1}}}),
@@ -194,6 +194,23 @@ def test_backtest_entry_and_exit_rules(client):
     assert trades and {trade["exit_reason"] for trade in trades} <= {"stop", "open"}
     assert all(trade["entry_date"] > trade["signal_date"] for trade in trades)
     assert [trade["entry_date"] for trade in trades] != [trade["entry_date"] for trade in default["runs"][0]["trades"]]
+
+
+def test_backtest_with_moving_stops(client):
+    body = {"ticker": "AAA", "signal": "connors_rsi2_long"}
+    exits = [{"name": "trailing", "params": {"atr_mult": 1.5}}, {"name": "breakeven", "params": {"trigger_r": 2, "lock_r": 0.5}}]
+    response = client.post("/api/backtest", json={**body, "exits": exits})
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert [rule["description"] for rule in data["exits"]] == [
+        "Stop 1.5 ATR below the highest high since the entry bar (above the lowest low for shorts), only tightening",
+        "Once the gain reaches 2R from the fill, stop at 0.5R from the fill",
+    ]
+    reasons = {trade["exit_reason"] for trade in data["runs"][0]["trades"]}
+    assert "trailing" in reasons and reasons <= {"stop", "trailing", "breakeven", "open"}
+
+    invalid = client.post("/api/backtest", json={**body, "exits": [{"name": "breakeven", "params": {"lock_r": 1}}]})
+    assert invalid.status_code == 400 and "must be below the trigger" in invalid.text
 
 
 def test_backtest_reports_the_split(client):

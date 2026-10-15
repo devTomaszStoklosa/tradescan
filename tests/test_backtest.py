@@ -5,8 +5,9 @@ from synthetic import AdverseCloseExit, FixedSignal, RatchetStop, random_walk
 
 from tradescan.backtest.base import BacktestConfig, ExitReason
 from tradescan.backtest.entries import LimitEntry, NextOpenEntry, StopEntry, entry_rules
-from tradescan.backtest.exits import TargetExit, TimeExit, exit_rules
+from tradescan.backtest.exits import BreakevenStop, ChannelStop, TargetExit, TimeExit, TrailingStop, exit_rules
 from tradescan.backtest.metrics import compute_metrics
+from tradescan.backtest.rules import Bars
 from tradescan.backtest.trade_rules import TradeRules
 from tradescan.backtest.vectorized import VectorizedEngine
 from tradescan.signals import Direction, default_registry
@@ -134,6 +135,45 @@ def test_limit_entry_fills_at_its_level_or_better(engine):
     assert not _run(engine, _bars({21: (100.0, 101.0, 99.5, 100.0)}), rules=TradeRules(entry=LimitEntry(offset_atr=0.5))).trades
 
 
+# --- Trailing, channel and breakeven stops -----------------------------------------------------------
+
+
+def test_trailing_stop_exits_at_the_level_set_by_the_last_close(engine):
+    # Entry at 100 on bar 21. The close of bar 23 trails the stop 1 ATR below its high of 111; bar 24 falls through it.
+    df = _bars({22: (100.0, 106.0, 100.0, 105.0), 23: (105.0, 111.0, 105.0, 110.0), 24: (110.0, 110.5, 104.0, 105.0)})
+    level = 111.0 - Bars.from_frame(df, NO_COSTS.atr_period).atr[23]
+    (trade,) = _run(engine, df, rules=TradeRules(exits=(TrailingStop(atr_mult=1.0),))).trades
+    assert (trade.exit_reason, trade.exit_date) == ("trailing", df.index[24])
+    assert trade.exit_price == pytest.approx(level) and trade.r_multiple == pytest.approx((level - 100.0) / 4)
+
+    # The breakeven stop (at 100 from bar 23 on) is looser, so the trailing stop still closes the trade.
+    rules = TradeRules(exits=(BreakevenStop(), TrailingStop(atr_mult=1.0)))
+    assert _run(engine, df, rules=rules).trades[0].exit_reason == "trailing"
+
+
+def test_channel_stop_exits_below_the_lowest_low_of_the_last_bars(engine):
+    # The 3-bar low rises from 99 to 99.5 (close of bar 24) and 100 (close of bar 25); bar 26 trades through 100.
+    df = _bars(
+        {
+            22: (100.0, 103.0, 99.5, 102.0),
+            23: (102.0, 104.0, 101.0, 103.0),
+            24: (103.0, 105.0, 102.0, 104.0),
+            25: (104.0, 104.5, 100.0, 100.5),
+            26: (100.5, 101.0, 99.0, 99.5),
+        }
+    )
+    (trade,) = _run(engine, df, rules=TradeRules(exits=(ChannelStop(period=3),))).trades
+    assert (trade.exit_reason, trade.exit_date, trade.exit_price) == ("channel", df.index[26], 100.0)
+
+
+def test_breakeven_stop_exits_at_the_fill_price(engine):
+    # Fill 100, risk 4: bar 22's high of 105 passes the 1R trigger (104), so bar 23 stops out at 100.
+    df = _bars({22: (100.0, 105.0, 100.5, 104.0), 23: (103.0, 103.5, 99.0, 99.5)})
+    (trade,) = _run(engine, df, rules=TradeRules(exits=(BreakevenStop(),))).trades
+    assert (trade.exit_reason, trade.exit_date, trade.exit_price) == ("breakeven", df.index[23], 100.0)
+    assert trade.pnl == pytest.approx(0.0)
+
+
 def test_unfilled_orders_expire_and_signals_wait_for_them(engine):
     # The 99 buy-limit is out of reach on bars 21 and 22 and reachable from bar 23 on.
     df = _bars({21: (100.0, 101.0, 99.5, 100.0), 22: (100.0, 101.0, 99.5, 100.0)})
@@ -217,10 +257,12 @@ def test_engines_match_with_non_default_parameters():
 
 ENTRIES = [cls() for cls in entry_rules.classes()] + [StopEntry(offset_atr=0.3, valid_bars=3), LimitEntry(offset_atr=0.2, valid_bars=4)]
 
-# Every registered exit alone, none, and the test-only moving stop and exit at the open (what T1 and M2 need).
+# Every registered exit alone, none, combinations, and the test-only moving stop and exit at the open.
 EXITS = [(cls(),) for cls in exit_rules.classes()] + [
     (),
     (TargetExit(target_r=1.5), TimeExit(max_hold_bars=12)),
+    (TrailingStop(atr_mult=1.5), TargetExit(target_r=3.0)),
+    (BreakevenStop(trigger_r=0.5, lock_r=0.1), ChannelStop(period=5), TimeExit(max_hold_bars=30)),
     (RatchetStop(),),
     (AdverseCloseExit(),),
     (RatchetStop(atr_mult=1.0), TargetExit(target_r=3.0), TimeExit(max_hold_bars=30)),
@@ -247,3 +289,6 @@ def test_engines_match_for_every_exit_rule(exits, entry, signal_name):
         assert "trailing" in reasons
     if any(isinstance(rule, AdverseCloseExit) for rule in exits):
         assert "signal" in reasons
+    for rule in exits:
+        if isinstance(rule, TrailingStop | ChannelStop | BreakevenStop):
+            assert rule.name in reasons
