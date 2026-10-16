@@ -26,8 +26,9 @@ def test_meta_endpoints(client):
     assert client.get("/api/health").json()["status"] == "ok"
     config = client.get("/api/config").json()
     sections = {section["name"]: {param["name"]: param for param in section["params"]} for section in config["sections"]}
-    assert set(sections) == {"account", "risk", "scan", "scoring", "trend", "regime", "backtest", "monte_carlo"}
+    assert set(sections) == {"account", "risk", "scan", "scoring", "trend", "regime", "backtest", "monte_carlo", "portfolio"}
     assert [name for name in sections["monte_carlo"]] == ["simulations", "ruin_drawdown_pct", "seed"]
+    assert [name for name in sections["portfolio"]] == ["max_positions", "max_exposure_pct"]
     assert sections["account"]["equity"]["default"] == 100_000
     assert sections["risk"]["targets_r"] | {"kind": "float_list", "default": [2.0, 3.0]} == sections["risk"]["targets_r"]
     assert sections["scoring"]["family_weights"]["keys"] == ["trend", "momentum", "breakout", "mean_reversion", "volume", "pattern"]
@@ -47,6 +48,11 @@ def test_meta_endpoints(client):
     assert [param["name"] for param in limit["params"]] == ["offset_atr", "valid_bars"]
     assert limit["description"].startswith("Buy-limit 0.5 ATR") and "{offset_atr:g}" in limit["template"]
     assert "target_r" not in str(config["sections"])
+    assert [rule["name"] for rule in config["priority_rules"]] == ["relative_strength", "momentum"]
+    assert config["default_priority"] == "relative_strength"
+    momentum = config["priority_rules"][1]
+    assert [param["name"] for param in momentum["params"]] == ["lookback", "skip"]
+    assert momentum["description"] == "Return from 252 bars ago to 21 bars ago"
 
     signals = client.get("/api/signals").json()
     assert len(signals) == 38 and {"name", "family", "direction", "weight", "description", "template", "params"} <= set(signals[0])
@@ -353,6 +359,55 @@ def test_watchlist_backtest(client):
     assert status(tickers=["ZZZ"]) == 400
     assert status(watchlist="demo", filters=[{"name": "market"}], benchmark="NOPE") == 400
     assert client.post("/api/watchlist-backtest", json={"watchlist": "demo", "signal": "nope"}).status_code == 400
+
+
+def test_portfolio_backtest(client):
+    setup = {
+        "signal": "connors_rsi2_long",
+        "filters": [{"name": "market"}],
+        "settings": {"portfolio": {"max_positions": 2, "max_exposure_pct": 60}},
+        "priority": {"name": "momentum", "params": {"lookback": 126, "skip": 5}},
+    }
+    response = client.post("/api/portfolio-backtest", json={"watchlist": "demo", "engines": ["vectorized", "cerebro"], **setup})
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert (data["universe"], data["benchmark"], data["buy_hold_benchmark"], data["missing"]) == ("demo", "SPY", "SPY", [])
+    assert data["portfolio"] == {"max_positions": 2, "max_exposure_pct": 60.0}
+    assert data["priority"]["name"] == "momentum" and data["priority"]["params"] == {"lookback": 126, "skip": 5}
+    assert data["split"]["oos_pct"] == 30.0 and data["buy_hold"][0]["value"] == 100_000
+    vectorized, cerebro = data["runs"]
+    assert (vectorized["engine"], cerebro["engine"]) == ("vectorized", "cerebro")
+    assert vectorized["full"]["metrics"] == pytest.approx(cerebro["full"]["metrics"], rel=1e-9)
+    assert vectorized["full"]["stats"] == pytest.approx(cerebro["full"]["stats"], rel=1e-9)
+
+    def keys(run):
+        return [(trade["ticker"], trade["entry_date"], trade["exit_date"], trade["size"]) for trade in run["trades"]]
+
+    assert keys(vectorized) == keys(cerebro)
+    full = vectorized["full"]
+    assert full["stats"]["max_positions"] <= 2 and full["metrics"]["trades"] > 0
+    assert full["stats"]["orders"] >= full["metrics"]["trades"]
+    assert {trade["ticker"] for trade in vectorized["trades"]} <= {"AAA", "BBB", "CCC"}
+    assert [row["ticker"] for row in vectorized["tickers"]] == ["AAA", "BBB", "CCC"]
+    assert sum(row["pnl"] for row in vectorized["tickers"]) == pytest.approx(vectorized["equity"][-1]["value"] - 100_000)
+    assert len(vectorized["positions"]) == len(vectorized["equity"])
+    assert vectorized["in_sample"]["metrics"]["trades"] > 0 and vectorized["out_of_sample"] is not None
+
+    tickers = client.post("/api/portfolio-backtest", json={"tickers": ["aaa", "zzz"], "signal": "connors_rsi2_long"}).json()
+    assert tickers["missing"] == ["ZZZ"] and tickers["benchmark"] is None and tickers["buy_hold_benchmark"] == "SPY"
+    assert tickers["priority"]["name"] == "relative_strength" and [run["engine"] for run in tickers["runs"]] == ["vectorized"]
+
+    def status(**extra):
+        return client.post("/api/portfolio-backtest", json={"signal": "connors_rsi2_long", **extra}).status_code
+
+    assert status(watchlist="nope") == 404
+    assert status(watchlist="demo", ticker="AAA") == 422
+    assert status(tickers=["ZZZ"]) == 400
+    assert status(watchlist="demo", benchmark="NOPE") == 400  # buy & hold needs the benchmark
+    assert status(watchlist="demo", engines=["nope"]) == 400
+    assert status(watchlist="demo", priority={"name": "nope"}) == 400
+    assert status(watchlist="demo", priority={"name": "momentum", "params": {"skip": 300}}) == 400
+    assert status(watchlist="demo", settings={"portfolio": {"max_positions": 0}}) == 400
 
 
 def test_sweep_limits_and_errors(client):

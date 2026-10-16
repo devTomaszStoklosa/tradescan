@@ -30,13 +30,13 @@ def backtest_request(body: schemas.BacktestRulesIn, ticker: str, engines: tuple[
         engines=engines,
         params=body.params,
         settings=body.settings,
-        entry=_choice(body.entry) if body.entry else None,
-        exits=None if body.exits is None else tuple(_choice(rule) for rule in body.exits),
-        filters=tuple(_choice(rule) for rule in body.filters),
+        entry=rule_choice(body.entry) if body.entry else None,
+        exits=None if body.exits is None else tuple(rule_choice(rule) for rule in body.exits),
+        filters=tuple(rule_choice(rule) for rule in body.filters),
         benchmark=body.benchmark,
         period=body.period,
     )
 
 
-def _choice(rule: schemas.RuleIn) -> RuleChoice:
+def rule_choice(rule: schemas.RuleIn) -> RuleChoice:
     return RuleChoice(name=rule.name, params=rule.params)

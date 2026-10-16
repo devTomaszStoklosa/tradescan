@@ -115,6 +115,26 @@ def test_watchlist_backtest_ranks_tickers_and_exports_every_period(provider, tmp
         cli.main(["watchlist-backtest", "connors_rsi2_long", "-t", "AAA", "--metric", "nope"])
 
 
+def test_portfolio_backtest_shares_one_equity_and_exports_every_engines_trades(provider, tmp_path, capsys):
+    target = tmp_path / "trades.csv"
+    code = cli.main([
+        "portfolio-backtest", "connors_rsi2_long", "-t", "AAA,BBB,CCC,ZZZ", "--max-positions", "2", "--max-exposure", "50",
+        "--priority", "momentum", "--engine", "both", "--top", "2", "--export", str(target),
+    ])  # fmt: skip
+    assert code == 0
+    output = " ".join(capsys.readouterr().out.split())
+    assert "No data for: ZZZ" in output and "3 tickers of custom with one equity" in output
+    assert "at most 2 positions and 50% exposure, priority: Return from 252 bars ago to 21 bars ago" in output
+    assert "buy & hold is SPY's" in output and "2 of 3 tickers by P&L (vectorized)" in output
+    assert provider.calls[-1][0] == ("AAA", "BBB", "CCC", "ZZZ", "SPY")
+    trades = pd.read_csv(target)
+    assert set(trades["engine"]) == {"vectorized", "cerebro"} and set(trades["ticker"]) <= {"AAA", "BBB", "CCC"}
+    vectorized, cerebro = (trades[trades["engine"] == engine].drop(columns="engine") for engine in ("vectorized", "cerebro"))
+    pd.testing.assert_frame_equal(vectorized.reset_index(drop=True), cerebro.reset_index(drop=True), rtol=1e-6)
+    with pytest.raises(SystemExit):
+        cli.main(["portfolio-backtest", "connors_rsi2_long", "-t", "AAA", "--priority", "nope"])
+
+
 def test_backtest_and_sweep_still_take_a_ticker(provider):
     assert cli.build_parser().parse_args(["backtest", "AAA", "connors_rsi2_long"]).ticker == "AAA"
     assert cli.build_parser().parse_args(["sweep", "AAA", "connors_rsi2_long", "--axis", "signal.oversold=5,10"]).signal == "connors_rsi2_long"
