@@ -10,6 +10,7 @@ import pandas as pd
 from tradescan.api import schemas
 from tradescan.backtest.base import BacktestConfig, Trade
 from tradescan.backtest.edge import EdgeStats
+from tradescan.backtest.filters import EntryFilter
 from tradescan.backtest.metrics import Metrics
 from tradescan.backtest.oos import Split
 from tradescan.backtest.rules import Rule
@@ -84,6 +85,10 @@ def rule_out(rule: type[Rule]) -> schemas.RuleOut:
         template=rule.description,
         params=[param_spec_out(spec) for spec in rule.parameters()],
     )
+
+
+def filter_rule_out(rule: type[EntryFilter]) -> schemas.FilterRuleOut:
+    return schemas.FilterRuleOut(**rule_out(rule).model_dump(), needs_benchmark=rule.needs_benchmark)
 
 
 def applied_rule_out(rule: Rule) -> schemas.AppliedRuleOut:
@@ -238,7 +243,9 @@ def trade_out(trade: Trade) -> schemas.TradeOut:
     )
 
 
-def _setup_out(ticker: str, signal: Signal, config: BacktestConfig, rules: TradeRules, close: pd.Series) -> dict[str, object]:
+def _setup_out(
+    ticker: str, signal: Signal, config: BacktestConfig, rules: TradeRules, benchmark: str | None, close: pd.Series
+) -> dict[str, object]:
     """The fields a backtest and a sweep share: what was tested, on which data, with which rules."""
     return {
         "ticker": ticker,
@@ -251,6 +258,8 @@ def _setup_out(ticker: str, signal: Signal, config: BacktestConfig, rules: Trade
         "config": schemas.BacktestConfigOut(**{item.name: getattr(config, item.name) for item in fields(config)}),
         "entry": applied_rule_out(rules.entry),
         "exits": [applied_rule_out(rule) for rule in rules.exits],
+        "filters": [applied_rule_out(rule) for rule in rules.filters],
+        "benchmark": benchmark,
     }
 
 
@@ -268,7 +277,7 @@ def backtest_out(report: BacktestReport) -> schemas.BacktestOut:
     close = report.close
     buy_hold = close / close.iloc[0] * report.config.initial_equity
     return schemas.BacktestOut(
-        **_setup_out(report.ticker, report.signal, report.config, report.rules, close),  # type: ignore[arg-type]
+        **_setup_out(report.ticker, report.signal, report.config, report.rules, report.benchmark, close),  # type: ignore[arg-type]
         split=split_out(report.split) if report.split else None,
         buy_hold=points(buy_hold),
         runs=[
@@ -288,7 +297,7 @@ def backtest_out(report: BacktestReport) -> schemas.BacktestOut:
 def sweep_out(report: SweepReport) -> schemas.SweepOut:
     base = report.base
     return schemas.SweepOut(
-        **_setup_out(report.ticker, base.signal, base.config, base.rules, report.close),  # type: ignore[arg-type]
+        **_setup_out(report.ticker, base.signal, base.config, base.rules, base.benchmark, report.close),  # type: ignore[arg-type]
         engine=VectorizedEngine.name,
         split=split_out(report.split),
         axes=[

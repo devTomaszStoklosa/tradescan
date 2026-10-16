@@ -66,6 +66,15 @@ def test_backtest_entry_and_exit_options(provider, tmp_path):
     assert cli.main(["backtest", "AAA", "connors_rsi2_long", "--exits", "none"]) == 0
 
 
+def test_backtest_filter_options(provider, capsys):
+    assert cli.main(["backtest", "AAA", "connors_rsi2_long", "--filters", "trend,market", "--benchmark", "bbb"]) == 0
+    output = capsys.readouterr().out
+    assert "filters: Close above SMA(200)" in output and "(benchmark BBB)" in output
+    assert provider.calls[-1][0] == ("AAA", "BBB")
+    assert cli.main(["backtest", "AAA", "connors_rsi2_long", "--filters", "nope"]) == 2
+    assert cli._axis("filter.trend.period=100:200:50").key == "filter.trend.period"
+
+
 def test_backtest_out_of_sample_option(provider, capsys):
     assert cli.main(["backtest", "AAA", "connors_rsi2_long", "--oos", "20"]) == 0
     assert "out-of-sample (last 20%)" in capsys.readouterr().out

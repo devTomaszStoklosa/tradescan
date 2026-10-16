@@ -1,4 +1,4 @@
-"""Building blocks of the entry and exit rules that both backtest engines execute.
+"""Building blocks of the entry filters, entry rules and exit rules that both backtest engines execute.
 
 A rule is a frozen dataclass whose numbers are declared with `tradescan.params.param`, like a signal's,
 so the API publishes them and the web UI builds their fields. Rules work on numpy arrays (`Bars`) and
@@ -21,18 +21,20 @@ from tradescan.params import Overrides, ParamSpec, parameters_of, with_overrides
 
 @dataclass(frozen=True, eq=False)
 class Bars:
-    """One ticker's prices and ATR as float arrays, aligned with its DataFrame."""
+    """One ticker's prices, volume and ATR as float arrays, aligned with its DataFrame and its dates."""
 
     open: np.ndarray
     high: np.ndarray
     low: np.ndarray
     close: np.ndarray
+    volume: np.ndarray
     atr: np.ndarray
+    dates: pd.DatetimeIndex
 
     @classmethod
     def from_frame(cls, df: pd.DataFrame, atr_period: int) -> Bars:
-        prices = (df[column].to_numpy(dtype=float) for column in ("open", "high", "low", "close"))
-        return cls(*prices, atr=atr(df, atr_period).to_numpy(dtype=float))
+        values = (df[column].to_numpy(dtype=float) for column in ("open", "high", "low", "close", "volume"))
+        return cls(*values, atr=atr(df, atr_period).to_numpy(dtype=float), dates=pd.DatetimeIndex(df.index))
 
     def __len__(self) -> int:
         return len(self.close)

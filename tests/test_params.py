@@ -7,13 +7,14 @@ from synthetic import random_walk
 
 from tradescan.backtest.entries import entry_rules
 from tradescan.backtest.exits import exit_rules
+from tradescan.backtest.filters import entry_filters
 from tradescan.backtest.trade_rules import RuleCatalog, RuleChoice, TradeRules
 from tradescan.config import Settings, adjustable_sections, load_settings
 from tradescan.params import ParamKind, parameters_of, validate, with_overrides
 from tradescan.signals import Family, default_registry
 
 ALL_SIGNALS = default_registry.names()
-ALL_RULES = [*entry_rules.classes(), *exit_rules.classes()]
+ALL_RULES = [*entry_rules.classes(), *exit_rules.classes(), *entry_filters.classes()]
 
 # Numeric settings that never change a result, so they are deliberately not adjustable per run.
 NOT_PARAMETERS = {("data", "cache_ttl_hours")}

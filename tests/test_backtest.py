@@ -19,6 +19,7 @@ from tradescan.backtest.exits import (
     TrailingStop,
     exit_rules,
 )
+from tradescan.backtest.filters import AdxFilter, AtrPercentFilter, MarketFilter, TrendFilter, VolumeFilter
 from tradescan.backtest.metrics import compute_metrics
 from tradescan.backtest.rules import Bars
 from tradescan.backtest.trade_rules import TradeRules
@@ -235,6 +236,22 @@ def test_no_progress_exit_closes_a_short_that_has_not_gained_enough(engine):
     assert _run(engine, df, side=Direction.SHORT, rules=rules).trades[0].exit_reason == ExitReason.OPEN
 
 
+def test_a_signal_a_filter_blocks_is_ignored_even_when_the_filter_allows_the_next_bars(engine):
+    df = _bars({21: (100.0, 103.0, 99.0, 102.0), 22: (102.0, 104.0, 101.0, 103.0)})
+    trend = TradeRules(exits=BRACKET.exits, filters=(TrendFilter(period=3),))
+    assert len(_run(engine, df).trades) == 1
+    assert _run(engine, df, rules=trend).trades == ()  # bar 20 closes at its SMA(3); bar 21 is no new signal
+    assert [trade.signal_date for trade in _run(engine, df, positions=(20, 22), rules=trend).trades] == [df.index[22]]
+
+
+def test_every_filter_has_to_allow_a_signal(engine):
+    df = _bars({})  # flat bars: ATR is 2% of the close
+    band = AtrPercentFilter(min_pct=1.0, max_pct=3.0)
+    assert len(_run(engine, df, rules=TradeRules(exits=BRACKET.exits, filters=(band,))).trades) == 1
+    both = TradeRules(exits=BRACKET.exits, filters=(band, VolumeFilter(min_ratio=2.0)))  # flat volume: a ratio of 1
+    assert _run(engine, df, rules=both).trades == ()
+
+
 def test_unfilled_orders_expire_and_signals_wait_for_them(engine):
     # The 99 buy-limit is out of reach on bars 21 and 22 and reachable from bar 23 on.
     df = _bars({21: (100.0, 101.0, 99.5, 100.0), 22: (100.0, 101.0, 99.5, 100.0)})
@@ -374,3 +391,24 @@ def test_engines_match_for_breakout_exits_after_a_stop_entry():
     for name in ("donchian_breakout", "donchian_breakdown"):
         result = _assert_engines_match(df, default_registry.create(name), ENGINE_CHECK_CONFIG, rules)
         assert {"failed_breakout", "no_progress"} <= {trade.exit_reason for trade in result.trades}, name
+
+
+# Every registered filter alone with its defaults, and combinations with other parameters.
+FILTERS = [(cls(),) for cls in [TrendFilter, MarketFilter, AdxFilter, VolumeFilter, AtrPercentFilter]] + [
+    (TrendFilter(period=50), AdxFilter(min_adx=20)),
+    (VolumeFilter(period=10, min_ratio=1.2), MarketFilter(period=100)),
+    (AtrPercentFilter(min_pct=1.5, max_pct=3.0), TrendFilter(period=100)),
+]
+
+
+@pytest.mark.parametrize("filters", FILTERS, ids=lambda filters: "+".join(rule.name for rule in filters))
+@pytest.mark.parametrize("signal_name", ["donchian_breakout", "ema_cross_down"])
+def test_engines_match_with_entry_filters(filters, signal_name):
+    df = random_walk(1000, seed=24)
+    benchmark = random_walk(1100, seed=25)["close"]  # starts on the same day and ends later
+    signal = default_registry.create(signal_name)
+    rules = TradeRules(filters=filters).with_benchmark(benchmark)
+    result = _assert_engines_match(df, signal, ENGINE_CHECK_CONFIG, rules)
+    allowed = rules.prepare(Bars.from_frame(df, ENGINE_CHECK_CONFIG.atr_period), signal.direction).allowed
+    assert not allowed[signal.events(df).to_numpy()].all(), "the filters should block some signals"
+    assert all(allowed[df.index.get_loc(trade.signal_date)] for trade in result.trades)

@@ -4,8 +4,8 @@ Each use case takes a request dataclass and returns a report dataclass; neither 
 argparse, HTTP or rendering. `build_use_cases` wires them from settings and a data provider.
 
 Requests carry per-run overrides: `settings` ({section: {parameter: value}}) and signal parameters
-({signal name: {parameter: value}}); a backtest also names its entry and exit rules with their
-parameters. All are validated against the declared ranges, and the configured settings are never modified.
+({signal name: {parameter: value}}); a backtest also names its entry filters, entry rule and exit rules
+with their parameters. All are validated against the declared ranges, and the configured settings are never modified.
 A sweep reruns one backtest setup over a grid of one or two of those parameters.
 """
 
@@ -22,6 +22,7 @@ from tradescan.backtest.base import BacktestConfig, BacktestEngine, BacktestResu
 from tradescan.backtest.edge import EdgeSampler, EdgeStats, combine_samples
 from tradescan.backtest.metrics import Metrics, compute_metrics
 from tradescan.backtest.oos import MIN_PERIOD_BARS, PeriodMetrics, Split, run_periods, split_history
+from tradescan.backtest.rules import Rule
 from tradescan.backtest.sweep import SweepAxis, SweepCase, SweepJob, SweepTarget, check_axes, grid
 from tradescan.backtest.trade_rules import RuleCatalog, RuleChoice, TradeRules, default_catalog
 from tradescan.backtest.vectorized import VectorizedEngine
@@ -371,6 +372,8 @@ class BacktestRequest:
     settings: GroupOverrides = field(default_factory=dict)
     entry: RuleChoice | None = None  # None: the catalog's default entry
     exits: tuple[RuleChoice, ...] | None = None  # None: the default exits; empty: only the initial stop
+    filters: tuple[RuleChoice, ...] = ()  # every one has to allow a signal for it to trade
+    benchmark: str | None = None  # compared by the market filter; None: the settings' scan benchmark
     period: str | None = None
     interval: str | None = None
 
@@ -388,6 +391,7 @@ class BacktestReport:
     signal: Signal
     config: BacktestConfig
     rules: TradeRules
+    benchmark: str | None  # the benchmark the filters compared; None when no filter reads one
     close: pd.Series
     runs: list[EngineRun]
     split: Split | None
@@ -399,19 +403,23 @@ class ResolvedBacktest:
 
     settings: Settings
     signal: Signal
-    rules: TradeRules
+    rules: TradeRules  # without the benchmark's closes, which `_load_setup` adds
     config: BacktestConfig
+    benchmark: str | None  # the benchmark the filters compare; None when no filter reads one
 
 
 def resolve_backtest(
     request: BacktestRequest, settings: Settings, registry: SignalRegistry, rules: RuleCatalog
 ) -> ResolvedBacktest:
     resolved = resolve_settings(settings, request.settings, registry)
+    trade_rules = rules.build(request.entry, request.exits, request.filters)
+    benchmark = (request.benchmark or resolved.scan.benchmark).upper() if trade_rules.needs_benchmark else None
     return ResolvedBacktest(
         settings=resolved,
         signal=registry.create(request.signal, request.params),
-        rules=rules.build(request.entry, request.exits),
+        rules=trade_rules,
         config=build_backtest_config(resolved),
+        benchmark=benchmark,
     )
 
 
@@ -443,9 +451,10 @@ class BacktestUseCase:
         if unknown or not request.engines:
             raise ValueError(f"Unknown engine(s): {', '.join(unknown) or 'none given'}. Use: {', '.join(self._engines)}")
         resolved = resolve_backtest(request, self._settings, self._registry, self._rules)
-        signal, rules, config = resolved.signal, resolved.rules, resolved.config
+        signal, config = resolved.signal, resolved.config
         ticker = request.ticker.upper()
-        df = _load_one(self._market_data, ticker, request.period or resolved.settings.backtest.period, request.interval)
+        period = request.period or resolved.settings.backtest.period
+        df, rules = _load_setup(self._market_data, ticker, resolved, period, request.interval)
         split = split_history(df.index, config.oos_pct)
 
         runs = []
@@ -456,15 +465,31 @@ class BacktestUseCase:
             periods = run_periods(engine, ticker, df, signal, config, rules, split.index) if split else None
             runs.append(EngineRun(result, metrics, periods))
         return BacktestReport(
-            ticker=ticker, signal=signal, config=config, rules=rules, close=df["close"], runs=runs, split=split
+            ticker=ticker,
+            signal=signal,
+            config=config,
+            rules=rules,
+            benchmark=resolved.benchmark,
+            close=df["close"],
+            runs=runs,
+            split=split,
         )
 
 
-def _load_one(market_data: MarketData, ticker: str, period: str, interval: str | None) -> pd.DataFrame:
-    loaded = market_data.load([ticker], period, interval)
+def _load_setup(
+    market_data: MarketData, ticker: str, resolved: ResolvedBacktest, period: str, interval: str | None
+) -> tuple[pd.DataFrame, TradeRules]:
+    """The ticker's bars, and the rules with the benchmark's closes when a filter compares the market."""
+    benchmark = resolved.benchmark
+    loaded = market_data.load([ticker, benchmark] if benchmark else [ticker], period, interval)
     if ticker not in loaded.frames:
         raise ValueError(f"No data for {ticker}")
-    return loaded.frames[ticker]
+    if benchmark is None:
+        return loaded.frames[ticker], resolved.rules
+    if benchmark not in loaded.frames:
+        readers = ", ".join(rule.name for rule in resolved.rules.filters if rule.needs_benchmark)
+        raise ValueError(f"No data for the benchmark {benchmark}, which the {readers} filter compares")
+    return loaded.frames[ticker], resolved.rules.with_benchmark(loaded.frames[benchmark]["close"])
 
 
 # ---------------------------------------------------------------------------
@@ -531,7 +556,8 @@ class SweepUseCase:
         axes = tuple(parameter.axis for parameter in parameters)
 
         ticker = setup.ticker.upper()
-        df = _load_one(self._market_data, ticker, setup.period or base.settings.backtest.period, setup.interval)
+        period = setup.period or base.settings.backtest.period
+        df, base_rules = _load_setup(self._market_data, ticker, base, period, setup.interval)
         split = split_history(df.index, base.config.oos_pct)
         if split is None:
             raise ValueError(
@@ -550,7 +576,8 @@ class SweepUseCase:
             except ValueError as error:
                 cells.append(SweepCell(values, None, str(error)))
                 continue
-            cases.append((len(cells), SweepCase(resolved.signal, resolved.rules, resolved.config)))
+            rules = resolved.rules.with_benchmark(base_rules.benchmark_close)  # no axis changes the benchmark
+            cases.append((len(cells), SweepCase(resolved.signal, rules, resolved.config)))
             cells.append(SweepCell(values, None))
         results = self._runner.map(SweepJob(ticker, df, split.index), [case for _, case in cases])
         for (position, _), periods in zip(cases, results):
@@ -579,16 +606,23 @@ def _holder(axis: SweepAxis, base: ResolvedBacktest) -> tuple[object, str]:
     if axis.target is SweepTarget.ENTRY:
         return base.rules.entry, base.rules.entry.name
     if axis.target is SweepTarget.EXIT:
-        rule = next((rule for rule in base.rules.exits if rule.name == axis.owner), None)
-        if rule is None:
-            used = ", ".join(rule.name for rule in base.rules.exits) or "none"
-            raise ValueError(f"{axis.key}: the '{axis.owner}' exit is not part of this backtest (its exits: {used})")
-        return rule, rule.name
+        return _owned_rule(axis, base.rules.exits, "exit")
+    if axis.target is SweepTarget.FILTER:
+        return _owned_rule(axis, base.rules.filters, "filter")
     if axis.owner not in SWEEP_SECTIONS:
         raise ValueError(f"{axis.key}: sweeps can change the settings in {', '.join(SWEEP_SECTIONS)}")
     if (axis.owner, axis.name) in NOT_SWEEPABLE:
         raise ValueError(f"{axis.key} sets the out-of-sample split, so it is the same for every combination")
     return getattr(base.settings, axis.owner), axis.owner
+
+
+def _owned_rule(axis: SweepAxis, rules: Sequence[Rule], kind: str) -> tuple[Rule, str]:
+    """The exit rule or filter of the backtest that the axis names as its owner."""
+    rule = next((rule for rule in rules if rule.name == axis.owner), None)
+    if rule is None:
+        used = ", ".join(rule.name for rule in rules) or "none"
+        raise ValueError(f"{axis.key}: the '{axis.owner}' {kind} is not part of this backtest (its {kind}s: {used})")
+    return rule, rule.name
 
 
 def _set_signal_param(setup: BacktestRequest, axis: SweepAxis, value: float) -> BacktestRequest:
@@ -600,12 +634,20 @@ def _set_entry_param(setup: BacktestRequest, axis: SweepAxis, value: float) -> B
     return replace(setup, entry=RuleChoice(setup.entry.name, {**setup.entry.params, axis.name: value}))
 
 
-def _set_exit_param(setup: BacktestRequest, axis: SweepAxis, value: float) -> BacktestRequest:
-    exits = tuple(
+def _with_param(choices: Sequence[RuleChoice], axis: SweepAxis, value: float) -> tuple[RuleChoice, ...]:
+    """The rule choices with the value set on the rule the axis names as its owner."""
+    return tuple(
         RuleChoice(choice.name, {**choice.params, axis.name: value}) if choice.name == axis.owner else choice
-        for choice in setup.exits or ()
+        for choice in choices
     )
-    return replace(setup, exits=exits)
+
+
+def _set_exit_param(setup: BacktestRequest, axis: SweepAxis, value: float) -> BacktestRequest:
+    return replace(setup, exits=_with_param(setup.exits or (), axis, value))
+
+
+def _set_filter_param(setup: BacktestRequest, axis: SweepAxis, value: float) -> BacktestRequest:
+    return replace(setup, filters=_with_param(setup.filters, axis, value))
 
 
 def _set_setting(setup: BacktestRequest, axis: SweepAxis, value: float) -> BacktestRequest:
@@ -618,6 +660,7 @@ _APPLY = {
     SweepTarget.SIGNAL: _set_signal_param,
     SweepTarget.ENTRY: _set_entry_param,
     SweepTarget.EXIT: _set_exit_param,
+    SweepTarget.FILTER: _set_filter_param,
     SweepTarget.SETTINGS: _set_setting,
 }
 

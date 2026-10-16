@@ -1,4 +1,5 @@
 import pickle
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -6,6 +7,7 @@ from synthetic import FakeProvider, FixedSignal, random_walk
 
 from tradescan.backtest.base import BacktestConfig
 from tradescan.backtest.exits import TargetExit, TimeExit
+from tradescan.backtest.filters import MarketFilter
 from tradescan.backtest.metrics import compute_metrics
 from tradescan.backtest.oos import MIN_PERIOD_BARS, SignalFrom, run_periods, split_history, split_index
 from tradescan.backtest.sweep import MAX_COMBINATIONS, SweepAxis, SweepJob, SweepTarget, check_axes, grid
@@ -205,6 +207,7 @@ def test_sweep_settings_entry_and_account(frames):
         (_axis("trend_period", (100, 150.5)), "whole number"),
         (_axis("targets_r", (1, 2), SweepTarget.SETTINGS, "risk"), "not a single number"),
         (_axis("offset_atr", (0.1, 0.2), SweepTarget.EXIT, "limit"), "'limit' exit is not part of this backtest"),
+        (_axis("period", (50, 100), SweepTarget.FILTER, "trend"), r"'trend' filter is not part of this backtest \(its filters: none\)"),
         (_axis("fresh_bars", (1, 2), SweepTarget.SETTINGS, "scan"), "account, risk, backtest"),
         (_axis("oos_pct", (20, 30), SweepTarget.SETTINGS, "backtest"), "out-of-sample split"),
         (_axis(owner="target"), "takes no owner"),
@@ -213,6 +216,24 @@ def test_sweep_settings_entry_and_account(frames):
 def test_sweep_rejects_parameters_it_cannot_change(frames, axis, message):
     with pytest.raises(ValueError, match=message):
         _use_cases(frames).sweep.run(SweepRequest(SETUP, (axis,)))
+
+
+def test_sweep_over_a_filter_compares_the_benchmark_in_every_combination(frames):
+    frames = {**frames, "QQQ": random_walk(1600, seed=5)}
+    provider = FakeProvider(frames)
+    setup = replace(SETUP, filters=(RuleChoice("market"),), benchmark="qqq")
+    axes = (_axis("period", (100, 200), SweepTarget.FILTER, "market"),)
+    report = build_use_cases(Settings(), provider).sweep.run(SweepRequest(setup, axes))
+    assert report.base.benchmark == "QQQ" and [call[0] for call in provider.calls] == [("AAA", "QQQ")]
+    assert [(item.axis.key, item.spec.label, item.spec.default) for item in report.parameters] == [
+        ("filter.market.period", "Benchmark SMA", 200)
+    ]
+
+    # A cell is the backtest of its combination, the benchmark's closes included.
+    rules = TradeRules(filters=(MarketFilter(period=100),)).with_benchmark(frames["QQQ"]["close"])
+    signal = default_registry.create("connors_rsi2_long")
+    expected = run_periods(VectorizedEngine(), "AAA", frames["AAA"], signal, report.base.config, rules, 1050)
+    assert report.cells[0].periods == expected
 
 
 def test_sweep_needs_enough_history_to_split(frames):

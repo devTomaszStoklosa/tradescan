@@ -38,6 +38,10 @@ def test_meta_endpoints(client):
         "failed_breakout", "no_progress",
     ]
     assert (config["default_entry"], config["default_exits"]) == ("next_open", ["target", "time"])
+    assert [(rule["name"], rule["needs_benchmark"]) for rule in config["filter_rules"]] == [
+        ("trend", False), ("market", True), ("adx", False), ("volume", False), ("atr_pct", False),
+    ]  # fmt: skip
+    assert config["filter_rules"][0]["description"] == "Close above SMA(200) for longs, below it for shorts"
     limit = config["entry_rules"][2]
     assert [param["name"] for param in limit["params"]] == ["offset_atr", "valid_bars"]
     assert limit["description"].startswith("Buy-limit 0.5 ATR") and "{offset_atr:g}" in limit["template"]
@@ -227,6 +231,37 @@ def test_backtest_with_indicator_exits(client):
     ]
     reasons = {trade["exit_reason"] for trade in data["runs"][0]["trades"]}
     assert "rsi" in reasons and reasons <= {"stop", "rsi", "sma_trend", "open"}
+
+
+def test_backtest_with_entry_filters(client):
+    body = {"ticker": "AAA", "signal": "connors_rsi2_long"}
+    default = client.post("/api/backtest", json=body).json()
+    assert default["filters"] == [] and default["benchmark"] is None
+
+    filters = [{"name": "market", "params": {"period": 100}}, {"name": "volume", "params": {"min_ratio": 1.2}}]
+    response = client.post("/api/backtest", json={**body, "filters": filters})
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["benchmark"] == "SPY"
+    assert [(rule["name"], rule["params"]) for rule in data["filters"]] == [
+        ("market", {"period": 100}), ("volume", {"period": 20, "min_ratio": 1.2}),
+    ]  # fmt: skip
+    assert data["filters"][0]["description"] == "Benchmark close above its SMA(100) for longs, below it for shorts"
+    assert 0 < len(data["runs"][0]["trades"]) < len(default["runs"][0]["trades"])
+
+    def status(**extra):
+        return client.post("/api/backtest", json={**body, **extra}).status_code
+
+    assert status(filters=[{"name": "trend"}], benchmark="BBB") == 200
+    assert status(filters=[{"name": "market"}], benchmark="NOPE") == 400
+    assert status(filters=[{"name": "atr_pct", "params": {"min_pct": 6}}]) == 400  # above the default maximum
+    assert status(filters=[{"name": "nope"}]) == 400
+    assert status(filters=[{"name": "trend"}, {"name": "trend"}]) == 400
+
+    axes = [{"target": "filter", "owner": "market", "name": "period", "values": [100, 200]}]
+    sweep = client.post("/api/sweep", json={**body, "filters": filters, "axes": axes}).json()
+    assert sweep["axes"][0]["key"] == "filter.market.period" and sweep["benchmark"] == "SPY"
+    assert all(cell["error"] is None for cell in sweep["cells"])
 
 
 def test_backtest_reports_the_split(client):

@@ -30,6 +30,7 @@ class SweepTarget(StrEnum):
     SIGNAL = "signal"  # a parameter of the signal
     ENTRY = "entry"  # a parameter of the entry rule
     EXIT = "exit"  # a parameter of the exit rule named by `owner`
+    FILTER = "filter"  # a parameter of the entry filter named by `owner`
     SETTINGS = "settings"  # a setting of the section named by `owner`
 
 
@@ -38,7 +39,7 @@ class SweepAxis:
     target: SweepTarget
     name: str
     values: tuple[float, ...]
-    owner: str = ""  # the exit rule or settings section; empty for the signal and the entry rule
+    owner: str = ""  # the exit rule, entry filter or settings section; empty for the signal and the entry rule
 
     @property
     def key(self) -> str:

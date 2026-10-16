@@ -2,7 +2,7 @@
 
 * a signal on bar t places the entry rule's order: a market order for the open of bar t+1, or a stop
   or limit order active on the next `valid_bars` bars; signals are ignored while an order waits or a
-  position is open,
+  position is open, and so are signals on bars where an entry filter blocks them,
 * the initial stop sits `atr_mult` ATRs (of the signal bar) from the entry rule's reference price, and
   size comes from `risk.position_size` using equity at the signal bar,
 * exit orders are placed on the entry bar and checked from the next bar (backtrader bracket

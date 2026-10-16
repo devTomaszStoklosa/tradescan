@@ -130,6 +130,8 @@ def _backtest_request(args: argparse.Namespace, engines: tuple[str, ...]) -> Bac
         ),
         entry=RuleChoice(args.entry) if args.entry else None,
         exits=_exits(args),
+        filters=tuple(RuleChoice(name) for name in _split(args.filters)),
+        benchmark=args.benchmark,
         period=args.period,
         interval=args.interval,
     )
@@ -263,11 +265,13 @@ def cmd_backtest(args: argparse.Namespace, settings: Settings, report: ConsoleRe
     result = _use_cases(settings, args).backtest.run(_backtest_request(args, engines))
     config, signal, rules = result.config, result.signal, result.rules
     exits = "; ".join(rule.describe() for rule in rules.exits) or "none"
+    filters = "; ".join(rule.describe() for rule in rules.filters) or "none"
+    benchmark = f" (benchmark {result.benchmark})" if result.benchmark else ""
     report.frame(
         metrics_to_frame(result.runs),
         title=f"{result.ticker} {signal.name} ({signal.direction.value}), "
         f"{result.close.index[0].date()} to {result.close.index[-1].date()}",
-        caption=f"entry: {rules.entry.describe()}. Stop {config.atr_mult:g} ATR, exits: {exits}. "
+        caption=f"filters: {filters}{benchmark}. Entry: {rules.entry.describe()}. Stop {config.atr_mult:g} ATR, exits: {exits}. "
         f"Risk {config.risk_pct:g}%/trade, costs {config.commission_pct:g}% + {config.slippage_pct:g}% slippage",
         show_index=True,
     )
@@ -412,6 +416,12 @@ def _add_backtest_setup_args(parser: argparse.ArgumentParser) -> None:
         help=f"exit rules on top of the stop, comma separated ({', '.join(default_catalog.exits.names())}); "
         f"'none' keeps only the stop (default {','.join(default_catalog.default_exits)})",
     )
+    parser.add_argument(
+        "--filters",
+        help=f"entry filters a signal has to pass, comma separated ({', '.join(default_catalog.filters.names())}); "
+        "default none",
+    )
+    parser.add_argument("--benchmark", help="benchmark the market filter compares (default: scan.benchmark from the settings)")
     parser.add_argument("--atr-mult", type=float, help="stop distance in ATRs")
     parser.add_argument("--target-r", type=float, help="target as a multiple of the risk (target exit)")
     parser.add_argument("--max-hold", type=int, help="time exit after N bars (time exit)")
@@ -474,8 +484,9 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         required=True,
         help="parameter and values: target[.owner].name=FROM:TO:STEP or =V1,V2,... with target signal, entry, exit "
-        "(owner: the exit rule) or settings (owner: account, risk or backtest), e.g. signal.oversold=5:20:5 or "
-        "exit.target.target_r=1,1.5,2; give it twice for a grid",
+        "(owner: the exit rule), filter (owner: the entry filter) or settings (owner: account, risk or backtest), "
+        "e.g. signal.oversold=5:20:5, exit.target.target_r=1,1.5,2 or filter.trend.period=100:200:50; "
+        "give it twice for a grid",
     )
     sweep.add_argument("--metric", choices=METRIC_CHOICES, default="sharpe", help="metric shown in the grids")
     sweep.add_argument("--export", help="save every combination with both periods' metrics to .csv or .json")

@@ -4,6 +4,7 @@ hand-made bars."""
 import math
 
 import numpy as np
+import pandas as pd
 import pytest
 from synthetic import random_walk
 
@@ -38,7 +39,9 @@ def _bars(high=None, low=None, atr=None, close=None) -> Bars:
         high=_array(high, length, 0.0),
         low=_array(low, length, 0.0),
         close=_array(close, length, 0.0),
+        volume=np.zeros(length),
         atr=_array(atr, length, 1.0),
+        dates=pd.date_range("2024-01-01", periods=length, freq="B"),
     )
 
 
