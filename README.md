@@ -8,7 +8,7 @@ tradescan serve
 Trading signal scanner for daily bars: **vectorized pandas signals on yfinance data**, with
 **backtrader's Cerebro as an optional second engine** to validate a signal with realistic orders.
 
-- 30 signals in 6 families (trend, momentum, breakout, mean reversion, volume, patterns), long and short
+- 38 signals in 6 families (trend, momentum, breakout, mean reversion, volume, patterns), long and short
 - confluence score: weighted fresh signals + daily trend + weekly trend + relative strength
 - risk plan for every setup: ATR stop, 2R/3R targets, position size from account risk
 - historical edge of each signal: win rate and forward return vs. the average bar
@@ -255,7 +255,7 @@ Data is cached as Parquet in `.cache/` for `cache_ttl_hours`; use `--no-cache` t
 ## Parameters
 
 Every number that changes a result is a declared parameter with a default, an allowed range and a label:
-the settings of all 30 signals (periods, thresholds, multipliers), of the backtest's entry filters,
+the settings of all 38 signals (periods, thresholds, multipliers), of the backtest's entry filters,
 entry rules and exit rules, and the settings sections `account`, `risk`, `scan`, `scoring`, `trend`,
 `regime` and `backtest`. `settings.toml` holds the defaults of the settings sections, the code those of
 signals and rules; a single run can override any of them without touching the file:
