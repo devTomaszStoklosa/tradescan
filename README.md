@@ -15,6 +15,8 @@ Trading signal scanner for daily bars: **vectorized pandas signals on yfinance d
 - market regime: benchmark vs. SMA200, breadth, new highs/lows
 - two backtest engines that produce identical trades (pandas for speed, Cerebro as reference)
 - an out-of-sample check on every backtest, and parameter sweeps shown as in-sample and out-of-sample heatmaps
+- a Monte Carlo of every backtest's trades: how deep the drawdown and how long the losing streak could have
+  been, and the chance of ruin at the run's risk per trade
 - one setup on every ticker of a watchlist: each ticker's metrics, all trades pooled, and how the results spread
 - a React web UI on top of a small FastAPI server (`tradescan serve`)
 
@@ -49,7 +51,7 @@ the built UI. The screens:
   (next open, stop or limit order) and the exits (target, time exit, trailing, channel and breakeven stops,
   RSI, SMA and Supertrend exits, failed breakout and no-progress exits) on top of the ATR stop; the
   signal's and the rules' parameters are editable; key metrics, equity vs. buy & hold, in-sample vs.
-  out-of-sample metrics, trades on the chart and in a sortable table.
+  out-of-sample metrics, a Monte Carlo of the trades, trades on the chart and in a sortable table.
 - **Sweep**: the same setup as Backtest over a range of one or two of its parameters (signal, filters,
   entry, exits, stop or costs), as two heatmaps of a metric you pick: in-sample and out-of-sample. Click a
   cell for its metrics, the average of its neighbours, and a link that opens it on the Backtest page.
@@ -59,8 +61,10 @@ the built UI. The screens:
   each ticker's metrics, where a ticker opens its own backtest.
 - **Edge**: signal statistics across a watchlist at several horizons, coloured by edge.
 - **Compare**: backtest runs pinned with **Pin run** on the Backtest page, side by side: the parameters
-  that differ, an out-of-sample check (key metrics in-sample next to out-of-sample), every metric of the
-  full history or of one period with the best value highlighted, and the return curves on one chart.
+  that differ, an out-of-sample check (key metrics in-sample next to out-of-sample), a Monte Carlo check
+  (unlucky and median return, drawdown and losing streak, and the chance of ruin, per method), every
+  metric of the full history or of one period with the best value highlighted, and the return curves on
+  one chart.
 - **Signals**: the signal library with families, weights, rules and each parameter's default and range.
 
 Scanner and Edge have an **Advanced settings** panel with every other parameter (see
@@ -72,8 +76,8 @@ Up to 8 runs can be pinned. A pinned run is a snapshot: it keeps the result you 
 arrive, and **Open in Backtest** runs it again with today's data and the account currently set in the
 header. Pinned runs live in this browser only (clearing site data deletes them), so use **Export JSON**
 as a backup or to move them to another browser, and **Import JSON** to bring them back. Runs with fewer
-than 20 trades are flagged, because their metrics are mostly noise. Runs pinned before out-of-sample
-results existed have none, since a pin is never re-run.
+than 20 trades are flagged, because their metrics are mostly noise. Runs pinned before out-of-sample or
+Monte Carlo results existed have none, since a pin is never re-run.
 
 > The API has no authentication. `serve` binds to 127.0.0.1; do not expose it to a network.
 
@@ -244,6 +248,23 @@ Each period needs at least 60 bars; with less history the split is left out. Tun
 period and treat the out-of-sample one as the check: a setting that only works in-sample is fitted to
 the past.
 
+**Monte Carlo.** Every backtest also resamples the full history's closed trades in R, for each engine,
+to show how much of the result is the luck of the order and of the sample. Each simulated sequence is
+traded with fixed-fractional sizing: a trade moves equity by `account.risk_pct` percent times its R.
+
+- shuffled: the same trades in a random order. The final return is the same for every order, so this
+  spreads the maximum drawdown and the longest losing streak;
+- bootstrapped: as many trades drawn at random with replacement, which spreads the final return too.
+
+For each method the Backtest page shows the unlucky (5th percentile on the bad side), median and lucky
+(95th percentile) final return, maximum drawdown and longest losing streak next to the run's own order of
+trades, and the chance of ruin: the share of simulations whose drawdown from the peak reaches
+`monte_carlo.ruin_drawdown_pct` (default 50%). `monte_carlo.simulations` (default 1000 per method) and
+`monte_carlo.seed` (the same seed repeats the same simulations) are settable too. The model leaves out
+the cap on position value and any trade still open on the last bar, so its numbers differ from the
+backtest's own. A run needs at least two closed trades; sweeps and watchlist backtests run no Monte
+Carlo. The API reports it as `monte_carlo` on every run of `/api/backtest`.
+
 **Sweeps.** A sweep runs one setup for every combination of one or two parameters' values (at most 200
 combinations, 2–50 values per parameter), each on both periods, with the pandas engine on all CPU cores.
 Any single-number parameter of the signal, the setup's entry filters, the entry rule, the setup's exit
@@ -270,8 +291,8 @@ A setting that works on one or two tickers and not on the rest is fitted to them
 ## Configuration
 
 `config/settings.toml` holds account size, risk per trade, ATR stop multiple, targets, freshness,
-benchmark, scoring weights, trend and relative-strength lookbacks, market regime thresholds and
-backtest costs. Every key is optional; unknown keys and values outside a parameter's range are rejected.
+benchmark, scoring weights, trend and relative-strength lookbacks, market regime thresholds,
+backtest costs and the Monte Carlo of a backtest's trades. Every key is optional; unknown keys and values outside a parameter's range are rejected.
 Data is cached as Parquet in `.cache/` for `cache_ttl_hours`; use `--no-cache` to force a download.
 
 ## Parameters
@@ -279,7 +300,7 @@ Data is cached as Parquet in `.cache/` for `cache_ttl_hours`; use `--no-cache` t
 Every number that changes a result is a declared parameter with a default, an allowed range and a label:
 the settings of all 38 signals (periods, thresholds, multipliers), of the backtest's entry filters,
 entry rules and exit rules, and the settings sections `account`, `risk`, `scan`, `scoring`, `trend`,
-`regime` and `backtest`. `settings.toml` holds the defaults of the settings sections, the code those of
+`regime`, `backtest` and `monte_carlo`. `settings.toml` holds the defaults of the settings sections, the code those of
 signals and rules; a single run can override any of them without touching the file:
 
 - in the web UI, where changed values are highlighted, kept in the URL and checked against their range;
