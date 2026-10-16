@@ -22,9 +22,13 @@ export type Family = Schemas["Family"];
 export type FilterRuleOut = Schemas["FilterRuleOut"];
 export type HitOut = Schemas["HitOut"];
 export type MetricsOut = Schemas["MetricsOut"];
+export type MetricSpreadOut = Schemas["MetricSpreadOut"];
 export type ParamKind = Schemas["ParamKind"];
 export type ParamSpecOut = Schemas["ParamSpecOut"];
+export type Period = Schemas["Period"];
+export type PeriodSummaryOut = Schemas["PeriodSummaryOut"];
 export type Point = Schemas["Point"];
+export type PooledTradesOut = Schemas["PooledTradesOut"];
 export type RegimeOut = Schemas["RegimeOut"];
 export type RuleIn = Schemas["RuleIn"];
 export type RuleOut = Schemas["RuleOut"];
@@ -40,7 +44,10 @@ export type SweepIn = Schemas["SweepIn"];
 export type SweepLimitsOut = Schemas["SweepLimitsOut"];
 export type SweepOut = Schemas["SweepOut"];
 export type SweepTarget = Schemas["SweepTarget"];
+export type TickerRunOut = Schemas["TickerRunOut"];
 export type TradeOut = Schemas["TradeOut"];
+export type WatchlistBacktestIn = Schemas["WatchlistBacktestIn"];
+export type WatchlistBacktestOut = Schemas["WatchlistBacktestOut"];
 export type WatchlistOut = Schemas["WatchlistOut"];
 
 export class ApiError extends Error {
@@ -100,6 +107,7 @@ export const api = {
   edge: (body: EdgeIn) => post<EdgeOut>("/edge", body),
   backtest: (body: BacktestIn) => post<BacktestOut>("/backtest", body),
   sweep: (body: SweepIn) => post<SweepOut>("/sweep", body),
+  watchlistBacktest: (body: WatchlistBacktestIn) => post<WatchlistBacktestOut>("/watchlist-backtest", body),
   chart: (body: ChartIn) => post<ChartOut>("/chart", body),
 };
 

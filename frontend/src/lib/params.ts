@@ -47,9 +47,8 @@ export interface EdgeForm {
   signalParams: Overrides;
 }
 
-/** What one backtest tests: shared by the Backtest and the Sweep page. */
-export interface BacktestSetup extends TradeRulesForm {
-  ticker: string;
+/** What one backtest tests apart from the ticker: shared by the Backtest, Sweep and Watchlist pages. */
+export interface BacktestRules extends TradeRulesForm {
   signal: string;
   period: string;
   settings: Overrides;
@@ -57,6 +56,11 @@ export interface BacktestSetup extends TradeRulesForm {
   signalParams: Values;
   /** The benchmark the market filter compares; empty for the server's default. */
   benchmark: string;
+}
+
+/** What one backtest tests: shared by the Backtest and the Sweep page. */
+export interface BacktestSetup extends BacktestRules {
+  ticker: string;
 }
 
 export interface BacktestForm extends BacktestSetup {
@@ -88,16 +92,16 @@ const families = (value: string | null): Family[] =>
 export const tickerList = (text: string): string[] =>
   list(text.replace(/[\s;]+/g, ",")).map((ticker) => ticker.toUpperCase());
 
-function readUniverse(params: URLSearchParams): Universe {
+export function readUniverse(params: URLSearchParams): Universe {
   return { watchlist: params.get("w") ?? "", tickers: params.get("t") ?? "" };
 }
 
-function writeUniverse(params: URLSearchParams, universe: Universe): void {
+export function writeUniverse(params: URLSearchParams, universe: Universe): void {
   if (universe.watchlist) params.set("w", universe.watchlist);
   else if (universe.tickers.trim()) params.set("t", tickerList(universe.tickers).join(","));
 }
 
-function universeBody(universe: Universe): { watchlist?: string; tickers?: string[] } | null {
+export function universeBody(universe: Universe): { watchlist?: string; tickers?: string[] } | null {
   if (universe.watchlist) return { watchlist: universe.watchlist };
   const tickers = tickerList(universe.tickers);
   return tickers.length ? { tickers } : null;
@@ -204,6 +208,10 @@ export function readBacktestForm(params: URLSearchParams, defaults: RuleDefaults
 }
 
 export function readBacktestSetup(params: URLSearchParams, defaults: RuleDefaults): BacktestSetup {
+  return { ticker: (params.get("ticker") ?? "").toUpperCase(), ...readBacktestRules(params, defaults) };
+}
+
+export function readBacktestRules(params: URLSearchParams, defaults: RuleDefaults): BacktestRules {
   const signal = params.get("signal") ?? "";
   const entry = params.get("entry") || defaults.default_entry;
   const exitList = params.get("exit");
@@ -211,7 +219,6 @@ export function readBacktestSetup(params: URLSearchParams, defaults: RuleDefault
   const filters = list(params.get("filter"));
   const { settings, exitParams } = moveLegacyExitSettings(readOverrides(params, SETTINGS_PREFIX), readOverrides(params, EXIT_PREFIX));
   return {
-    ticker: (params.get("ticker") ?? "").toUpperCase(),
     signal,
     period: params.get("p") ?? "",
     settings,
@@ -231,10 +238,10 @@ export function writeBacktestForm(form: BacktestForm, defaults?: RuleDefaults): 
   return writeBacktestSetup(form, defaults, form.engines);
 }
 
-/** `engines` belong to a backtest only: a sweep always runs on one engine. */
-export function writeBacktestSetup(form: BacktestSetup, defaults?: RuleDefaults, engines: string[] = []): URLSearchParams {
+/** `engines` belong to a backtest only: a sweep always runs on one engine. A setup without a ticker leaves it out. */
+export function writeBacktestSetup(form: BacktestRules & { ticker?: string }, defaults?: RuleDefaults, engines: string[] = []): URLSearchParams {
   const params = new URLSearchParams();
-  setIf(params, "ticker", form.ticker.trim().toUpperCase());
+  setIf(params, "ticker", form.ticker?.trim().toUpperCase());
   setIf(params, "signal", form.signal);
   setIf(params, "eng", engines.join(","));
   setIf(params, "p", form.period);
@@ -258,9 +265,14 @@ export function backtestBody(form: BacktestForm): BacktestIn | null {
 
 /** The setup part of a backtest or sweep request; null until a ticker and a signal are chosen. */
 export function setupBody(form: BacktestSetup): BacktestSetupIn | null {
-  if (!form.ticker.trim() || !form.signal) return null;
+  const rules = rulesBody(form);
+  return form.ticker.trim() && rules ? { ticker: form.ticker.trim().toUpperCase(), ...rules } : null;
+}
+
+/** Everything a request tests apart from the ticker; null until a signal is chosen. */
+export function rulesBody(form: BacktestRules): Omit<BacktestSetupIn, "ticker"> | null {
+  if (!form.signal) return null;
   return {
-    ticker: form.ticker.trim().toUpperCase(),
     signal: form.signal,
     period: form.period || null,
     params: form.signalParams as SignalParamsIn[string],
