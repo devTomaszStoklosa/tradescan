@@ -12,6 +12,7 @@ from tradescan.backtest.base import BacktestConfig, Trade
 from tradescan.backtest.edge import EdgeStats
 from tradescan.backtest.filters import EntryFilter
 from tradescan.backtest.metrics import Metrics
+from tradescan.backtest.monte_carlo import Distribution, MonteCarlo, PathStats, Percentiles
 from tradescan.backtest.oos import Split
 from tradescan.backtest.pooled import PooledTrades, Spread
 from tradescan.backtest.rules import Rule
@@ -253,6 +254,44 @@ def trade_out(trade: Trade) -> schemas.TradeOut:
     )
 
 
+def percentiles_out(percentiles: Percentiles) -> schemas.PercentilesOut:
+    return schemas.PercentilesOut(**{item.name: finite(getattr(percentiles, item.name)) for item in fields(percentiles)})
+
+
+def path_out(path: PathStats) -> schemas.MonteCarloPathOut:
+    return schemas.MonteCarloPathOut(
+        final_return_pct=finite(path.final_return_pct),
+        max_drawdown_pct=finite(path.max_drawdown_pct),
+        longest_losing_streak=path.longest_losing_streak,
+    )
+
+
+def distribution_out(distribution: Distribution) -> schemas.MonteCarloMethodOut:
+    method = distribution.method
+    return schemas.MonteCarloMethodOut(
+        name=method.name,
+        label=method.label,
+        description=method.description,
+        final_return_pct=percentiles_out(distribution.final_return_pct),
+        max_drawdown_pct=percentiles_out(distribution.max_drawdown_pct),
+        longest_losing_streak=percentiles_out(distribution.longest_losing_streak),
+        ruin_pct=distribution.ruin_pct,
+    )
+
+
+def monte_carlo_out(monte_carlo: MonteCarlo) -> schemas.MonteCarloOut:
+    config = monte_carlo.config
+    return schemas.MonteCarloOut(
+        simulations=config.simulations,
+        ruin_drawdown_pct=config.ruin_drawdown_pct,
+        seed=config.seed,
+        risk_pct=monte_carlo.risk_pct,
+        trades=monte_carlo.trades,
+        actual=path_out(monte_carlo.actual),
+        methods=[distribution_out(distribution) for distribution in monte_carlo.methods],
+    )
+
+
 def _setup_out(
     ticker: str, signal: Signal, config: BacktestConfig, rules: TradeRules, benchmark: str | None, close: pd.Series
 ) -> dict[str, object]:
@@ -303,6 +342,7 @@ def backtest_out(report: BacktestReport) -> schemas.BacktestOut:
                 metrics=metrics_out(run.metrics),
                 in_sample=metrics_out(run.periods.in_sample) if run.periods else None,
                 out_of_sample=metrics_out(run.periods.out_of_sample) if run.periods else None,
+                monte_carlo=monte_carlo_out(run.monte_carlo) if run.monte_carlo else None,
                 equity=points(run.result.equity),
                 trades=[trade_out(trade) for trade in run.result.trades],
             )

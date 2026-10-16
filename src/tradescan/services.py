@@ -22,6 +22,7 @@ import pandas as pd
 from tradescan.backtest.base import BacktestConfig, BacktestEngine, BacktestResult
 from tradescan.backtest.edge import EdgeSampler, EdgeStats, combine_samples
 from tradescan.backtest.metrics import Metrics, compute_metrics
+from tradescan.backtest.monte_carlo import MonteCarlo, MonteCarloConfig, closed_r_multiples, simulate
 from tradescan.backtest.oos import MIN_PERIOD_BARS, PeriodMetrics, Split, run_periods, split_history
 from tradescan.backtest.pooled import BREAK_EVEN, PooledTrades, Spread, pool_trades, spread
 from tradescan.backtest.rules import Rule
@@ -129,6 +130,13 @@ def build_backtest_config(settings: Settings) -> BacktestConfig:
         slippage_pct=backtest.slippage_pct,
         bars_per_year=backtest.bars_per_year,
         oos_pct=backtest.oos_pct,
+    )
+
+
+def build_monte_carlo_config(settings: Settings) -> MonteCarloConfig:
+    monte_carlo = settings.monte_carlo
+    return MonteCarloConfig(
+        simulations=monte_carlo.simulations, ruin_drawdown_pct=monte_carlo.ruin_drawdown_pct, seed=monte_carlo.seed
     )
 
 
@@ -386,6 +394,7 @@ class EngineRun:
     result: BacktestResult
     metrics: Metrics
     periods: PeriodMetrics | None  # None when the history is too short to split
+    monte_carlo: MonteCarlo | None  # of the full history's trades; None with too few closed trades
 
 
 @dataclass(frozen=True)
@@ -459,6 +468,7 @@ class BacktestUseCase:
         period = request.period or resolved.settings.backtest.period
         df, rules = _load_setup(self._market_data, ticker, resolved, period, request.interval)
         split = split_history(df.index, config.oos_pct)
+        monte_carlo = build_monte_carlo_config(resolved.settings)
 
         runs = []
         for name in request.engines:
@@ -466,7 +476,8 @@ class BacktestUseCase:
             result = engine.run(ticker, df, signal, config, rules)
             metrics = compute_metrics(result.equity, result.trades, df["close"], config.bars_per_year)
             periods = run_periods(engine, ticker, df, signal, config, rules, split.index) if split else None
-            runs.append(EngineRun(result, metrics, periods))
+            simulations = simulate(closed_r_multiples(result.trades), config.risk_pct, monte_carlo)
+            runs.append(EngineRun(result, metrics, periods, simulations))
         return BacktestReport(
             ticker=ticker,
             signal=signal,
