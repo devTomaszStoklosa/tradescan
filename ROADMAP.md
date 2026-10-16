@@ -33,7 +33,7 @@ URL, pinned runs, Compare and the sweep pick them up.
 | M2 | RSI, SMA and Supertrend exits | done ([#16], [PR #17]) | | F1 |
 | B1 | Breakout exits: failed breakout, no progress | done ([#19], [PR #21]) | | F1 |
 | F2 | Entry filters on any signal | done ([#22], [PR #23]) | | F1 |
-| M1 | Mean-reversion signals | done ([#24]) | | |
+| M1 | Mean-reversion signals | done ([#24], [PR #25]) | | |
 | O2 | One setup over a watchlist | planned | M | |
 | O3 | Monte Carlo of trades | planned | S | |
 | F3 | Portfolio backtest | planned | L | |
@@ -94,3 +94,4 @@ server instead of only in the browser, with notes per trade and the backtest tha
 [#22]: https://github.com/devTomaszStoklosa/tradescan/issues/22
 [PR #23]: https://github.com/devTomaszStoklosa/tradescan/pull/23
 [#24]: https://github.com/devTomaszStoklosa/tradescan/issues/24
+[PR #25]: https://github.com/devTomaszStoklosa/tradescan/pull/25
