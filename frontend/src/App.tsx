@@ -19,6 +19,7 @@ const router = createBrowserRouter([
       { path: "edge", lazy: async () => ({ Component: (await import("./pages/EdgePage")).EdgePage }) },
       { path: "sweep", lazy: async () => ({ Component: (await import("./pages/SweepPage")).SweepPage }) },
       { path: "watchlist", lazy: async () => ({ Component: (await import("./pages/WatchlistPage")).WatchlistPage }) },
+      { path: "portfolio", lazy: async () => ({ Component: (await import("./pages/PortfolioPage")).PortfolioPage }) },
       { path: "compare", lazy: async () => ({ Component: (await import("./pages/ComparePage")).ComparePage }) },
       { path: "signals", lazy: async () => ({ Component: (await import("./pages/SignalsPage")).SignalsPage }) },
       { path: "*", element: <EmptyState title="Page not found" /> },
