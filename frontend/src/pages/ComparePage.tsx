@@ -7,12 +7,13 @@ import { EquityChart, type EquitySeries } from "../components/charts/EquityChart
 import { MonteCarloTable } from "../components/MonteCarlo";
 import { OutOfSampleTable } from "../components/OutOfSample";
 import { ParameterDiffTable } from "../components/ParameterDiffTable";
+import { PortfolioStatsTable } from "../components/PortfolioStats";
 import { RunCard, RunLabel } from "../components/RunCard";
 import { Button, EmptyState, ErrorBox, PageHeader, Panel, Segmented } from "../components/ui";
 import { parameterRows, returnCurve } from "../lib/compare";
 import { downloadFile } from "../lib/csv";
 import { methodsOf, PREFERRED_METHOD } from "../lib/monteCarlo";
-import { MAX_RUNS, runColorVar, type MergeResult, type PinnedRun } from "../lib/runs";
+import { asPortfolio, MAX_RUNS, runColorVar, type MergeResult, type PinnedRun } from "../lib/runs";
 import { usePinnedRuns } from "../state/pinnedRuns";
 
 type Period = "full" | "in_sample" | "out_of_sample";
@@ -50,6 +51,14 @@ export function ComparePage() {
     () => visible.map((run) => ({ key: run.id, header: <RunLabel run={run} />, metrics: periodMetrics(run, period) })),
     [visible, period],
   );
+  const statColumns = useMemo(
+    () =>
+      visible.flatMap((item) => {
+        const run = asPortfolio(item);
+        return run ? [{ key: run.id, header: <RunLabel run={run} />, stats: run.stats[period] }] : [];
+      }),
+    [visible, period],
+  );
   const methods = useMemo(() => methodsOf(visible.map((run) => run.monteCarlo)), [visible]);
   const method = methods.some((item) => item.name === chosenMethod) ? chosenMethod : (methods[0]?.name ?? chosenMethod);
   const series = useMemo<EquitySeries[]>(
@@ -78,7 +87,7 @@ export function ComparePage() {
     <>
       <PageHeader
         title="Compare"
-        subtitle={`Pinned backtest runs side by side, up to ${MAX_RUNS}. They are kept in this browser only: export them as a backup.`}
+        subtitle={`Pinned backtest and portfolio runs side by side, up to ${MAX_RUNS}. They are kept in this browser only: export them as a backup.`}
         actions={
           <>
             <input ref={fileInput} type="file" accept="application/json,.json" aria-label="Runs file to import" className="hidden" onChange={onImport} />
@@ -100,8 +109,9 @@ export function ComparePage() {
       )}
       {!runs.length ? (
         <EmptyState title="No pinned runs yet">
-          Run a <Link to="/backtest" className="text-accent hover:underline">backtest</Link> and press <strong>Pin run</strong> to keep it here, then
-          change a parameter and pin again.
+          Run a <Link to="/backtest" className="text-accent hover:underline">backtest</Link> or a{" "}
+          <Link to="/portfolio" className="text-accent hover:underline">portfolio</Link> and press <strong>Pin run</strong> to keep it here, then change
+          a parameter and pin again.
         </EmptyState>
       ) : (
         <>
@@ -144,6 +154,16 @@ export function ComparePage() {
                   The best value of each ranked metric is highlighted.{period !== "full" && " Runs without a split show dashes."}
                 </p>
               </section>
+              {statColumns.length > 0 && (
+                <section className="space-y-2">
+                  <h2 className="text-sm font-semibold">Portfolio stats</h2>
+                  <PortfolioStatsTable
+                    columns={statColumns}
+                    caption={`Portfolio stats of the pinned portfolio runs${period === "full" ? "" : `, ${period === "in_sample" ? "in-sample" : "out-of-sample"}`}`}
+                  />
+                  <p className="text-xs text-muted">Portfolio runs only, for the period chosen under Metrics.</p>
+                </section>
+              )}
               <Panel>
                 <h2 className="mb-2 text-sm font-semibold">Return since the first bar</h2>
                 <EquityChart series={series} format="percent" label="Return of the pinned runs since their first bar" />

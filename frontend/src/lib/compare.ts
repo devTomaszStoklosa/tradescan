@@ -2,12 +2,12 @@
  * Comparison of pinned runs: which parameters differ and which run is best on each metric.
  * Labels and units come from the API's parameter specs, so parameters added later appear without frontend changes.
  */
-import type { MetricsOut, ParamSpecOut, Point, SettingsSectionOut, SignalOut } from "../api/client";
-import { MONTE_CARLO_SECTION } from "./choices";
+import type { ConfigOut, MetricsOut, ParamSpecOut, Point, SettingsSectionOut, SignalOut } from "../api/client";
+import { MONTE_CARLO_SECTION, PORTFOLIO_SECTION } from "./choices";
 import { DASH } from "./format";
 import { MONTE_CARLO_SETTINGS } from "./monteCarlo";
 import type { RuleSpecs } from "./rules";
-import type { PinnedRun } from "./runs";
+import { asBacktest, asPortfolio, type PinnedPortfolioRun, type PinnedRun, type RunKind } from "./runs";
 
 /** Fewer trades than this make a run's metrics mostly noise. */
 export const MIN_TRADES = 20;
@@ -69,20 +69,74 @@ function ownedRows(
   return rows;
 }
 
+/** The rules' specs, with the priority rules when portfolio runs are compared. */
+export type CompareSpecs = RuleSpecs & Partial<Pick<ConfigOut, "priority_rules">>;
+
+const KIND_LABELS: Record<RunKind, string> = { backtest: "Backtest", portfolio: "Portfolio" };
+
+/** Each run as a portfolio run, undefined for the others; empty when no run is a portfolio, so no portfolio rows appear. */
+function portfolioRuns(runs: PinnedRun[]): (PinnedPortfolioRun | undefined)[] {
+  const portfolios = runs.map(asPortfolio);
+  return portfolios.some(Boolean) ? portfolios : [];
+}
+
+/** What a portfolio run tested: its kind, universe and number of tickers. */
+function universeRows(runs: PinnedRun[], portfolios: (PinnedPortfolioRun | undefined)[]): ParamRow[] {
+  if (!portfolios.length) return [];
+  return [
+    row("kind", "Run", "", runs.map((run) => KIND_LABELS[run.kind])),
+    row("universe", "Universe", "", portfolios.map((run) => run?.universe)),
+    row("tickers", "Tickers", "", portfolios.map((run) => run?.tickers.length)),
+  ];
+}
+
+/** The max positions and the max exposure of portfolio runs, labelled like the Portfolio page's fields. */
+function portfolioSettingRows(portfolios: (PinnedPortfolioRun | undefined)[], sections: SettingsSectionOut[]): ParamRow[] {
+  const section = sections.find((item) => item.name === PORTFOLIO_SECTION);
+  const settings = portfolios.map((run) => run?.portfolio as Record<string, number> | undefined);
+  return keysOf(settings.filter((item) => item !== undefined)).map((name) => {
+    const spec = section?.params.find((item) => item.name === name);
+    return row(`portfolio.${name}`, `${section?.label ?? "Portfolio"} · ${spec?.label ?? humanize(name)}`, spec?.unit ?? "", settings.map((item) => item?.[name]));
+  });
+}
+
+/** The rule that ranked a portfolio's signals, with its parameters. */
+function priorityRows(runs: PinnedRun[], portfolios: (PinnedPortfolioRun | undefined)[], rules: CompareSpecs): ParamRow[] {
+  if (!portfolios.length) return [];
+  const labels = new Map(portfolios.flatMap((run) => (run ? [[run.priority.name, run.priority.label] as const] : [])));
+  return [
+    row("priority", "Priority", "", portfolios.map((run) => run?.priority.label)),
+    ...ownedRows(
+      "priority",
+      labels.keys(),
+      (name) => labels.get(name) ?? name,
+      (name) => rules.priority_rules?.find((rule) => rule.name === name)?.params ?? [],
+      (run, name) => {
+        const priority = asPortfolio(run)?.priority;
+        return priority?.name === name ? priority.params : undefined;
+      },
+      runs,
+    ),
+  ];
+}
+
 /**
- * Every input of the runs as rows: what was tested, the data range, the stop, costs and account,
- * the Monte Carlo settings, the entry filters (and the benchmark they compared), the entry and exit rules
- * with their parameters, and the signal parameters.
+ * Every input of the runs as rows: what was tested (a ticker, or a portfolio's universe), the data range, the stop,
+ * costs and account, a portfolio's max positions and max exposure, the Monte Carlo settings, the entry filters
+ * (and the benchmark they compared), the entry and exit rules with their parameters, a portfolio's priority rule
+ * with its parameters, and the signal parameters.
  */
 export function parameterRows(
   runs: PinnedRun[],
   sections: SettingsSectionOut[] = [],
   signals: SignalOut[] = [],
-  rules: RuleSpecs = { entry_rules: [], exit_rules: [], filter_rules: [] },
+  rules: CompareSpecs = { entry_rules: [], exit_rules: [], filter_rules: [] },
 ): ParamRow[] {
   const settingSpecs = sections.flatMap((section) => section.params);
+  const portfolios = portfolioRuns(runs);
   const rows: ParamRow[] = [
-    row("ticker", "Ticker", "", runs.map((run) => run.ticker)),
+    ...universeRows(runs, portfolios),
+    row("ticker", "Ticker", "", runs.map((run) => asBacktest(run)?.ticker)),
     row("signal", "Signal", "", runs.map((run) => run.signal)),
     row("engine", "Engine", "", runs.map((run) => run.engine)),
     row("data", "Data", "", runs.map((run) => `${run.start} → ${run.end}`)),
@@ -92,6 +146,7 @@ export function parameterRows(
     const values = runs.map((run) => (run.config as unknown as Record<string, number | undefined>)[name]);
     rows.push(row(`config.${name}`, spec?.label ?? humanize(name), spec?.unit ?? "", values));
   }
+  rows.push(...portfolioSettingRows(portfolios, sections));
   if (runs.some((run) => run.monteCarlo)) {
     const section = sections.find((item) => item.name === MONTE_CARLO_SECTION);
     for (const name of MONTE_CARLO_SETTINGS) {
@@ -139,6 +194,7 @@ export function parameterRows(
       runs,
     ),
   );
+  rows.push(...priorityRows(runs, portfolios, rules));
 
   rows.push(
     ...ownedRows(

@@ -1,7 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { appliedRule, backtestForm, backtestResult, entryRules, exitRules, filterRules, makeMonteCarlo, makeRun } from "../test/fixtures";
-import { freeSlot, MAX_RUNS, mergeRuns, runKey, snapshotRun, toPinnedRun } from "./runs";
+import {
+  appliedRule,
+  backtestForm,
+  backtestResult,
+  entryRules,
+  exitRules,
+  filterRules,
+  makeMonteCarlo,
+  makePortfolioPin,
+  makePortfolioRun,
+  makeRun,
+  portfolioForm,
+  portfolioResult,
+  priorityRules,
+} from "../test/fixtures";
+import { freeSlot, MAX_RUNS, mergeRuns, runKey, snapshotPortfolioRun, snapshotRun, toPinnedRun } from "./runs";
 import { decodeRuns, encodeRuns, parseRunsFile, RUNS_FILE_VERSION } from "./runsFile";
 
 describe("snapshotRun", () => {
@@ -30,6 +44,44 @@ describe("snapshotRun", () => {
     expect(snapshotRun(backtestResult, "vectorized", backtestForm)?.monteCarlo).toEqual(makeMonteCarlo());
     const few = { ...backtestResult, runs: backtestResult.runs.map((run) => ({ ...run, monte_carlo: null })) };
     expect(snapshotRun(few, "vectorized", backtestForm)?.monteCarlo).toBeNull();
+  });
+});
+
+describe("snapshotPortfolioRun", () => {
+  it("keeps one engine's portfolio result and reopens with only that engine", () => {
+    const result = { ...portfolioResult, runs: [makePortfolioRun("vectorized"), makePortfolioRun("cerebro")] };
+    const snapshot = snapshotPortfolioRun(result, "cerebro", { ...portfolioForm, engines: ["vectorized", "cerebro"] });
+    expect(snapshot).toMatchObject({
+      kind: "portfolio",
+      universe: "us_large",
+      tickers: ["AAPL", "MSFT"],
+      missing: ["TSLA"],
+      engine: "cerebro",
+      portfolio: { max_positions: 5, max_exposure_pct: 100 },
+      priority: { name: "momentum", params: { lookback: 252, skip: 21 } },
+      metrics: { trades: 118 },
+      monteCarlo: null,
+    });
+    expect(snapshot?.form).toMatchObject({ engines: ["cerebro"], priority: "momentum", universe: { watchlist: "us_large" } });
+    expect(snapshot).not.toHaveProperty("trades");
+    expect(snapshot).not.toHaveProperty("positions");
+  });
+
+  it("keeps the stats and metrics of both periods with the split's dates", () => {
+    const snapshot = snapshotPortfolioRun(portfolioResult, "vectorized", portfolioForm);
+    expect(snapshot?.stats).toMatchObject({ full: { orders: 120 }, in_sample: { orders: 82 }, out_of_sample: { orders: 38 } });
+    expect(snapshot?.split).toMatchObject({ out_of_sample_start: "2023-07-03", in_sample: { sharpe: 1.1 }, out_of_sample: { sharpe: 0.3 } });
+
+    const short = { ...portfolioResult, split: null, runs: [makePortfolioRun("vectorized", { in_sample: null, out_of_sample: null })] };
+    expect(snapshotPortfolioRun(short, "vectorized", portfolioForm)).toMatchObject({ split: null, stats: { in_sample: null, out_of_sample: null } });
+  });
+
+  it("returns null for an engine that did not run", () => {
+    expect(snapshotPortfolioRun(portfolioResult, "cerebro", portfolioForm)).toBeNull();
+  });
+
+  it("names a pinned portfolio after its universe", () => {
+    expect(makePortfolioPin(1).name).toBe("us_large connors_rsi2_long");
   });
 });
 
@@ -68,7 +120,37 @@ describe("runKey", () => {
   });
 });
 
+describe("runKey of portfolio runs", () => {
+  it("tells portfolio runs apart by their limits, priority rule and members", () => {
+    const run = makePortfolioPin(1);
+    expect(runKey(makePortfolioPin(2, {}, { name: "other" }))).toBe(runKey(run));
+    expect(runKey(makePortfolioPin(1, { portfolio: { ...run.portfolio, max_positions: 10 } }))).not.toBe(runKey(run));
+    expect(runKey(makePortfolioPin(1, { portfolio: { ...run.portfolio, max_exposure_pct: 150 } }))).not.toBe(runKey(run));
+    expect(runKey(makePortfolioPin(1, { priority: appliedRule(priorityRules[1]!, { skip: 0 }) }))).not.toBe(runKey(run));
+    expect(runKey(makePortfolioPin(1, { priority: appliedRule(priorityRules[0]!) }))).not.toBe(runKey(run));
+    expect(runKey(makePortfolioPin(1, { tickers: ["AAPL", "MSFT", "NVDA"] }))).not.toBe(runKey(run));
+    expect(runKey(makePortfolioPin(1, { tickers: ["MSFT", "AAPL"] }))).toBe(runKey(run));
+    expect(runKey(makePortfolioPin(1, { universe: "custom" }))).not.toBe(runKey(run));
+    expect(runKey(makePortfolioPin(1, { params: { ...run.params, oversold: 15 } }))).not.toBe(runKey(run));
+  });
+
+  it("never equals the key of a backtest run", () => {
+    const portfolio = makePortfolioPin(1);
+    const backtest = makeRun(1, { ticker: "us_large", filters: portfolio.filters, benchmark: portfolio.benchmark, monteCarlo: null });
+    expect(runKey(portfolio)).not.toBe(runKey(backtest));
+  });
+});
+
 describe("mergeRuns", () => {
+  it("pins backtest and portfolio runs next to each other", () => {
+    const result = mergeRuns([makeRun(1)], [makePortfolioPin(1), makePortfolioPin(4)]);
+    expect(result.runs.map((run) => [run.kind, run.slot])).toEqual([
+      ["backtest", 1],
+      ["portfolio", 2],
+    ]);
+    expect(result).toMatchObject({ added: 1, duplicates: 1 });
+  });
+
   it("assigns the lowest free slot and skips runs already pinned", () => {
     const first = makeRun(1);
     const result = mergeRuns([first], [toPinnedRun(makeRun(1, { config: { ...first.config, atr_mult: 3 } })), toPinnedRun(first)]);
@@ -141,6 +223,20 @@ describe("runs file", () => {
     expect(runKey(run!)).toBe(runKey(makeRun(1, { monteCarlo: null })));
   });
 
+  it("upgrades version 5 runs, which were all backtests of one ticker", () => {
+    const { kind: _kind, ...current } = encodeRuns([makeRun(1)]).runs[0]!;
+    const [run] = decodeRuns({ version: 5, runs: [current] });
+    expect(run).toMatchObject({ kind: "backtest", ticker: "SPY" });
+    expect(runKey(run!)).toBe(runKey(makeRun(1)));
+  });
+
+  it("round-trips portfolio runs next to backtest runs", () => {
+    const runs = [makeRun(1), makePortfolioPin(2, {}, { name: "top 5 by momentum" })];
+    const decoded = parseRunsFile(JSON.stringify(encodeRuns(runs)));
+    expect(decoded).toEqual(runs.map((run) => ({ ...run, equity: run.equity.map((point) => ({ ...point, value: Math.round(point.value * 100) / 100 })) })));
+    expect(decoded.map(runKey)).toEqual(runs.map(runKey));
+  });
+
   it("drops fields it does not know", () => {
     const file = encodeRuns([makeRun(1)]);
     const [decoded] = decodeRuns({ ...file, runs: [{ ...file.runs[0], extra: "x" }] });
@@ -177,6 +273,36 @@ describe("runs file", () => {
       'Run 1 has an invalid "monteCarlo"',
     ],
     ["a bad rule", JSON.stringify({ version: 2, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], exits: [{ name: "target" }] }] }), 'Run 1 has an invalid "exits"'],
+    ["an unknown kind", JSON.stringify({ version: RUNS_FILE_VERSION, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], kind: "rotation" }] }), 'Run 1 has an invalid "kind"'],
+    ["a run without a kind", JSON.stringify({ version: RUNS_FILE_VERSION, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], kind: undefined }] }), 'Run 1 has an invalid "kind"'],
+    [
+      "a portfolio run without its ticker list",
+      JSON.stringify({ version: RUNS_FILE_VERSION, runs: [{ ...encodeRuns([makePortfolioPin(1)]).runs[0], tickers: "AAPL,MSFT" }] }),
+      'Run 1 has an invalid "tickers"',
+    ],
+    [
+      "a portfolio run with bad stats",
+      JSON.stringify({
+        version: RUNS_FILE_VERSION,
+        runs: [{ ...encodeRuns([makePortfolioPin(1)]).runs[0], stats: { ...makePortfolioPin(1).stats, full: { orders: 120 } } }],
+      }),
+      'Run 1 has an invalid "stats"',
+    ],
+    [
+      "a portfolio run without its limits",
+      JSON.stringify({ version: RUNS_FILE_VERSION, runs: [{ ...encodeRuns([makePortfolioPin(1)]).runs[0], portfolio: { max_positions: 5 } }] }),
+      'Run 1 has an invalid "portfolio"',
+    ],
+    [
+      "a portfolio run with a backtest form",
+      JSON.stringify({ version: RUNS_FILE_VERSION, runs: [{ ...encodeRuns([makePortfolioPin(1)]).runs[0], form: backtestForm }] }),
+      'Run 1 has an invalid "form"',
+    ],
+    [
+      "a backtest run with a portfolio form",
+      JSON.stringify({ version: RUNS_FILE_VERSION, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], form: portfolioForm }] }),
+      'Run 1 has an invalid "form"',
+    ],
     [
       "a bad form value",
       JSON.stringify({ version: 2, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], form: { ...backtestForm, settings: { risk: { atr_mult: "3" } } } }] }),

@@ -1,16 +1,16 @@
 import { useMemo } from "react";
 import { Link } from "react-router";
 
-import type { BacktestOut } from "../api/client";
+import type { BacktestOut, PortfolioOut } from "../api/client";
 import type { BacktestForm } from "../lib/params";
-import { MAX_RUNS, runKey, snapshotRun } from "../lib/runs";
+import type { PortfolioForm } from "../lib/portfolio";
+import { MAX_RUNS, runKey, snapshotPortfolioRun, snapshotRun, type RunSnapshot } from "../lib/runs";
 import { usePinnedRuns } from "../state/pinnedRuns";
 import { Button } from "./ui";
 
-/** Pins the shown engine's run for the Compare page, or unpins it when it is already pinned. */
-export function PinRunButton({ result, engine, form }: { result: BacktestOut; engine: string; form: BacktestForm }) {
+/** Pins a run for the Compare page, or unpins it when it is already pinned; `what` names the run on the button. */
+function PinSnapshotButton({ snapshot, what }: { snapshot: RunSnapshot | null; what: string }) {
   const { runs, pin, remove } = usePinnedRuns();
-  const snapshot = useMemo(() => snapshotRun(result, engine, form), [result, engine, form]);
   const pinned = useMemo(() => {
     if (!snapshot) return undefined;
     const key = runKey(snapshot);
@@ -19,7 +19,6 @@ export function PinRunButton({ result, engine, form }: { result: BacktestOut; en
   if (!snapshot) return null;
 
   const full = !pinned && runs.length >= MAX_RUNS;
-  const what = result.runs.length > 1 ? `${engine} run` : "run";
   return (
     <div className="flex flex-wrap items-center gap-2">
       {runs.length > 0 && (
@@ -37,4 +36,18 @@ export function PinRunButton({ result, engine, form }: { result: BacktestOut; en
       )}
     </div>
   );
+}
+
+const runName = (engines: number, engine: string) => (engines > 1 ? `${engine} run` : "run");
+
+/** Pins the shown engine's backtest run. */
+export function PinRunButton({ result, engine, form }: { result: BacktestOut; engine: string; form: BacktestForm }) {
+  const snapshot = useMemo(() => snapshotRun(result, engine, form), [result, engine, form]);
+  return <PinSnapshotButton snapshot={snapshot} what={runName(result.runs.length, engine)} />;
+}
+
+/** Pins the shown engine's portfolio run. */
+export function PinPortfolioRunButton({ result, engine, form }: { result: PortfolioOut; engine: string; form: PortfolioForm }) {
+  const snapshot = useMemo(() => snapshotPortfolioRun(result, engine, form), [result, engine, form]);
+  return <PinSnapshotButton snapshot={snapshot} what={runName(result.runs.length, engine)} />;
 }

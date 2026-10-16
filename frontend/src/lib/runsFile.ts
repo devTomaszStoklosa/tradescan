@@ -3,21 +3,22 @@
  * `{version, runs}`, with each equity curve as two arrays (dates, values rounded to cents),
  * about half the size of one object per point. Older files are upgraded when read: version 1 is from
  * before entry and exit rules, version 2 from before out-of-sample results, version 3 from before entry filters,
- * version 4 from before Monte Carlo results.
+ * version 4 from before Monte Carlo results, version 5 from before portfolio runs.
  */
 import type { AppliedRuleOut, MetricsOut } from "../api/client";
 import { formatTemplate, type Overrides } from "./overrides";
 import { moveLegacyExitSettings } from "./rules";
-import { MAX_RUNS, type PinnedRun } from "./runs";
+import { MAX_RUNS, type PinnedBacktestRun, type PinnedPortfolioRun, type PinnedRun, type RunKind } from "./runs";
 
-export const RUNS_FILE_VERSION = 5;
+export const RUNS_FILE_VERSION = 6;
 
 interface StoredEquity {
   time: string[];
   value: number[];
 }
 
-type StoredRun = Omit<PinnedRun, "equity"> & { equity: StoredEquity };
+type Stored<R> = Omit<R, "equity"> & { equity: StoredEquity };
+type StoredRun = Stored<PinnedBacktestRun> | Stored<PinnedPortfolioRun>;
 
 export interface RunsFile {
   version: number;
@@ -27,10 +28,13 @@ export interface RunsFile {
 export function encodeRuns(runs: PinnedRun[]): RunsFile {
   return {
     version: RUNS_FILE_VERSION,
-    runs: runs.map(({ equity, ...run }) => ({
-      ...run,
-      equity: { time: equity.map((point) => point.time), value: equity.map((point) => Math.round(point.value * 100) / 100) },
-    })),
+    runs: runs.map(
+      ({ equity, ...run }) =>
+        ({
+          ...run,
+          equity: { time: equity.map((point) => point.time), value: equity.map((point) => Math.round(point.value * 100) / 100) },
+        }) as StoredRun,
+    ),
   };
 }
 
@@ -52,9 +56,9 @@ const equity: Check = (value) => isRecord(value) && arrayOf(text)(value.time) &&
 
 const metrics: Check = (value) => recordOf(oneOf(finite, flag, (item) => item === null))(value) && finite((value as Partial<MetricsOut>).trades);
 
-const form: Check = (value) =>
+/** The setup both pages' forms share. */
+const setupForm: Check = (value) =>
   isRecord(value) &&
-  text(value.ticker) &&
   text(value.signal) &&
   arrayOf(text)(value.engines) &&
   text(value.period) &&
@@ -67,6 +71,17 @@ const form: Check = (value) =>
   arrayOf(text)(value.filters) &&
   recordOf(recordOf(paramValue))(value.filterParams) &&
   text(value.benchmark);
+
+const backtestForm: Check = (value) => setupForm(value) && text((value as Record<string, unknown>).ticker);
+
+const universe: Check = (value) => isRecord(value) && text(value.watchlist) && text(value.tickers);
+
+const portfolioForm: Check = (value) =>
+  setupForm(value) &&
+  isRecord(value) &&
+  universe(value.universe) &&
+  text(value.priority) &&
+  recordOf(paramValue)(value.priorityParams);
 
 const split: Check = (value) =>
   isRecord(value) &&
@@ -101,13 +116,31 @@ const monteCarlo: Check = (value) =>
 const appliedRule: Check = (value) =>
   isRecord(value) && text(value.name) && text(value.label) && text(value.description) && recordOf(oneOf(finite, arrayOf(finite)))(value.params);
 
-const RUN_FIELDS: Record<keyof StoredRun, Check> = {
+const portfolioSettings: Check = (value) => isRecord(value) && finite(value.max_positions) && finite(value.max_exposure_pct);
+
+const portfolioStats: Check = (value) =>
+  isRecord(value) &&
+  ["average_positions", "average_exposure_pct", "max_exposure_pct"].every((key) => optionalNumber(value[key])) &&
+  ["max_positions", "orders", "skipped_no_slot", "skipped_no_room"].every((key) => finite(value[key]));
+
+const optionalStats = oneOf((value) => value === null, portfolioStats);
+
+const periodStats: Check = (value) => isRecord(value) && portfolioStats(value.full) && optionalStats(value.in_sample) && optionalStats(value.out_of_sample);
+
+const is =
+  (expected: string): Check =>
+  (value) =>
+    value === expected;
+
+/** Fields every kind of run has; `keyof` of the union is the fields its kinds share. */
+type SharedField = Exclude<keyof StoredRun, "kind" | "form">;
+
+const SHARED_FIELDS: Record<SharedField, Check> = {
   id: text,
   slot: (value) => Number.isInteger(value) && (value as number) >= 1 && (value as number) <= MAX_RUNS,
   name: text,
   pinnedAt: text,
   hidden: flag,
-  ticker: text,
   signal: text,
   direction: (value) => value === "long" || value === "short",
   description: text,
@@ -124,18 +157,35 @@ const RUN_FIELDS: Record<keyof StoredRun, Check> = {
   split: oneOf((value) => value === null, split),
   monteCarlo: oneOf((value) => value === null, monteCarlo),
   equity,
-  form,
+};
+
+/** Fields only one kind of run has; a new kind of run adds its entry here. */
+const KIND_FIELDS: { [K in RunKind]: Record<Exclude<keyof Extract<StoredRun, { kind: K }>, SharedField>, Check> } = {
+  backtest: { kind: is("backtest"), ticker: text, form: backtestForm },
+  portfolio: {
+    kind: is("portfolio"),
+    universe: text,
+    tickers: arrayOf(text),
+    missing: arrayOf(text),
+    portfolio: portfolioSettings,
+    priority: appliedRule,
+    stats: periodStats,
+    form: portfolioForm,
+  },
 };
 
 function decodeRun(value: unknown, index: number): PinnedRun {
   if (!isRecord(value)) throw new Error(`Run ${index + 1} is not an object`);
-  for (const [field, check] of Object.entries(RUN_FIELDS)) {
+  const kind = typeof value.kind === "string" && Object.hasOwn(KIND_FIELDS, value.kind) ? (value.kind as RunKind) : null;
+  if (!kind) throw new Error(`Run ${index + 1} has an invalid "kind"`);
+  const fields: Record<string, Check> = { ...SHARED_FIELDS, ...KIND_FIELDS[kind] };
+  for (const [field, check] of Object.entries(fields)) {
     if (!check(value[field])) throw new Error(`Run ${index + 1} has an invalid "${field}"`);
   }
   // Only known fields are kept, so nothing unexpected reaches storage again.
-  const run = Object.fromEntries(Object.keys(RUN_FIELDS).map((field) => [field, value[field]])) as StoredRun;
+  const run = Object.fromEntries(Object.keys(fields).map((field) => [field, value[field]])) as StoredRun;
   const points = run.equity.time.map((time, at) => ({ time, value: run.equity.value[at] as number }));
-  return { ...run, equity: points };
+  return { ...run, equity: points } as PinnedRun;
 }
 
 // --- Version 1: every run used a next-open entry, a target and a time exit, set in `config` ------------
@@ -181,11 +231,16 @@ const upgradeV3 = (value: unknown): unknown =>
 
 const upgradeV4 = (value: unknown): unknown => (isRecord(value) ? { ...value, monteCarlo: null } : value);
 
+// --- Version 5: every run was a backtest of one ticker ----------------------------------------------
+
+const upgradeV5 = (value: unknown): unknown => (isRecord(value) ? { ...value, kind: "backtest" } : value);
+
 const UPGRADES: Record<number, (value: unknown) => unknown> = {
-  1: (value) => upgradeV4(upgradeV3(upgradeV2(upgradeV1(value)))),
-  2: (value) => upgradeV4(upgradeV3(upgradeV2(value))),
-  3: (value) => upgradeV4(upgradeV3(value)),
-  4: upgradeV4,
+  1: (value) => upgradeV5(upgradeV4(upgradeV3(upgradeV2(upgradeV1(value))))),
+  2: (value) => upgradeV5(upgradeV4(upgradeV3(upgradeV2(value)))),
+  3: (value) => upgradeV5(upgradeV4(upgradeV3(value))),
+  4: (value) => upgradeV5(upgradeV4(value)),
+  5: upgradeV5,
   [RUNS_FILE_VERSION]: (value) => value,
 };
 

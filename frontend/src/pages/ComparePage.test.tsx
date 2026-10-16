@@ -8,7 +8,7 @@ import { downloadFile } from "../lib/csv";
 import type { PinnedRun } from "../lib/runs";
 import { encodeRuns } from "../lib/runsFile";
 import { PinnedRunsProvider } from "../state/pinnedRuns";
-import { config, makeMetrics, makeMonteCarlo, makeRun, signals } from "../test/fixtures";
+import { config, makeMetrics, makeMonteCarlo, makePortfolioPin, makeRun, makePortfolioRun, signals } from "../test/fixtures";
 import { ComparePage } from "./ComparePage";
 
 vi.mock("../components/charts/EquityChart", () => ({
@@ -25,6 +25,7 @@ const STORAGE_KEY = "tradescan.runs";
 
 const base = makeRun(1, {}, { name: "baseline" });
 const wideStop = makeRun(2, { config: { ...base.config, atr_mult: 3 }, metrics: makeMetrics({ total_return_pct: 20, trades: 7 }) }, { name: "wide stop" });
+const portfolio = makePortfolioPin(3, {}, { name: "top 5" });
 
 function pin(runs: PinnedRun[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(encodeRuns(runs)));
@@ -49,6 +50,12 @@ function renderPage() {
 }
 
 const table = (name: string) => screen.getByRole("table", { name });
+
+/** The parts of `portfolio` that differ for another engine's run. */
+const snapshotOf = (engine: string) => {
+  const run = makePortfolioRun(engine, { equity: [{ time: "2016-01-04", value: 100000 }, { time: "2026-10-13", value: 114000 }] });
+  return { engine, equity: run.equity, form: { ...portfolio.form, engines: [engine] } };
+};
 
 describe("ComparePage", () => {
   beforeEach(() => vi.mocked(downloadFile).mockClear());
@@ -175,6 +182,63 @@ describe("ComparePage", () => {
     await userEvent.upload(screen.getByLabelText("Runs file to import"), new File([file], "runs.json", { type: "application/json" }));
     expect(await screen.findByText("Imported 1 run. 1 run already pinned.")).toBeInTheDocument();
     expect(screen.getAllByRole("article")).toHaveLength(2);
+  });
+
+  it("compares a portfolio run with a backtest run, with its stats in the chosen period", async () => {
+    pin([base, portfolio]);
+    renderPage();
+
+    const card = screen.getByRole("article", { name: "Run 3" });
+    expect(card).toHaveTextContent("us_large");
+    expect(card).toHaveTextContent("portfolio of 2 tickers · vectorized · 2016-01-04 → 2026-10-13");
+    expect(within(card).getByRole("link", { name: "Open in Portfolio" })).toHaveAttribute(
+      "href",
+      "/portfolio?w=us_large&signal=connors_rsi2_long&eng=vectorized&entry=next_open&exit=target%2Ctime&filter=market&prio=momentum",
+    );
+
+    const parameters = table("Parameters of the pinned runs");
+    expect(await within(parameters).findByText("Portfolio · Max positions")).toBeInTheDocument();
+    expect(within(within(parameters).getByRole("row", { name: /^Run/ })).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["Backtest", "Portfolio"]);
+    expect(within(parameters).getByRole("row", { name: /^Priority/ })).toHaveTextContent("Momentum");
+
+    const orders = () => within(screen.getByRole("table", { name: /^Portfolio stats of the pinned portfolio runs/ })).getByRole("row", { name: /Entry orders/ });
+    const stats = screen.getByRole("table", { name: "Portfolio stats of the pinned portfolio runs" });
+    expect(within(stats).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["Portfolio", "#3top 5"]);
+    expect(orders()).toHaveTextContent("Entry orders120");
+    await userEvent.click(screen.getByRole("radio", { name: "Out-of-sample" }));
+    expect(screen.getByRole("table", { name: "Portfolio stats of the pinned portfolio runs, out-of-sample" })).toBeInTheDocument();
+    expect(orders()).toHaveTextContent("Entry orders38");
+
+    expect(within(table("Monte Carlo of the pinned runs' trades")).getByRole("row", { name: /top 5/ })).toHaveTextContent(
+      "No Monte Carlo: the portfolio backtest does not simulate its trades.",
+    );
+  });
+
+  it("shows no portfolio stats without a shown portfolio run", async () => {
+    pin([base, wideStop, portfolio]);
+    renderPage();
+    expect(screen.getByRole("heading", { name: "Portfolio stats" })).toBeInTheDocument();
+    await userEvent.click(within(screen.getByRole("article", { name: "Run 3" })).getByRole("button", { name: "Hide" }));
+    expect(screen.queryByRole("heading", { name: "Portfolio stats" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Show all" }));
+    expect(within(table("Parameters of the pinned runs")).getByText("Ticker")).toBeInTheDocument();
+    expect(within(table("Parameters of the pinned runs")).queryByText("Universe")).not.toBeInTheDocument();
+  });
+
+  it("exports and imports portfolio runs next to backtest runs", async () => {
+    const cerebro = makePortfolioPin(4, snapshotOf("cerebro"), { name: "top 5 cerebro" });
+    pin([base, portfolio, cerebro]);
+    renderPage();
+    await userEvent.click(screen.getByRole("button", { name: "Export JSON" }));
+    const content = vi.mocked(downloadFile).mock.calls[0]?.[1] ?? "";
+    expect(JSON.parse(content)).toEqual(encodeRuns([base, portfolio, cerebro]));
+
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    await userEvent.click(screen.getByRole("button", { name: "Remove all" }));
+    await userEvent.upload(screen.getByLabelText("Runs file to import"), new File([content], "runs.json", { type: "application/json" }));
+    expect(await screen.findByText("Imported 3 runs.")).toBeInTheDocument();
+    expect(within(screen.getByRole("article", { name: "Run 4" })).getByRole("link", { name: "Open in Portfolio" })).toBeInTheDocument();
+    expect(stored().runs.map((run) => run.name)).toEqual(["baseline", "top 5", "top 5 cerebro"]);
   });
 
   it("reports an invalid import file", async () => {
