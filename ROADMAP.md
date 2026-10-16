@@ -36,7 +36,7 @@ URL, pinned runs, Compare and the sweep pick them up.
 | M1 | Mean-reversion signals | done ([#24], [PR #25]) | | |
 | O2 | One setup over a watchlist | done ([#26], [PR #27]) | | |
 | O3 | Monte Carlo of trades | done ([#28], [PR #29]) | | |
-| F3 | Portfolio backtest | planned | L | |
+| F3 | Portfolio backtest | done ([#30]) | | |
 | R1 | Momentum rotation | planned | L | F3 |
 | T2 | Pyramiding | planned | M | F1 |
 | O4 | Walk-forward analysis | planned | M/L | O1 |
@@ -50,10 +50,6 @@ are weak. M1 is small. O2 and O3 show whether a result is robust before the larg
 which rotation (R1) needs. Pyramiding (T2), walk-forward analysis (O4) and the trade journal (O6) follow.
 
 ## Open items
-
-**F3 · Portfolio backtest.** One setup across a watchlist with shared equity: a cap on open positions and
-on total exposure, a priority (score, relative strength) when more signals fire than slots are free, and
-portfolio metrics. A new engine path, with a Cerebro reference for parity.
 
 **R1 · Momentum rotation.** Rank a universe by momentum (12-1 month return or IBD-style relative
 strength), hold the top N, rebalance weekly or monthly, move to cash or a bond ETF when absolute momentum
@@ -91,3 +87,4 @@ server instead of only in the browser, with notes per trade and the backtest tha
 [PR #27]: https://github.com/devTomaszStoklosa/tradescan/pull/27
 [#28]: https://github.com/devTomaszStoklosa/tradescan/issues/28
 [PR #29]: https://github.com/devTomaszStoklosa/tradescan/pull/29
+[#30]: https://github.com/devTomaszStoklosa/tradescan/issues/30
