@@ -8,6 +8,9 @@ import type {
   MetricSpreadOut,
   MonteCarloOut,
   ParamSpecOut,
+  PortfolioOut,
+  PortfolioRunOut,
+  PortfolioStatsOut,
   RuleOut,
   ScanOut,
   SignalOut,
@@ -97,6 +100,27 @@ export const filterRules: FilterRuleOut[] = [
   },
 ];
 
+/** What /api/config lists as priority rules of a portfolio backtest. */
+export const priorityRules: RuleOut[] = [
+  {
+    name: "relative_strength",
+    label: "Relative strength",
+    description: "Weighted returns over several lookbacks (IBD style by default: the latest quarter counts double)",
+    template: "Weighted returns over several lookbacks (IBD style by default: the latest quarter counts double)",
+    params: [
+      spec("periods", "Lookbacks", [63, 126, 189, 252], [1, 1000, 1], "int_list", { unit: "bars" }),
+      spec("weights", "Weights", [0.4, 0.2, 0.2, 0.2], [0, 10, 0.05], "float_list"),
+    ],
+  },
+  {
+    name: "momentum",
+    label: "Momentum",
+    description: "Return from 252 bars ago to 21 bars ago",
+    template: "Return from {lookback} bars ago to {skip} bars ago",
+    params: [spec("lookback", "Lookback", 252, [2, 1000, 1], "int", { unit: "bars" }), spec("skip", "Skip", 21, [0, 250, 1], "int", { unit: "bars" })],
+  },
+];
+
 /** A rule as a backtest result reports it. */
 export function appliedRule(rule: RuleOut, params: Record<string, number> = {}): AppliedRuleOut {
   const values = { ...Object.fromEntries(rule.params.map((item) => [item.name, item.default as number])), ...params };
@@ -165,6 +189,14 @@ export const config: ConfigOut = {
         spec("seed", "Random seed", 0, [0, 2147483647, 1], "int"),
       ],
     },
+    {
+      name: "portfolio",
+      label: "Portfolio",
+      params: [
+        spec("max_positions", "Max positions", 10, [1, 100, 1], "int"),
+        spec("max_exposure_pct", "Max exposure", 100, [1, 300, 5], "float", { unit: "% of equity" }),
+      ],
+    },
   ],
   families: ["trend", "momentum", "breakout", "mean_reversion", "volume", "pattern"],
   engines: ["vectorized", "cerebro"],
@@ -173,6 +205,8 @@ export const config: ConfigOut = {
   filter_rules: filterRules,
   default_entry: "next_open",
   default_exits: ["target", "time"],
+  priority_rules: priorityRules,
+  default_priority: "relative_strength",
   sweep: {
     max_axes: 2,
     min_values: 2,
@@ -518,5 +552,71 @@ export const watchlistResult: WatchlistBacktestOut = {
       spread: [spread("expectancy_r", { tickers: 1, median: -0.1, p25: -0.1, p75: -0.1, minimum: -0.1, maximum: -0.1, above_break_even_pct: 0 })],
     },
   ],
+  missing: ["TSLA"],
+};
+
+const portfolioStats = (overrides: Partial<PortfolioStatsOut> = {}): PortfolioStatsOut => ({
+  average_positions: 2.4,
+  max_positions: 5,
+  average_exposure_pct: 48.5,
+  max_exposure_pct: 100.9,
+  orders: 120,
+  skipped_no_slot: 30,
+  skipped_no_room: 4,
+  ...overrides,
+});
+
+export function makePortfolioRun(engine: string, overrides: Partial<PortfolioRunOut> = {}): PortfolioRunOut {
+  return {
+    engine,
+    full: { metrics: makeMetrics({ trades: 118, buy_hold_pct: 180.5 }), stats: portfolioStats() },
+    in_sample: { metrics: makeMetrics({ sharpe: 1.1, trades: 80 }), stats: portfolioStats({ orders: 82 }) },
+    out_of_sample: { metrics: makeMetrics({ sharpe: 0.3, trades: 38 }), stats: portfolioStats({ orders: 38, skipped_no_room: 0 }) },
+    equity: [
+      { time: "2016-01-04", value: 100000 },
+      { time: "2026-10-13", value: 115000 },
+    ],
+    positions: [
+      { time: "2016-01-04", value: 0 },
+      { time: "2026-10-13", value: 3 },
+    ],
+    trades: [
+      {
+        ticker: "AAPL", direction: "long", signal_date: "2024-03-01", entry_date: "2024-03-04", exit_date: "2024-03-08",
+        entry_price: 170, exit_price: 178, size: 100, pnl: 780, r_multiple: 1.6, exit_reason: "target",
+      },
+      {
+        ticker: "MSFT", direction: "long", signal_date: "2024-03-01", entry_date: "2024-03-04", exit_date: "2024-03-06",
+        entry_price: 400, exit_price: 390, size: 40, pnl: -430, r_multiple: -1.05, exit_reason: "stop",
+      },
+    ],
+    tickers: [
+      { ticker: "AAPL", trades: 70, pnl: 18000, contribution_pct: 18, win_rate_pct: 55, expectancy_r: 0.3 },
+      { ticker: "MSFT", trades: 48, pnl: -3000, contribution_pct: -3, win_rate_pct: 40, expectancy_r: -0.1 },
+    ],
+    ...overrides,
+  };
+}
+
+/** The RSI2 setup with the market filter on us_large as one portfolio, ranked by momentum; TSLA had no data. */
+export const portfolioResult: PortfolioOut = {
+  signal: "connors_rsi2_long",
+  direction: "long",
+  description: backtestResult.description,
+  params: backtestResult.params,
+  config: backtestResult.config,
+  entry: backtestResult.entry,
+  exits: backtestResult.exits,
+  filters: [appliedRule(filterRules[1]!)],
+  benchmark: "SPY",
+  universe: "us_large",
+  start: "2016-01-04",
+  end: "2026-10-13",
+  portfolio: { max_positions: 5, max_exposure_pct: 100 },
+  priority: appliedRule(priorityRules[1]!),
+  buy_hold_benchmark: "SPY",
+  buy_hold: backtestResult.buy_hold,
+  split: backtestResult.split,
+  runs: [makePortfolioRun("vectorized")],
   missing: ["TSLA"],
 };

@@ -58,7 +58,7 @@ export function KeyMetrics({ run }: { run: EngineRunOut }) {
 }
 
 /** True when every metric of every engine matches the first engine. */
-export function enginesAgree(runs: EngineRunOut[]): boolean {
+export function enginesAgree(runs: { metrics: MetricsOut }[]): boolean {
   const [first, ...rest] = runs;
   if (!first || !rest.length) return false;
   return rest.every((run) =>
@@ -171,12 +171,23 @@ const tradeColumns: Column<TradeOut>[] = [
   },
 ];
 
-export function TradesTable({ trades }: { trades: TradeOut[] }) {
+type TickerTrade = TradeOut & { ticker?: string };
+
+const tickerColumn: Column<TickerTrade> = {
+  key: "ticker",
+  header: "Ticker",
+  sortValue: (t) => t.ticker,
+  render: (t) => <span className="font-mono font-semibold">{t.ticker}</span>,
+};
+
+/** Trades of one ticker, or of many with a ticker column (a portfolio's). */
+export function TradesTable({ trades }: { trades: TickerTrade[] }) {
+  const columns = trades.some((trade) => trade.ticker !== undefined) ? [tickerColumn, ...tradeColumns] : tradeColumns;
   return (
     <DataTable
       rows={trades}
-      columns={tradeColumns}
-      rowKey={(trade) => `${trade.entry_date}:${trade.exit_date}`}
+      columns={columns}
+      rowKey={(trade) => `${trade.ticker ?? ""}:${trade.entry_date}:${trade.exit_date}`}
       initialSort={{ key: "entry", direction: "desc" }}
       dense
       caption="Trades"

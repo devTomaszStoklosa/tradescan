@@ -10,10 +10,12 @@ import pandas as pd
 
 from tradescan.backtest.base import Trade
 from tradescan.backtest.oos import PeriodMetrics
+from tradescan.backtest.portfolio import PortfolioTrade
+from tradescan.backtest.portfolio_metrics import TickerContribution
 from tradescan.backtest.tickers import Period
 from tradescan.scanner import ScanHit
 from tradescan.scoring import Scorer
-from tradescan.services import METRIC_NAMES, EdgeRow, EngineRun, SweepReport, WatchlistBacktestReport
+from tradescan.services import METRIC_NAMES, EdgeRow, EngineRun, PortfolioReport, SweepReport, WatchlistBacktestReport
 from tradescan.signals.base import Signal
 
 SCAN_COLUMNS: tuple[str, ...] = (
@@ -241,4 +243,30 @@ def trades_to_frame(trades: Sequence[Trade], engine: str = "") -> pd.DataFrame:
         frame[column] = pd.to_datetime(frame[column]).dt.date.astype(str)
     if engine:
         frame.insert(0, "engine", engine)
+    return frame
+
+
+def portfolio_metrics_frame(report: PortfolioReport) -> pd.DataFrame:
+    """Every engine's metrics and portfolio stats of the full history and of each period, one column each."""
+    columns = {}
+    for run in report.runs:
+        for label, period in (("full", run.full), ("in-sample", run.in_sample), ("out-of-sample", run.out_of_sample)):
+            if period is None:
+                continue
+            values = {item.name: getattr(period.metrics, item.name) for item in fields(period.metrics)}
+            values.update({item.name: getattr(period.stats, item.name) for item in fields(period.stats)})
+            columns[f"{run.result.engine} {label}"] = values
+    return pd.DataFrame(columns)
+
+
+def contributions_frame(rows: Sequence[TickerContribution]) -> pd.DataFrame:
+    """Every ticker's share of the portfolio's result, the largest P&L first."""
+    frame = pd.DataFrame([asdict(row) for row in rows])
+    return frame if frame.empty else frame.sort_values("pnl", ascending=False, kind="stable").reset_index(drop=True)
+
+
+def portfolio_trades_frame(trades: Sequence[PortfolioTrade], engine: str = "") -> pd.DataFrame:
+    frame = trades_to_frame([item.trade for item in trades], engine)
+    if not frame.empty:
+        frame.insert(1 if engine else 0, "ticker", [item.ticker for item in trades])
     return frame

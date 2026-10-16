@@ -18,6 +18,8 @@ Trading signal scanner for daily bars: **vectorized pandas signals on yfinance d
 - a Monte Carlo of every backtest's trades: how deep the drawdown and how long the losing streak could have
   been, and the chance of ruin at the run's risk per trade
 - one setup on every ticker of a watchlist: each ticker's metrics, all trades pooled, and how the results spread
+- one setup as a portfolio with one shared equity: a cap on open positions and on exposure, a priority when
+  more signals fire than fit, and portfolio metrics, with Cerebro as a reference that produces the same trades
 - a React web UI on top of a small FastAPI server (`tradescan serve`)
 
 > Not investment advice. This is a research tool; every number it prints is a historical statistic.
@@ -59,6 +61,11 @@ the built UI. The screens:
   spread of a metric you pick across the tickers (worst, quartiles, median, best and the share above
   break-even) in-sample and out-of-sample, every ticker's trades pooled in R, and a sortable table of
   each ticker's metrics, where a ticker opens its own backtest.
+- **Portfolio**: the same setup as Watchlist with one shared equity, on either or both engines: the max
+  positions, the max exposure and the priority rule with its parameters are editable; key metrics against
+  the benchmark's buy & hold, skipped signals, equity and open positions over time, metrics and portfolio
+  stats in-sample and out-of-sample, each ticker's contribution (a ticker opens its own backtest) and every
+  trade with its ticker.
 - **Edge**: signal statistics across a watchlist at several horizons, coloured by edge.
 - **Compare**: backtest runs pinned with **Pin run** on the Backtest page, side by side: the parameters
   that differ, an out-of-sample check (key metrics in-sample next to out-of-sample), a Monte Carlo check
@@ -116,6 +123,7 @@ tradescan backtest AAPL donchian_breakout --filters trend,market,volume --benchm
 tradescan backtest SPY connors_rsi2_long --oos 20
 tradescan sweep SPY connors_rsi2_long --axis signal.oversold=4:16:2 --axis exit.target.target_r=1,2,3 --metric expectancy_r
 tradescan watchlist-backtest connors_rsi2_long -w etf --filters market --metric expectancy_r
+tradescan portfolio-backtest donchian_breakout -w sp500 --filters trend --max-positions 10 --priority momentum
 tradescan scan -w crypto --lot-size 0.0001
 tradescan update-universes
 ```
@@ -128,6 +136,7 @@ tradescan update-universes
 | `backtest` | One signal on one ticker with the pandas engine, Cerebro, or `both` side by side, plus its in-sample and out-of-sample metrics. `--filters` picks the entry filters (none by default) and `--benchmark` the benchmark the market filter compares, `--entry` the entry rule, `--exits` the exit rules (`none` keeps only the stop), `--oos` the out-of-sample share. |
 | `sweep` | The `backtest` setup over one or two `--axis` parameters (`target[.owner].name=FROM:TO:STEP` or `=V1,V2,...`), as in-sample and out-of-sample grids of `--metric`; `--export` saves every combination. |
 | `watchlist-backtest` | The `backtest` setup (without the ticker) on every ticker of `-w`/`-t` with the vectorized engine: the best `--top` tickers by `--metric` with their in-sample and out-of-sample values, the spread of `--metric` across tickers and all trades pooled; `--export` saves every ticker with every period's metrics. |
+| `portfolio-backtest` | The `backtest` setup (without the ticker) on every ticker of `-w`/`-t` with one shared equity: `--max-positions` and `--max-exposure` (% of equity) cap it, `--priority` ranks the signals when more fire than fit, `--engine` picks the engine (or `both`). Prints every engine's metrics and portfolio stats for the full history and both periods and the `--top` tickers by P&L; `--export` saves every engine's trades. |
 | `list-signals` | All signals with family, direction, scoring weight and rule. |
 | `update-universes` | Refresh the `sp500` and `nasdaq100` watchlists from Wikipedia's constituent tables (`--only sp500`). |
 | `serve` | Web UI and HTTP API. |
@@ -288,11 +297,48 @@ filter compares the setup's benchmark, else the watchlist's (`# benchmark:`), el
 A setting that works on one or two tickers and not on the rest is fitted to them. On 20 ETFs with
 10 years of daily bars a watchlist backtest takes a few seconds once the data is cached.
 
+**Portfolio backtests.** One setup runs on every ticker of a watchlist with one shared equity, on the
+pandas engine, Cerebro or both, which produce the same trades. Every ticker trades by the rules above on
+its own bars; the portfolio decides at each close of the shared calendar (every date on which a ticker has
+a bar):
+
+- a ticker whose entry order waits or whose position is open ignores its signals, as in a single backtest;
+- the signals of the other tickers are ranked by the priority rule, the highest score first; ties keep the
+  watchlist order, and signals without a score (too little history) go last;
+- a signal gets an entry order while open positions plus waiting orders stay below
+  `portfolio.max_positions` (default 10); a waiting order holds its slot until it fills or expires;
+- its size comes from the shared equity, marked to market at each ticker's last close, with the account's
+  risk per trade, max position and lot size. When its value at the entry reference would take the gross
+  exposure (open positions at the close plus waiting orders at their reference) above
+  `portfolio.max_exposure_pct` of equity (default 100%; above it is leverage), it is cut to fit, and
+  skipped when less than one lot fits. A gap can fill a position above its value at the reference, so
+  exposure can end slightly above the cap;
+- signals skipped for want of a slot or of exposure room are counted.
+
+| Priority | Score, the highest first (the lowest first for shorts) |
+| --- | --- |
+| `relative_strength` (default) | the returns over `periods` bars times their `weights` (default 63/126/189/252 bars weighted 0.4/0.2/0.2/0.2, IBD style) |
+| `momentum` | the return from `lookback` bars ago to `skip` bars ago (default 252 and 21: 12-1 month momentum) |
+
+The metrics are a backtest's on the shared equity, except that buy & hold is the benchmark's (the setup's,
+else the watchlist's, else `scan.benchmark`) and exposure is the share of days with an open position. The
+portfolio also reports the average and highest open positions and gross exposure, the entry orders, the
+skipped signals, and each ticker's trades, P&L and share of the result. The shared calendar is split
+in-sample and out-of-sample like a single backtest's history: the in-sample run gets the bars before the
+split date, the out-of-sample run every bar with signals from the split date on and fresh equity. A ticker
+whose bars end early keeps a position that is still open, marked to its last close, until the end.
+
+Cerebro runs every ticker as a data feed of one strategy with the same allocation code. Its broker never
+refuses a fill for lack of cash, so the exposure cap is the only limit on size, and tries an order only on
+a bar of its ticker after the one it was placed on. It is the reference and is slow: about a minute per
+20 tickers of 10-year history. The pandas engine runs the S&P 500 over 10 years in under a minute once the
+data is cached.
+
 ## Configuration
 
 `config/settings.toml` holds account size, risk per trade, ATR stop multiple, targets, freshness,
 benchmark, scoring weights, trend and relative-strength lookbacks, market regime thresholds,
-backtest costs and the Monte Carlo of a backtest's trades. Every key is optional; unknown keys and values outside a parameter's range are rejected.
+backtest costs, the Monte Carlo of a backtest's trades and a portfolio's limits. Every key is optional; unknown keys and values outside a parameter's range are rejected.
 Data is cached as Parquet in `.cache/` for `cache_ttl_hours`; use `--no-cache` to force a download.
 
 ## Parameters
@@ -300,7 +346,7 @@ Data is cached as Parquet in `.cache/` for `cache_ttl_hours`; use `--no-cache` t
 Every number that changes a result is a declared parameter with a default, an allowed range and a label:
 the settings of all 38 signals (periods, thresholds, multipliers), of the backtest's entry filters,
 entry rules and exit rules, and the settings sections `account`, `risk`, `scan`, `scoring`, `trend`,
-`regime`, `backtest` and `monte_carlo`. `settings.toml` holds the defaults of the settings sections, the code those of
+`regime`, `backtest`, `monte_carlo` and `portfolio`. `settings.toml` holds the defaults of the settings sections, the code those of
 signals and rules; a single run can override any of them without touching the file:
 
 - in the web UI, where changed values are highlighted, kept in the URL and checked against their range;
@@ -311,7 +357,8 @@ signals and rules; a single run can override any of them without touching the fi
   `"filters": [{"name": "trend", "params": {"period": 100}}]` with `"benchmark": "QQQ"`), a sweep its
   parameters as `"axes": [{"target": "exit", "owner": "target", "name": "target_r", "values": [1, 2, 3]}]`,
   and a watchlist backtest (`/api/watchlist-backtest`) the same setup with `"watchlist": "etf"` or
-  `"tickers": [...]` instead of the ticker);
+  `"tickers": [...]` instead of the ticker, as does a portfolio backtest (`/api/portfolio-backtest`) with
+  `"priority": {"name": "momentum", "params": {"skip": 0}}` and `"engines"`);
   `/api/config` lists the settings, the rules and the sweep limits, `/api/signals` the signals, each
   parameter with its range;
 - on the CLI, through the existing flags (`--atr-mult`, `--fresh`, `--equity`, `--target-r`, `--oos`, ...).

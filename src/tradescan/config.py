@@ -173,6 +173,18 @@ class MonteCarloSettings:
 
 
 @dataclass(frozen=True)
+class PortfolioSettings:
+    label: ClassVar[str] = "Portfolio"
+    max_positions: int = param(
+        10, minimum=1, maximum=100, step=1, label="Max positions", help="Open positions plus entry orders waiting to fill"
+    )
+    max_exposure_pct: float = param(
+        100.0, minimum=1.0, maximum=300.0, step=5.0, label="Max exposure", unit="% of equity",
+        help="Gross value of the open positions and waiting orders; above 100% is leverage",
+    )
+
+
+@dataclass(frozen=True)
 class Settings:
     data: DataSettings = field(default_factory=DataSettings)
     account: AccountSettings = field(default_factory=AccountSettings)
@@ -183,6 +195,7 @@ class Settings:
     regime: RegimeSettings = field(default_factory=RegimeSettings)
     backtest: BacktestSettings = field(default_factory=BacktestSettings)
     monte_carlo: MonteCarloSettings = field(default_factory=MonteCarloSettings)
+    portfolio: PortfolioSettings = field(default_factory=PortfolioSettings)
 
     def with_overrides(self, overrides: GroupOverrides | None) -> Settings:
         """These settings with validated overrides for one run, e.g. {"risk": {"atr_mult": 3}}."""

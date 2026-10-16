@@ -83,6 +83,19 @@ class SignalFrom(Signal):
         return self._signal.describe()
 
 
+class SignalSince(SignalFrom):
+    """`signal` with its events before the date `start` removed, for tickers whose bars start on different dates."""
+
+    def __init__(self, signal: Signal, start: pd.Timestamp) -> None:
+        super().__init__(signal, 0)
+        self._since = start
+
+    def events(self, df: pd.DataFrame) -> pd.Series:
+        events = self._signal.events(df).copy()
+        events[events.index < self._since] = False
+        return events
+
+
 @dataclass(frozen=True)
 class PeriodResults:
     in_sample: BacktestResult  # on the bars before the split

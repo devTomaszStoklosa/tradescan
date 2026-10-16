@@ -15,6 +15,7 @@ from tradescan.backtest.metrics import Metrics
 from tradescan.backtest.monte_carlo import Distribution, MonteCarlo, PathStats, Percentiles
 from tradescan.backtest.oos import Split
 from tradescan.backtest.pooled import PooledTrades, Spread
+from tradescan.backtest.portfolio_metrics import PortfolioMetrics, TickerContribution
 from tradescan.backtest.rules import Rule
 from tradescan.backtest.tickers import PeriodRun
 from tradescan.backtest.trade_rules import TradeRules
@@ -29,6 +30,7 @@ from tradescan.services import (
     ChartData,
     EdgeReport,
     MarketReport,
+    PortfolioReport,
     ScanReport,
     SweepReport,
     WatchlistBacktestReport,
@@ -437,6 +439,69 @@ def watchlist_backtest_out(report: WatchlistBacktestReport) -> schemas.Watchlist
                 spread=[spread_out(metric, value) for metric, value in summary.spreads.items()],
             )
             for period, summary in report.periods.items()
+        ],
+        missing=report.missing,
+    )
+
+
+def portfolio_period_out(period: PortfolioMetrics) -> schemas.PortfolioPeriodOut:
+    stats = period.stats
+    return schemas.PortfolioPeriodOut(
+        metrics=metrics_out(period.metrics),
+        stats=schemas.PortfolioStatsOut(
+            average_positions=finite(stats.average_positions),
+            max_positions=stats.max_positions,
+            average_exposure_pct=finite(stats.average_exposure_pct),
+            max_exposure_pct=finite(stats.max_exposure_pct),
+            orders=stats.orders,
+            skipped_no_slot=stats.skipped_no_slot,
+            skipped_no_room=stats.skipped_no_room,
+        ),
+    )
+
+
+def contribution_out(row: TickerContribution) -> schemas.TickerContributionOut:
+    return schemas.TickerContributionOut(
+        ticker=row.ticker,
+        trades=row.trades,
+        pnl=row.pnl,
+        contribution_pct=finite(row.contribution_pct),
+        win_rate_pct=finite(row.win_rate_pct),
+        expectancy_r=finite(row.expectancy_r),
+    )
+
+
+def portfolio_out(report: PortfolioReport) -> schemas.PortfolioOut:
+    base = report.base
+    close = report.benchmark_close.dropna()
+    buy_hold = close / close.iloc[0] * base.config.initial_equity if len(close) else close
+    return schemas.PortfolioOut(
+        **_rules_out(base.signal, base.config, base.rules, base.benchmark),  # type: ignore[arg-type]
+        universe=report.universe.name,
+        start=day(report.calendar[0]),
+        end=day(report.calendar[-1]),
+        portfolio=schemas.PortfolioConfigOut(
+            max_positions=report.portfolio.max_positions, max_exposure_pct=report.portfolio.max_exposure_pct
+        ),
+        priority=applied_rule_out(report.priority),
+        buy_hold_benchmark=report.benchmark,
+        buy_hold=points(buy_hold),
+        split=split_out(report.split) if report.split else None,
+        runs=[
+            schemas.PortfolioRunOut(
+                engine=run.result.engine,
+                full=portfolio_period_out(run.full),
+                in_sample=portfolio_period_out(run.in_sample) if run.in_sample else None,
+                out_of_sample=portfolio_period_out(run.out_of_sample) if run.out_of_sample else None,
+                equity=points(run.result.equity),
+                positions=points(run.result.positions.astype(float)),
+                trades=[
+                    schemas.PortfolioTradeOut(ticker=item.ticker, **trade_out(item.trade).model_dump())
+                    for item in run.result.trades
+                ],
+                tickers=[contribution_out(row) for row in run.contributions],
+            )
+            for run in report.runs
         ],
         missing=report.missing,
     )

@@ -19,6 +19,10 @@ export const BACKTEST_SECTIONS = ["risk", "backtest"] as const;
 export const MONTE_CARLO_SECTION = "monte_carlo";
 /** Settings the Backtest page reads: the shared setup's and the Monte Carlo's. */
 export const BACKTEST_PAGE_SECTIONS = [...BACKTEST_SECTIONS, MONTE_CARLO_SECTION] as const;
+/** Settings of a portfolio backtest: the max positions and the max exposure. */
+export const PORTFOLIO_SECTION = "portfolio";
+/** Settings the Portfolio page reads: the shared setup's and the portfolio's. */
+export const PORTFOLIO_PAGE_SECTIONS = [...BACKTEST_SECTIONS, PORTFOLIO_SECTION] as const;
 
 export function defaultWatchlist(watchlists: WatchlistOut[]): string {
   return watchlists.find((item) => item.name === "us_large")?.name ?? watchlists[0]?.name ?? "";

@@ -69,3 +69,8 @@ oos_pct = 30.0           # last % of the history reported as out-of-sample (left
 simulations = 1000       # resampled sequences of a backtest's closed trades, per method
 ruin_drawdown_pct = 50.0 # a drawdown from the peak at least this deep counts as ruin
 seed = 0                 # the same seed repeats the same simulations
+
+[portfolio]
+max_positions = 10       # open positions plus entry orders waiting to fill, in a portfolio backtest
+max_exposure_pct = 100.0 # gross value of positions and waiting orders as % of equity; above 100 is leverage
+# The priority rule (which signals go first when more fire than there is room for) is chosen per backtest.

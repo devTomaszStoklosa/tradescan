@@ -14,14 +14,26 @@ from starlette.types import Scope
 
 from tradescan import __version__
 from tradescan.api.context import ApiContext
-from tradescan.api.routes import backtest, chart, edge, market, meta, scan, signals, sweep, watchlist_backtest, watchlists
+from tradescan.api.routes import (
+    backtest,
+    chart,
+    edge,
+    market,
+    meta,
+    portfolio,
+    scan,
+    signals,
+    sweep,
+    watchlist_backtest,
+    watchlists,
+)
 from tradescan.config import Settings
 from tradescan.data.provider import DataProvider
 from tradescan.parallel import TaskRunner
-from tradescan.services import EngineFactory, build_scorer, build_use_cases
+from tradescan.services import EngineFactory, PortfolioEngineFactory, build_scorer, build_use_cases
 from tradescan.signals.registry import SignalRegistry, default_registry
 
-ROUTERS = (meta, signals, watchlists, scan, market, edge, backtest, sweep, watchlist_backtest, chart)
+ROUTERS = (meta, signals, watchlists, scan, market, edge, backtest, sweep, watchlist_backtest, portfolio, chart)
 
 
 class SpaStaticFiles(StaticFiles):
@@ -47,10 +59,11 @@ def create_app(
     registry: SignalRegistry = default_registry,
     engines: dict[str, EngineFactory] | None = None,
     runner: TaskRunner | None = None,
+    portfolio_engines: dict[str, PortfolioEngineFactory] | None = None,
 ) -> FastAPI:
     context = ApiContext(
         settings=settings,
-        use_cases=build_use_cases(settings, provider, registry, engines, runner),
+        use_cases=build_use_cases(settings, provider, registry, engines, runner, portfolio_engines=portfolio_engines),
         registry=registry,
         scorer=build_scorer(settings),
         watchlists_dir=watchlists_dir,

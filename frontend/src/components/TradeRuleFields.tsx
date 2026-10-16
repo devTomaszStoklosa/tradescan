@@ -1,4 +1,4 @@
-/** Entry filter, entry and exit rule pickers with the chosen rules' parameters, built from the API's rule declarations. */
+/** Entry filter, entry, exit and priority rule pickers with the chosen rules' parameters, built from the API's rule declarations. */
 import { useId, type ReactNode } from "react";
 
 import type { FilterRuleOut, RuleOut } from "../api/client";
@@ -18,6 +18,44 @@ export function GroupHeading({ id, children }: { id?: string; children: string }
   );
 }
 
+/** One rule out of several, with its parameters: the entry rule, or a portfolio's priority rule. */
+export function RuleChoiceFields({
+  heading,
+  rules,
+  value,
+  params,
+  onChange,
+}: {
+  heading: string;
+  rules: RuleOut[];
+  value: string;
+  params: Values;
+  onChange: (value: string, params: Values) => void;
+}) {
+  const id = useId();
+  const selected = findRule(rules, value);
+  return (
+    <div className="space-y-2">
+      <GroupHeading id={id}>{heading}</GroupHeading>
+      {/* Parameters belong to one rule, so switching rules starts from its defaults. */}
+      <Select aria-labelledby={id} value={value} onChange={(event) => onChange(event.target.value, {})}>
+        {!selected && <option value={value}>{value} (unknown)</option>}
+        {rules.map((rule) => (
+          <option key={rule.name} value={rule.name}>
+            {rule.label}
+          </option>
+        ))}
+      </Select>
+      {selected && (
+        <>
+          <p className="text-xs text-muted">{describeRule(selected, params)}</p>
+          {selected.params.length > 0 && <ParamFields specs={selected.params} values={params} onChange={(next) => onChange(value, next)} className={FIELDS} />}
+        </>
+      )}
+    </div>
+  );
+}
+
 export function EntryFields({
   rules,
   entry,
@@ -29,28 +67,7 @@ export function EntryFields({
   params: Values;
   onChange: (entry: string, params: Values) => void;
 }) {
-  const id = useId();
-  const selected = findRule(rules, entry);
-  return (
-    <div className="space-y-2">
-      <GroupHeading id={id}>Entry</GroupHeading>
-      {/* Parameters belong to one rule, so switching rules starts from its defaults. */}
-      <Select aria-labelledby={id} value={entry} onChange={(event) => onChange(event.target.value, {})}>
-        {!selected && <option value={entry}>{entry} (unknown)</option>}
-        {rules.map((rule) => (
-          <option key={rule.name} value={rule.name}>
-            {rule.label}
-          </option>
-        ))}
-      </Select>
-      {selected && (
-        <>
-          <p className="text-xs text-muted">{describeRule(selected, params)}</p>
-          {selected.params.length > 0 && <ParamFields specs={selected.params} values={params} onChange={(next) => onChange(entry, next)} className={FIELDS} />}
-        </>
-      )}
-    </div>
-  );
+  return <RuleChoiceFields heading="Entry" rules={rules} value={entry} params={params} onChange={onChange} />;
 }
 
 /** Rules switched on and off as chips, each chosen one with its parameters: the exits and the filters. */

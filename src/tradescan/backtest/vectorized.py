@@ -20,7 +20,7 @@ from tradescan.signals.base import Signal
 
 
 @dataclass(frozen=True)
-class _FillModel:
+class FillModel:
     """Fill prices of backtrader's broker with percentage slippage (`set_slippage_perc` defaults).
 
     `side` is +1 for an order that buys and -1 for one that sells. Slippage works against the order and
@@ -59,7 +59,7 @@ class _FillModel:
 
 
 @dataclass(frozen=True)
-class _Exit:
+class TradeExit:
     index: int
     price: float
     reason: str
@@ -75,7 +75,7 @@ class VectorizedEngine:
         events = signal.events(df).to_numpy(dtype=bool)
         prepared = (rules or TradeRules()).prepare(bars, signal.direction)
         sign = signal.direction.sign
-        fills = _FillModel(config.slippage_pct / 100.0)
+        fills = FillModel(config.slippage_pct / 100.0)
         commission = config.commission_pct / 100.0
 
         daily_pnl = np.zeros(len(bars))
@@ -88,15 +88,16 @@ class VectorizedEngine:
             plan = prepared.plan(signal_index, equity, config)
             if plan is None:
                 continue
-            entry = _find_entry(bars, signal_index, plan, fills, sign)
+            entry = find_entry(bars, signal_index, plan, fills, sign)
             if entry is None:
                 next_free = signal_index + plan.valid_bars  # a signal on the bar the order expires may place a new one
                 continue
 
             entry_index, entry_price = entry
             trade = OpenTrade(signal.direction, entry_index, entry_price, plan.reference, plan.stop, plan.risk)
-            exit_ = _find_exit(bars, prepared.track(trade), entry_index, fills, sign)
-            pnl = _book(daily_pnl, bars.close, entry_index, entry_price, exit_, plan.size, sign, commission)
+            exit_ = find_exit(bars, prepared.track(trade), entry_index, fills, sign)
+            path, pnl = pnl_path(bars.close, entry_index, entry_price, exit_, plan.size, sign, commission)
+            daily_pnl[entry_index : exit_.index + 1] += path
             equity += pnl
             trades.append(
                 Trade(
@@ -118,7 +119,7 @@ class VectorizedEngine:
         return BacktestResult(engine=self.name, ticker=ticker, signal=signal.name, equity=equity_curve, trades=tuple(trades))
 
 
-def _find_entry(bars: Bars, signal_index: int, plan: EntryPlan, fills: _FillModel, sign: float) -> tuple[int, float] | None:
+def find_entry(bars: Bars, signal_index: int, plan: EntryPlan, fills: FillModel, sign: float) -> tuple[int, float] | None:
     """The bar and price at which the entry order fills, or None when it expires unfilled."""
     last = min(signal_index + plan.valid_bars, len(bars) - 1)
     for i in range(signal_index + 1, last + 1):
@@ -128,7 +129,7 @@ def _find_entry(bars: Bars, signal_index: int, plan: EntryPlan, fills: _FillMode
     return None
 
 
-def _find_exit(bars: Bars, tracker: ExitTracker, entry_index: int, fills: _FillModel, sign: float) -> _Exit:
+def find_exit(bars: Bars, tracker: ExitTracker, entry_index: int, fills: FillModel, sign: float) -> TradeExit:
     """Executes the orders the tracker names at each close on the next bar, the way backtrader's broker does:
     an exit at the open first, then the stop, then the target."""
     side = -sign
@@ -137,32 +138,32 @@ def _find_exit(bars: Bars, tracker: ExitTracker, entry_index: int, fills: _FillM
         bar = index + 1
         open_, high, low = bars.open[bar], bars.high[bar], bars.low[bar]
         if orders.at_open is not None:
-            return _Exit(bar, fills.market(side, open_, high, low), orders.at_open)
+            return TradeExit(bar, fills.market(side, open_, high, low), orders.at_open)
         if orders.stop is not None and (price := fills.stop(side, orders.stop, open_, high, low)) is not None:
-            return _Exit(bar, price, orders.stop_reason)
+            return TradeExit(bar, price, orders.stop_reason)
         if orders.target is not None and (price := fills.limit(side, orders.target, open_, high, low)) is not None:
-            return _Exit(bar, price, orders.target_reason)
-    return _Exit(len(bars) - 1, float(bars.close[-1]), ExitReason.OPEN)
+            return TradeExit(bar, price, orders.target_reason)
+    return TradeExit(len(bars) - 1, float(bars.close[-1]), ExitReason.OPEN)
 
 
-def _book(
-    daily_pnl: np.ndarray,
+def pnl_path(
     close: np.ndarray,
     entry_index: int,
     entry_price: float,
-    exit_: _Exit,
+    exit_: TradeExit,
     size: float,
     sign: float,
     commission: float,
-) -> float:
-    """Spread the trade's mark-to-market P&L over its bars and return the net trade P&L."""
+) -> tuple[np.ndarray, float]:
+    """The trade's mark-to-market P&L on each bar from the entry bar through the exit bar, and its net P&L."""
     entry_cost = commission * entry_price * size
     exit_cost = commission * exit_.price * size if exit_.reason != ExitReason.OPEN else 0.0
     exposure = sign * size
+    path = np.zeros(exit_.index - entry_index + 1)
     if exit_.index == entry_index:
-        daily_pnl[entry_index] += exposure * (exit_.price - entry_price) - entry_cost - exit_cost
+        path[0] = exposure * (exit_.price - entry_price) - entry_cost - exit_cost
     else:
-        daily_pnl[entry_index] += exposure * (close[entry_index] - entry_price) - entry_cost
-        daily_pnl[entry_index + 1 : exit_.index] += exposure * np.diff(close[entry_index : exit_.index])
-        daily_pnl[exit_.index] += exposure * (exit_.price - close[exit_.index - 1]) - exit_cost
-    return exposure * (exit_.price - entry_price) - entry_cost - exit_cost
+        path[0] = exposure * (close[entry_index] - entry_price) - entry_cost
+        path[1:-1] = exposure * np.diff(close[entry_index : exit_.index])
+        path[-1] = exposure * (exit_.price - close[exit_.index - 1]) - exit_cost
+    return path, exposure * (exit_.price - entry_price) - entry_cost - exit_cost

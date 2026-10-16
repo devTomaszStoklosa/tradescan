@@ -10,6 +10,7 @@ from tradescan.api.context import ApiContext
 from tradescan.api.mappers import filter_rule_out, rule_out, section_out
 from tradescan.backtest import sweep
 from tradescan.backtest.oos import MIN_PERIOD_BARS
+from tradescan.backtest.priority import DEFAULT_PRIORITY
 from tradescan.config import adjustable_sections
 from tradescan.services import NOT_SWEEPABLE, SWEEP_SECTIONS
 from tradescan.signals.base import Family
@@ -39,6 +40,8 @@ def build_router(context: ApiContext) -> APIRouter:
             filter_rules=[filter_rule_out(rule) for rule in rules.filters.classes()],
             default_entry=rules.default_entry,
             default_exits=list(rules.default_exits),
+            priority_rules=[rule_out(rule) for rule in context.use_cases.portfolio.priorities.classes()],
+            default_priority=DEFAULT_PRIORITY,
             sweep=schemas.SweepLimitsOut(
                 max_axes=sweep.MAX_AXES,
                 min_values=sweep.MIN_VALUES,

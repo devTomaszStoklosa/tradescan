@@ -174,6 +174,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/portfolio-backtest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Portfolio Backtest */
+        post: operations["portfolio_backtest_api_portfolio_backtest_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chart": {
         parameters: {
             query?: never;
@@ -422,6 +439,13 @@ export interface components {
             default_entry: string;
             /** Default Exits */
             default_exits: string[];
+            /**
+             * Priority Rules
+             * @description Priority rules of a portfolio backtest
+             */
+            priority_rules: components["schemas"]["RuleOut"][];
+            /** Default Priority */
+            default_priority: string;
             sweep: components["schemas"]["SweepLimitsOut"];
         };
         /**
@@ -856,6 +880,226 @@ export interface components {
             /** Sqn */
             sqn: number | null;
         };
+        /** PortfolioConfigOut */
+        PortfolioConfigOut: {
+            /**
+             * Max Positions
+             * @description Open positions plus entry orders waiting to fill
+             */
+            max_positions: number;
+            /**
+             * Max Exposure Pct
+             * @description Gross value of the open positions and waiting orders, % of equity
+             */
+            max_exposure_pct: number;
+        };
+        /**
+         * PortfolioIn
+         * @description `settings.portfolio` sets the max positions and the max exposure.
+         */
+        PortfolioIn: {
+            /** Signal */
+            signal: string;
+            /**
+             * Params
+             * @description The signal's parameters, e.g. {"period": 30}
+             */
+            params?: {
+                [key: string]: number | number[];
+            };
+            /**
+             * Settings
+             * @description Per-run overrides by settings section, e.g. {"risk": {"atr_mult": 3}}; backtest.oos_pct sets the out-of-sample share
+             */
+            settings?: {
+                [key: string]: {
+                    [key: string]: number | number[] | {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /** @description Entry rule; omit for the default entry */
+            entry?: components["schemas"]["RuleIn"] | null;
+            /**
+             * Exits
+             * @description Exit rules on top of the initial stop; omit for the default exits, [] for the stop only
+             */
+            exits?: components["schemas"]["RuleIn"][] | null;
+            /**
+             * Filters
+             * @description Entry filters; a signal trades only when every one allows it
+             */
+            filters?: components["schemas"]["RuleIn"][];
+            /**
+             * Benchmark
+             * @description Benchmark for buy & hold and for the market filter; omit for the watchlist's, else the configured benchmark
+             */
+            benchmark?: string | null;
+            /** Period */
+            period?: string | null;
+            /**
+             * Watchlist
+             * @description Watchlist name, e.g. us_large
+             */
+            watchlist?: string | null;
+            /**
+             * Tickers
+             * @description Ad-hoc tickers instead of a watchlist
+             */
+            tickers?: string[] | null;
+            /** Engines */
+            engines?: string[];
+            /** @description Which signals go first when more fire than there is room for; omit for the default priority */
+            priority?: components["schemas"]["RuleIn"] | null;
+        };
+        /** PortfolioOut */
+        PortfolioOut: {
+            /** Signal */
+            signal: string;
+            direction: components["schemas"]["Direction"];
+            /**
+             * Description
+             * @description The signal's rule with this run's parameters
+             */
+            description: string;
+            /**
+             * Params
+             * @description The signal's parameters used in this run
+             */
+            params: {
+                [key: string]: number | number[];
+            };
+            config: components["schemas"]["BacktestConfigOut"];
+            entry: components["schemas"]["AppliedRuleOut"];
+            /**
+             * Exits
+             * @description Exit rules on top of the initial stop, in the order given
+             */
+            exits: components["schemas"]["AppliedRuleOut"][];
+            /**
+             * Filters
+             * @description Entry filters, in the order given
+             */
+            filters: components["schemas"]["AppliedRuleOut"][];
+            /**
+             * Benchmark
+             * @description The benchmark the filters compared; null when no filter reads one
+             */
+            benchmark: string | null;
+            /** Universe */
+            universe: string;
+            /** Start */
+            start: string;
+            /** End */
+            end: string;
+            portfolio: components["schemas"]["PortfolioConfigOut"];
+            priority: components["schemas"]["AppliedRuleOut"];
+            /**
+             * Buy Hold Benchmark
+             * @description The benchmark buy & hold compares
+             */
+            buy_hold_benchmark: string;
+            /**
+             * Buy Hold
+             * @description The benchmark scaled to the initial equity
+             */
+            buy_hold: components["schemas"]["Point"][];
+            /** @description The split of the shared calendar; null when it is too short */
+            split: components["schemas"]["SplitOut"] | null;
+            /** Runs */
+            runs: components["schemas"]["PortfolioRunOut"][];
+            /**
+             * Missing
+             * @description Tickers without data
+             */
+            missing: string[];
+        };
+        /** PortfolioPeriodOut */
+        PortfolioPeriodOut: {
+            /** @description buy_hold_pct is the benchmark's; exposure_pct is the share of closes with an open position */
+            metrics: components["schemas"]["MetricsOut"];
+            stats: components["schemas"]["PortfolioStatsOut"];
+        };
+        /** PortfolioRunOut */
+        PortfolioRunOut: {
+            /** Engine */
+            engine: string;
+            full: components["schemas"]["PortfolioPeriodOut"];
+            /** @description The run on the bars before the split; null without a split */
+            in_sample: components["schemas"]["PortfolioPeriodOut"] | null;
+            /** @description The run from the split on, with fresh equity; null without a split */
+            out_of_sample: components["schemas"]["PortfolioPeriodOut"] | null;
+            /** Equity */
+            equity: components["schemas"]["Point"][];
+            /**
+             * Positions
+             * @description Open positions at each close
+             */
+            positions: components["schemas"]["Point"][];
+            /**
+             * Trades
+             * @description By entry date, then watchlist order
+             */
+            trades: components["schemas"]["PortfolioTradeOut"][];
+            /**
+             * Tickers
+             * @description Every ticker with data, in watchlist order
+             */
+            tickers: components["schemas"]["TickerContributionOut"][];
+        };
+        /** PortfolioStatsOut */
+        PortfolioStatsOut: {
+            /** Average Positions */
+            average_positions: number | null;
+            /** Max Positions */
+            max_positions: number;
+            /**
+             * Average Exposure Pct
+             * @description Gross value of the open positions, % of equity, averaged
+             */
+            average_exposure_pct: number | null;
+            /** Max Exposure Pct */
+            max_exposure_pct: number | null;
+            /**
+             * Orders
+             * @description Entry orders placed
+             */
+            orders: number;
+            /**
+             * Skipped No Slot
+             * @description Signals skipped because every slot was taken
+             */
+            skipped_no_slot: number;
+            /**
+             * Skipped No Room
+             * @description Signals skipped because less than one lot fitted under the exposure cap
+             */
+            skipped_no_room: number;
+        };
+        /** PortfolioTradeOut */
+        PortfolioTradeOut: {
+            direction: components["schemas"]["Direction"];
+            /** Signal Date */
+            signal_date: string;
+            /** Entry Date */
+            entry_date: string;
+            /** Exit Date */
+            exit_date: string;
+            /** Entry Price */
+            entry_price: number;
+            /** Exit Price */
+            exit_price: number;
+            /** Size */
+            size: number;
+            /** Pnl */
+            pnl: number;
+            /** R Multiple */
+            r_multiple: number | null;
+            /** Exit Reason */
+            exit_reason: string;
+            /** Ticker */
+            ticker: string;
+        };
         /** RegimeOut */
         RegimeOut: {
             /** Benchmark */
@@ -1244,6 +1488,30 @@ export interface components {
          * @enum {string}
          */
         SweepTarget: "signal" | "entry" | "exit" | "filter" | "settings";
+        /** TickerContributionOut */
+        TickerContributionOut: {
+            /** Ticker */
+            ticker: string;
+            /**
+             * Trades
+             * @description Closed trades
+             */
+            trades: number;
+            /**
+             * Pnl
+             * @description Net, with a trade still open marked to its last close
+             */
+            pnl: number;
+            /**
+             * Contribution Pct
+             * @description pnl as a percent of the initial equity
+             */
+            contribution_pct: number | null;
+            /** Win Rate Pct */
+            win_rate_pct: number | null;
+            /** Expectancy R */
+            expectancy_r: number | null;
+        };
         /** TickerRunOut */
         TickerRunOut: {
             /** Ticker */
@@ -1688,6 +1956,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WatchlistBacktestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    portfolio_backtest_api_portfolio_backtest_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortfolioIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioOut"];
                 };
             };
             /** @description Validation Error */

@@ -6,13 +6,14 @@ import argparse
 import logging
 import math
 from collections.abc import Callable, Sequence
-from dataclasses import fields
+from dataclasses import fields, replace
 from pathlib import Path
 
 import pandas as pd
 from rich.console import Console
 
 from tradescan.backtest.metrics import Metrics
+from tradescan.backtest.priority import DEFAULT_PRIORITY, priority_rules
 from tradescan.backtest.sweep import MAX_VALUES, SweepAxis, SweepTarget
 from tradescan.backtest.trade_rules import RuleChoice, default_catalog
 from tradescan.config import Settings, load_settings
@@ -23,11 +24,14 @@ from tradescan.report.export import export_frame
 from tradescan.report.tables import (
     FEW_TRADES,
     SCAN_COLUMNS,
+    contributions_frame,
     edge_to_frame,
     hits_to_frame,
     metrics_to_frame,
     periods_to_frame,
     pooled_frame,
+    portfolio_metrics_frame,
+    portfolio_trades_frame,
     signals_to_frame,
     spread_frame,
     sweep_cells_frame,
@@ -40,6 +44,7 @@ from tradescan.services import (
     BacktestRequest,
     EdgeRequest,
     MarketRequest,
+    PortfolioRequest,
     ScanRequest,
     SignalFilter,
     SweepRequest,
@@ -48,6 +53,7 @@ from tradescan.services import (
     build_scorer,
     build_use_cases,
     default_engines,
+    default_portfolio_engines,
     default_provider,
 )
 from tradescan.signals import Direction, Family, default_registry
@@ -121,7 +127,7 @@ def _exits(args: argparse.Namespace) -> tuple[RuleChoice, ...]:
 
 
 def _backtest_request(args: argparse.Namespace, ticker: str, engines: tuple[str, ...]) -> BacktestRequest:
-    """The setup flags shared by `backtest`, `sweep` and `watchlist-backtest`."""
+    """The setup flags shared by `backtest`, `sweep`, `watchlist-backtest` and `portfolio-backtest`."""
     return BacktestRequest(
         ticker=ticker,
         signal=args.signal,
@@ -364,6 +370,61 @@ def cmd_watchlist_backtest(args: argparse.Namespace, settings: Settings, report:
     return 0
 
 
+def cmd_portfolio_backtest(args: argparse.Namespace, settings: Settings, report: ConsoleReport) -> int:
+    universe = _universe(args)
+    _loading(report, len(universe.tickers), args.period or settings.backtest.period)
+    engines = tuple(default_portfolio_engines()) if args.engine == "both" else (args.engine,)
+    setup = _backtest_request(args, "", engines)
+    limits = _overrides({"portfolio": {"max_positions": args.max_positions, "max_exposure_pct": args.max_exposure}})
+    request = PortfolioRequest(
+        universe=universe,
+        setup=replace(setup, settings={**setup.settings, **limits}),
+        priority=RuleChoice(args.priority) if args.priority else None,
+    )
+    result = _use_cases(settings, args).portfolio.run(request)
+    _missing(report, result.missing)
+    base, portfolio = result.base, result.portfolio
+    signal, config, rules = base.signal, base.config, base.rules
+    exits = "; ".join(rule.describe() for rule in rules.exits) or "none"
+    filters = "; ".join(rule.describe() for rule in rules.filters) or "none"
+    tickers = len(result.runs[0].contributions)
+    report.note(
+        f"{signal.name} ({signal.direction.value}) on {tickers} tickers of {universe.name} with one equity: at most "
+        f"{portfolio.max_positions} positions and {portfolio.max_exposure_pct:g}% exposure, priority: {result.priority.describe()}. "
+        f"Filters: {filters}. Entry: {rules.entry.describe()}. Stop {config.atr_mult:g} ATR, exits: {exits}. "
+        f"Risk {config.risk_pct:g}%/trade, costs {config.commission_pct:g}% + {config.slippage_pct:g}% slippage"
+    )
+    split = result.split
+    calendar = result.calendar
+    report.frame(
+        portfolio_metrics_frame(result),
+        title=f"{universe.name} portfolio, {calendar[0].date()} to {calendar[-1].date()}",
+        caption=f"buy & hold is {result.benchmark}'s, exposure the share of days with a position"
+        + (
+            f"; out-of-sample from {split.out_of_sample[0].date()} (last {split.oos_pct:g}%), each period with fresh equity"
+            if split
+            else ""
+        ),
+        show_index=True,
+    )
+    if split is None:
+        report.warning(f"History too short for an out-of-sample split at {config.oos_pct:g}%")
+    first = result.runs[0]
+    rows = contributions_frame(first.contributions)
+    shown = rows if args.top <= 0 else rows.head(args.top)
+    report.frame(
+        shown,
+        title=f"{len(shown)} of {len(rows)} tickers by P&L ({first.result.engine}), full history",
+        caption="contribution in % of the initial equity" + ("" if len(shown) == len(rows) else "; --top 0 shows all"),
+    )
+    _export(
+        report,
+        pd.concat([portfolio_trades_frame(run.result.trades, run.result.engine) for run in result.runs], ignore_index=True),
+        args.export,
+    )
+    return 0
+
+
 def cmd_update_universes(args: argparse.Namespace, settings: Settings, report: ConsoleReport) -> int:
     wanted = set(_split(args.only))
     unknown = wanted - {source.name for source in SOURCES}
@@ -546,6 +607,21 @@ def build_parser() -> argparse.ArgumentParser:
     watchlist_backtest.add_argument("--top", type=int, default=25, help="tickers to show, best first (0: all)")
     watchlist_backtest.add_argument("--export", help="save every ticker with every period's metrics to .csv or .json")
     watchlist_backtest.set_defaults(handler=cmd_watchlist_backtest)
+
+    portfolio = commands.add_parser(
+        "portfolio-backtest", help="backtest one setup on every ticker of a watchlist with one shared equity"
+    )
+    _add_backtest_setup_args(portfolio)
+    _add_universe_args(portfolio)
+    portfolio.add_argument("--max-positions", type=int, help="open positions plus waiting entry orders (default 10)")
+    portfolio.add_argument("--max-exposure", type=float, help="gross exposure cap in %% of equity (default 100)")
+    portfolio.add_argument(
+        "--priority", choices=priority_rules.names(), help=f"which signals go first when more fire than fit (default {DEFAULT_PRIORITY})"
+    )
+    portfolio.add_argument("--engine", choices=ENGINE_CHOICES, default="vectorized")
+    portfolio.add_argument("--top", type=int, default=15, help="tickers to show, largest P&L first (0: all)")
+    portfolio.add_argument("--export", help="save every engine's trades to .csv or .json")
+    portfolio.set_defaults(handler=cmd_portfolio_backtest)
 
     universes = commands.add_parser("update-universes", help="refresh the S&P 500 and Nasdaq-100 watchlists from Wikipedia")
     universes.add_argument("--only", help=f"comma separated: {', '.join(source.name for source in SOURCES)}")

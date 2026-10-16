@@ -7,7 +7,8 @@ Requests carry per-run overrides: `settings` ({section: {parameter: value}}) and
 ({signal name: {parameter: value}}); a backtest also names its entry filters, entry rule and exit rules
 with their parameters. All are validated against the declared ranges, and the configured settings are never modified.
 A sweep reruns one backtest setup over a grid of one or two of those parameters, a watchlist backtest
-runs it on every ticker of a watchlist.
+runs it on every ticker of a watchlist, and a portfolio backtest on every ticker of a watchlist with one
+shared equity.
 """
 
 from __future__ import annotations
@@ -24,8 +25,18 @@ from tradescan.backtest.edge import EdgeSampler, EdgeStats, combine_samples
 from tradescan.backtest.metrics import Metrics, compute_metrics
 from tradescan.backtest.monte_carlo import MonteCarlo, MonteCarloConfig, closed_r_multiples, simulate
 from tradescan.backtest.oos import MIN_PERIOD_BARS, PeriodMetrics, Split, run_periods, split_history
+from tradescan.backtest.allocation import PortfolioConfig
 from tradescan.backtest.pooled import BREAK_EVEN, PooledTrades, Spread, pool_trades, spread
-from tradescan.backtest.rules import Rule
+from tradescan.backtest.portfolio import (
+    PortfolioEngine,
+    PortfolioResult,
+    VectorizedPortfolioEngine,
+    run_portfolio_periods,
+    shared_calendar,
+)
+from tradescan.backtest.portfolio_metrics import PortfolioMetrics, TickerContribution, contributions, portfolio_metrics
+from tradescan.backtest.priority import DEFAULT_PRIORITY, PriorityRule, priority_rules
+from tradescan.backtest.rules import Rule, RuleRegistry
 from tradescan.backtest.sweep import SweepAxis, SweepCase, SweepJob, SweepTarget, check_axes, grid
 from tradescan.backtest.tickers import Period, PeriodRun, TickerJob, TickerRun
 from tradescan.backtest.trade_rules import RuleCatalog, RuleChoice, TradeRules, default_catalog
@@ -47,6 +58,7 @@ from tradescan.signals.registry import SignalRegistry, default_registry
 from tradescan.watchlist import Watchlist
 
 EngineFactory = Callable[[], BacktestEngine]
+PortfolioEngineFactory = Callable[[], PortfolioEngine]
 
 
 def _load_cerebro_engine() -> BacktestEngine:
@@ -57,6 +69,16 @@ def _load_cerebro_engine() -> BacktestEngine:
 
 def default_engines() -> dict[str, EngineFactory]:
     return {"vectorized": VectorizedEngine, "cerebro": _load_cerebro_engine}
+
+
+def _load_cerebro_portfolio_engine() -> PortfolioEngine:
+    from tradescan.backtest.cerebro_portfolio import CerebroPortfolioEngine
+
+    return CerebroPortfolioEngine()
+
+
+def default_portfolio_engines() -> dict[str, PortfolioEngineFactory]:
+    return {"vectorized": VectorizedPortfolioEngine, "cerebro": _load_cerebro_portfolio_engine}
 
 
 def default_provider(settings: Settings, use_cache: bool = True) -> DataProvider:
@@ -138,6 +160,11 @@ def build_monte_carlo_config(settings: Settings) -> MonteCarloConfig:
     return MonteCarloConfig(
         simulations=monte_carlo.simulations, ruin_drawdown_pct=monte_carlo.ruin_drawdown_pct, seed=monte_carlo.seed
     )
+
+
+def build_portfolio_config(settings: Settings) -> PortfolioConfig:
+    portfolio = settings.portfolio
+    return PortfolioConfig(max_positions=portfolio.max_positions, max_exposure_pct=portfolio.max_exposure_pct)
 
 
 def resolve_settings(settings: Settings, overrides: GroupOverrides, registry: SignalRegistry) -> Settings:
@@ -776,6 +803,135 @@ def _summary(runs: Sequence[PeriodRun | None]) -> PeriodSummary:
 
 
 # ---------------------------------------------------------------------------
+# Portfolio backtest
+
+
+@dataclass(frozen=True)
+class PortfolioRequest:
+    """`setup` runs on every ticker of `universe` with one shared equity, on each of its `engines`; its `ticker` is
+    ignored. Without a benchmark of its own, the setup takes the watchlist's, and buy & hold compares that one."""
+
+    universe: Watchlist
+    setup: BacktestRequest
+    priority: RuleChoice | None = None  # None: the default priority rule
+
+
+@dataclass(frozen=True)
+class PortfolioRun:
+    result: PortfolioResult
+    full: PortfolioMetrics
+    in_sample: PortfolioMetrics | None  # None when the shared calendar is too short to split
+    out_of_sample: PortfolioMetrics | None
+    contributions: list[TickerContribution]  # of the full history, every ticker with data in watchlist order
+
+
+@dataclass(frozen=True)
+class PortfolioReport:
+    universe: Watchlist
+    base: ResolvedBacktest
+    portfolio: PortfolioConfig
+    priority: PriorityRule
+    benchmark: str  # compared by buy & hold, and by the filters that read a benchmark
+    benchmark_close: pd.Series  # on the shared calendar, each date with the benchmark's last close at or before it
+    calendar: pd.DatetimeIndex
+    split: Split | None
+    runs: list[PortfolioRun]
+    missing: list[str]
+
+
+class PortfolioUseCase:
+    def __init__(
+        self,
+        market_data: MarketData,
+        settings: Settings,
+        registry: SignalRegistry,
+        engines: Mapping[str, PortfolioEngineFactory],
+        rules: RuleCatalog = default_catalog,
+        priorities: RuleRegistry[PriorityRule] = priority_rules,
+    ) -> None:
+        self._market_data = market_data
+        self._settings = settings
+        self._registry = registry
+        self._engines = engines
+        self._rules = rules
+        self._priorities = priorities
+
+    @property
+    def priorities(self) -> RuleRegistry[PriorityRule]:
+        return self._priorities
+
+    def run(self, request: PortfolioRequest) -> PortfolioReport:
+        engines = request.setup.engines
+        unknown = [name for name in engines if name not in self._engines]
+        if unknown or not engines:
+            raise ValueError(f"Unknown engine(s): {', '.join(unknown) or 'none given'}. Use: {', '.join(self._engines)}")
+        universe = request.universe
+        benchmark = _benchmark(request.setup.benchmark, universe, self._settings)
+        setup = replace(request.setup, benchmark=benchmark)
+        base = resolve_backtest(setup, self._settings, self._registry, self._rules)
+        choice = request.priority or RuleChoice(DEFAULT_PRIORITY)
+        priority = self._priorities.create(choice.name, choice.params)
+        portfolio = build_portfolio_config(base.settings)
+
+        tickers = list(universe.tickers)
+        loaded = self._market_data.load([*tickers, benchmark], setup.period or base.settings.backtest.period, setup.interval)
+        rules = _with_benchmark(base, loaded)
+        frames = {ticker: loaded.frames[ticker] for ticker in tickers if ticker in loaded.frames}
+        if not frames:
+            raise ValueError(f"No data for any ticker of {universe.name}")
+        if benchmark not in loaded.frames:
+            raise ValueError(f"No data for the benchmark {benchmark}, which buy & hold compares")
+        calendar = shared_calendar(frames.values())
+        benchmark_close = loaded.frames[benchmark]["close"].astype(float).reindex(calendar, method="ffill")
+        split = split_history(calendar, base.config.oos_pct)
+
+        runs = [
+            _portfolio_run(self._engines[name](), frames, base, rules, portfolio, priority, benchmark_close, split)
+            for name in engines
+        ]
+        return PortfolioReport(
+            universe=universe,
+            base=base,
+            portfolio=portfolio,
+            priority=priority,
+            benchmark=benchmark,
+            benchmark_close=benchmark_close,
+            calendar=calendar,
+            split=split,
+            runs=runs,
+            missing=[ticker for ticker in loaded.missing if ticker in tickers],
+        )
+
+
+def _portfolio_run(
+    engine: PortfolioEngine,
+    frames: Mapping[str, pd.DataFrame],
+    base: ResolvedBacktest,
+    rules: TradeRules,
+    portfolio: PortfolioConfig,
+    priority: PriorityRule,
+    benchmark_close: pd.Series,
+    split: Split | None,
+) -> PortfolioRun:
+    """The full history and, with a split, both periods of one engine."""
+    config, signal = base.config, base.signal
+    result = engine.run(frames, signal, config, rules, portfolio, priority)
+    full = portfolio_metrics(result, benchmark_close, config.bars_per_year)
+    shares = contributions(result, config.initial_equity)
+    if split is None:
+        return PortfolioRun(result, full, None, None, shares)
+    start = split.out_of_sample[0]
+    periods = run_portfolio_periods(engine, frames, signal, config, rules, portfolio, priority, start)
+    return PortfolioRun(
+        result=result,
+        full=full,
+        in_sample=portfolio_metrics(periods.in_sample, benchmark_close, config.bars_per_year),
+        out_of_sample=portfolio_metrics(periods.out_of_sample, benchmark_close, config.bars_per_year, start),
+        contributions=shares,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Chart
 
 
@@ -852,6 +1008,7 @@ class UseCases:
     backtest: BacktestUseCase
     sweep: SweepUseCase
     watchlist_backtest: WatchlistBacktestUseCase
+    portfolio: PortfolioUseCase
     chart: ChartUseCase
 
 
@@ -862,6 +1019,7 @@ def build_use_cases(
     engines: Mapping[str, EngineFactory] | None = None,
     runner: TaskRunner | None = None,
     rules: RuleCatalog = default_catalog,
+    portfolio_engines: Mapping[str, PortfolioEngineFactory] | None = None,
 ) -> UseCases:
     """`runner` runs per-ticker work and sweeps; pass a `ProcessRunner` to use every core."""
     market_data = MarketData(provider, settings)
@@ -873,5 +1031,6 @@ def build_use_cases(
         backtest=BacktestUseCase(market_data, settings, registry, engines or default_engines(), rules),
         sweep=SweepUseCase(market_data, settings, registry, task_runner, rules),
         watchlist_backtest=WatchlistBacktestUseCase(market_data, settings, registry, task_runner, rules),
+        portfolio=PortfolioUseCase(market_data, settings, registry, portfolio_engines or default_portfolio_engines(), rules),
         chart=ChartUseCase(market_data, registry),
     )

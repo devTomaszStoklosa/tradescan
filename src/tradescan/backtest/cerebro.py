@@ -25,17 +25,22 @@ from tradescan.signals.base import Direction, Signal
 _EXEC_TYPES = {OrderType.MARKET: bt.Order.Market, OrderType.STOP: bt.Order.Stop, OrderType.LIMIT: bt.Order.Limit}
 
 
-class _RulesStrategy(bt.Strategy):
-    params = (("events", None), ("rules", None), ("direction", Direction.LONG), ("config", BacktestConfig()))
+class TickerOrders:
+    """One ticker's entry order, exit orders and trades inside a backtrader strategy, which may trade other
+    tickers too: the strategy calls `update` at every close of the ticker and forwards its order notifications.
 
-    def __init__(self) -> None:
-        self.equity_dates: list[pd.Timestamp] = []
-        self.equity_values: list[float] = []
+    Notifications carry clones of orders, so orders are matched by `ref`, never by identity.
+    """
+
+    def __init__(self, strategy: bt.Strategy, data: bt.AbstractDataBase, rules: PreparedRules, direction: Direction) -> None:
+        self._strategy = strategy
+        self._data = data
+        self._rules = rules
+        self._direction = direction
         self.trades: list[Trade] = []
         self._reset()
 
     def _reset(self) -> None:
-        # Notifications carry clones of orders, so orders are matched by `ref`, never by identity.
         self._entry_order = None
         self._plan: EntryPlan | None = None
         self._signal: tuple[int, pd.Timestamp] | None = None  # (bar index, date)
@@ -47,17 +52,25 @@ class _RulesStrategy(bt.Strategy):
         self._closing = False
 
     @property
-    def _rules(self) -> PreparedRules:
-        return self.p.rules
+    def position(self) -> bt.Position:
+        return self._strategy.getposition(self._data)
+
+    @property
+    def free(self) -> bool:
+        """No entry order waits and no position is open, so a signal may place an order."""
+        return self._entry_order is None and not self.position
+
+    @property
+    def waiting(self) -> EntryPlan | None:
+        """The plan of the entry order that waits to fill; None without one."""
+        return self._plan if self._entry_order is not None and not self.position else None
 
     def _index(self) -> int:
-        return len(self.data) - 1
+        return len(self._data) - 1
 
-    def next(self) -> None:
-        self.equity_dates.append(pd.Timestamp(self.data.datetime.datetime(0)))
-        self.equity_values.append(self.broker.getvalue())
-        index = self._index()
-
+    def update(self, index: int) -> None:
+        """At the close of bar `index`: move the exit orders of an open position, or cancel an expired entry order
+        (a signal on the bar it expires may place a new one)."""
         if self.position:
             self._manage_exits(index)
             return
@@ -65,20 +78,15 @@ class _RulesStrategy(bt.Strategy):
             assert self._plan is not None and self._signal is not None
             if index - self._signal[0] < self._plan.valid_bars:
                 return
-            self.cancel(self._entry_order)  # expired; a signal on this bar may place a new order
+            self._strategy.cancel(self._entry_order)
             self._reset()
-        if self.p.events[index]:
-            self._submit_entry(index)
 
-    def _submit_entry(self, index: int) -> None:
-        plan = self._rules.plan(index, self.broker.getvalue(), self.p.config)
-        if plan is None:
-            return
-        order = self.buy if self.p.direction is Direction.LONG else self.sell
+    def submit_entry(self, index: int, plan: EntryPlan) -> None:
+        order = self._strategy.buy if self._direction is Direction.LONG else self._strategy.sell
         price = None if plan.type is OrderType.MARKET else plan.level
-        self._entry_order = order(size=plan.size, exectype=_EXEC_TYPES[plan.type], price=price)
+        self._entry_order = order(data=self._data, size=plan.size, exectype=_EXEC_TYPES[plan.type], price=price)
         self._plan = plan
-        self._signal = (index, pd.Timestamp(self.data.datetime.datetime(0)))
+        self._signal = (index, pd.Timestamp(self._data.datetime.datetime(0)))
 
     def _manage_exits(self, index: int) -> None:
         if self._closing:
@@ -87,7 +95,7 @@ class _RulesStrategy(bt.Strategy):
         orders: ExitOrders = self._tracker.orders(index)
         if orders.at_open is not None:
             self._cancel_exits()
-            self._exit_reasons[self.close().ref] = orders.at_open
+            self._exit_reasons[self._strategy.close(data=self._data).ref] = orders.at_open
             self._closing = True
             return
         levels = (orders.stop, orders.stop_reason, orders.target, orders.target_reason)
@@ -99,20 +107,20 @@ class _RulesStrategy(bt.Strategy):
     def _submit_exits(self, orders: ExitOrders) -> None:
         """The stop first, so it is checked first on a bar that touches both, and the target linked to it."""
         size = abs(self.position.size)
-        order = self.sell if self.p.direction is Direction.LONG else self.buy
+        order = self._strategy.sell if self._direction is Direction.LONG else self._strategy.buy
         stop = None
         if orders.stop is not None:
-            stop = order(size=size, exectype=bt.Order.Stop, price=orders.stop)
+            stop = order(data=self._data, size=size, exectype=bt.Order.Stop, price=orders.stop)
             self._exit_orders.append(stop)
             self._exit_reasons[stop.ref] = orders.stop_reason
         if orders.target is not None:
-            target = order(size=size, exectype=bt.Order.Limit, price=orders.target, oco=stop)
+            target = order(data=self._data, size=size, exectype=bt.Order.Limit, price=orders.target, oco=stop)
             self._exit_orders.append(target)
             self._exit_reasons[target.ref] = orders.target_reason
 
     def _cancel_exits(self) -> None:
         for order in self._exit_orders:
-            self.cancel(order)  # cancelling one of a linked pair cancels both; a second cancel is a no-op
+            self._strategy.cancel(order)  # cancelling one of a linked pair cancels both; a second cancel is a no-op
             self._exit_reasons.pop(order.ref, None)
         self._exit_orders = []
 
@@ -128,7 +136,7 @@ class _RulesStrategy(bt.Strategy):
             assert self._plan is not None
             self._entry = (pd.Timestamp(bt.num2date(executed.dt)), executed.price, abs(executed.size), executed.comm)
             plan = self._plan
-            trade = OpenTrade(self.p.direction, self._index(), executed.price, plan.reference, plan.stop, plan.risk)
+            trade = OpenTrade(self._direction, self._index(), executed.price, plan.reference, plan.stop, plan.risk)
             self._tracker = self._rules.track(trade)
             return
         reason = self._exit_reasons.get(order.ref)
@@ -136,15 +144,16 @@ class _RulesStrategy(bt.Strategy):
             self._record(pd.Timestamp(bt.num2date(executed.dt)), executed.price, executed.comm, reason)
             self._reset()
 
-    def stop(self) -> None:
+    def finish(self) -> None:
+        """At the end of the run: a position still open is marked to the ticker's last close."""
         if self.position and self._entry is not None:
-            last_date = pd.Timestamp(self.data.datetime.datetime(0))
-            self._record(last_date, self.data.close[0], 0.0, ExitReason.OPEN)
+            last_date = pd.Timestamp(self._data.datetime.datetime(0))
+            self._record(last_date, self._data.close[0], 0.0, ExitReason.OPEN)
 
     def _record(self, exit_date: pd.Timestamp, exit_price: float, exit_commission: float, reason: str) -> None:
         assert self._plan is not None and self._entry is not None and self._signal is not None
         entry_date, entry_price, size, entry_commission = self._entry
-        direction: Direction = self.p.direction
+        direction = self._direction
         pnl = direction.sign * size * (exit_price - entry_price) - entry_commission - exit_commission
         self.trades.append(
             Trade(
@@ -160,6 +169,35 @@ class _RulesStrategy(bt.Strategy):
                 exit_reason=reason,
             )
         )
+
+
+class _RulesStrategy(bt.Strategy):
+    params = (("events", None), ("rules", None), ("direction", Direction.LONG), ("config", BacktestConfig()))
+
+    def __init__(self) -> None:
+        self.equity_dates: list[pd.Timestamp] = []
+        self.equity_values: list[float] = []
+        self._ticker = TickerOrders(self, self.data, self.p.rules, self.p.direction)
+
+    @property
+    def trades(self) -> list[Trade]:
+        return self._ticker.trades
+
+    def next(self) -> None:
+        self.equity_dates.append(pd.Timestamp(self.data.datetime.datetime(0)))
+        self.equity_values.append(self.broker.getvalue())
+        index = len(self.data) - 1
+        self._ticker.update(index)
+        if self._ticker.free and self.p.events[index]:
+            plan = self.p.rules.plan(index, self.broker.getvalue(), self.p.config)
+            if plan is not None:
+                self._ticker.submit_entry(index, plan)
+
+    def notify_order(self, order: bt.Order) -> None:
+        self._ticker.notify_order(order)
+
+    def stop(self) -> None:
+        self._ticker.finish()
 
 
 class CerebroEngine:
