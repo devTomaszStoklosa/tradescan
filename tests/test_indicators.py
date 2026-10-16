@@ -57,6 +57,24 @@ def test_bollinger_and_donchian():
     assert channel["lower"].iloc[-1] == 3.0
 
 
+def test_percent_b_places_the_close_within_the_bands():
+    assert ind.percent_b(pd.Series([1.0, 3.0, 2.0]), 3, 1.0).iloc[-1] == pytest.approx(0.5)
+    close = random_walk()["close"]
+    bands = ind.bollinger(close, 20, 2.0)
+    expected = (close - bands["lower"]) / (bands["upper"] - bands["lower"])
+    pd.testing.assert_series_equal(ind.percent_b(close, 20, 2.0), expected)
+    # Bands without width have no %b.
+    assert np.isnan(ind.percent_b(pd.Series([10.0] * 25), 20, 2.0).iloc[-1])
+
+
+def test_internal_bar_strength():
+    df = pd.DataFrame({"high": [12.0, 12.0, 12.0, 10.0], "low": [10.0, 10.0, 10.0, 10.0], "close": [10.0, 10.5, 12.0, 10.0]})
+    strength = ind.internal_bar_strength(df)
+    assert strength.iloc[:3].tolist() == [0.0, 0.25, 1.0]
+    # A bar without range has no IBS.
+    assert np.isnan(strength.iloc[3])
+
+
 def test_adx_detects_a_strong_uptrend():
     frame = ind.adx(make_ohlcv(np.linspace(100, 200, 120)), 14).iloc[-1]
     assert frame["plus_di"] > frame["minus_di"]
