@@ -1,16 +1,17 @@
-"""The trade rules of one backtest: an entry rule, plus exit rules on top of the initial ATR stop.
+"""The trade rules of one backtest: entry filters, an entry rule, and exit rules on top of the initial ATR stop.
 
 Both engines prepare the rules once per run and ask the result the same questions: which order a
-signal places (`plan`) and which exit orders an open trade has (`track`). Only the order execution
-differs between them.
+signal places, if its filters allow it (`plan`), and which exit orders an open trade has (`track`).
+Only the order execution differs between them.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
+import pandas as pd
 
 from tradescan.backtest.base import BacktestConfig
 from tradescan.backtest.entries import EntryOrders, EntryRule, NextOpenEntry, OrderType, entry_rules
@@ -26,29 +27,53 @@ from tradescan.backtest.exits import (
     TrackerFactory,
     exit_rules,
 )
+from tradescan.backtest.filters import EntryFilter, FilterInputs, entry_filters
 from tradescan.backtest.rules import Bars, RuleRegistry
 from tradescan.params import Overrides
 from tradescan.risk import position_size, trade_levels
 from tradescan.signals.base import Direction
 
 
+def _check_unique(rules: Sequence[ExitRule | EntryFilter], what: str) -> None:
+    names = [rule.name for rule in rules]
+    repeated = sorted({name for name in names if names.count(name) > 1})
+    if repeated:
+        raise ValueError(f"{what} given more than once: {', '.join(repeated)}")
+
+
 @dataclass(frozen=True)
 class TradeRules:
-    """The default reproduces the original rules: next-open entry, 2R target, 20-bar time exit."""
+    """The default reproduces the original rules: no filters, next-open entry, 2R target, 20-bar time exit.
+
+    `benchmark_close` holds the benchmark's closes for the filters that compare the market (`needs_benchmark`);
+    it is data for one run, not a parameter, so it takes no part in comparing rules.
+    """
 
     entry: EntryRule = field(default_factory=NextOpenEntry)
     exits: tuple[ExitRule, ...] = field(default_factory=lambda: (TargetExit(), TimeExit()))
+    filters: tuple[EntryFilter, ...] = ()
+    benchmark_close: pd.Series | None = field(default=None, compare=False, repr=False)
 
     def __post_init__(self) -> None:
-        names = [rule.name for rule in self.exits]
-        repeated = sorted({name for name in names if names.count(name) > 1})
-        if repeated:
-            raise ValueError(f"Exit rule(s) given more than once: {', '.join(repeated)}")
+        _check_unique(self.exits, "Exit rule(s)")
+        _check_unique(self.filters, "Entry filter(s)")
+
+    @property
+    def needs_benchmark(self) -> bool:
+        return any(rule.needs_benchmark for rule in self.filters)
+
+    def with_benchmark(self, close: pd.Series | None) -> TradeRules:
+        return replace(self, benchmark_close=close)
 
     def prepare(self, bars: Bars, direction: Direction) -> PreparedRules:
+        inputs = FilterInputs(bars, self.benchmark_close)
+        allowed = np.ones(len(bars), dtype=bool)
+        for rule in self.filters:
+            allowed &= rule.allows(inputs, direction)
         return PreparedRules(
             bars=bars,
             direction=direction,
+            allowed=allowed,
             entry=self.entry.orders(bars, direction),
             exits=tuple(rule.prepare(bars, direction) for rule in self.exits),
         )
@@ -71,11 +96,15 @@ class EntryPlan:
 class PreparedRules:
     bars: Bars
     direction: Direction
+    allowed: np.ndarray  # True where every entry filter lets a signal trade
     entry: EntryOrders
     exits: tuple[TrackerFactory, ...]
 
     def plan(self, index: int, equity: float, config: BacktestConfig) -> EntryPlan | None:
-        """The order a signal at the close of bar `index` places; None when it has no price or size."""
+        """The order a signal at the close of bar `index` places; None when an entry filter blocks the signal
+        or it has no price or size."""
+        if not self.allowed[index]:
+            return None
         reference = float(self.entry.reference[index])
         level = float(self.entry.level[index])
         atr = float(self.bars.atr[index])
@@ -104,20 +133,27 @@ class RuleChoice:
 
 @dataclass(frozen=True)
 class RuleCatalog:
-    """The rules a backtest can choose from, and the ones used when a request names none."""
+    """The rules a backtest can choose from, and the ones used when a request names none (no filters by default)."""
 
     entries: RuleRegistry[EntryRule] = entry_rules
     exits: RuleRegistry[ExitRule] = exit_rules
+    filters: RuleRegistry[EntryFilter] = entry_filters
     default_entry: str = NextOpenEntry.name
     default_exits: tuple[str, ...] = (TargetExit.name, TimeExit.name)
 
-    def build(self, entry: RuleChoice | None = None, exits: Sequence[RuleChoice] | None = None) -> TradeRules:
+    def build(
+        self,
+        entry: RuleChoice | None = None,
+        exits: Sequence[RuleChoice] | None = None,
+        filters: Sequence[RuleChoice] = (),
+    ) -> TradeRules:
         """Rules with validated parameters. No exits given means the defaults; an empty list keeps only the stop."""
         entry_choice = entry or RuleChoice(self.default_entry)
         exit_choices = exits if exits is not None else [RuleChoice(name) for name in self.default_exits]
         return TradeRules(
             entry=self.entries.create(entry_choice.name, entry_choice.params),
             exits=tuple(self.exits.create(choice.name, choice.params) for choice in exit_choices),
+            filters=tuple(self.filters.create(choice.name, choice.params) for choice in filters),
         )
 
 

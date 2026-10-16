@@ -19,6 +19,7 @@ export type EdgeRowOut = Schemas["EdgeRowOut"];
 export type EdgeStatsOut = Schemas["EdgeStatsOut"];
 export type EngineRunOut = Schemas["EngineRunOut"];
 export type Family = Schemas["Family"];
+export type FilterRuleOut = Schemas["FilterRuleOut"];
 export type HitOut = Schemas["HitOut"];
 export type MetricsOut = Schemas["MetricsOut"];
 export type ParamKind = Schemas["ParamKind"];

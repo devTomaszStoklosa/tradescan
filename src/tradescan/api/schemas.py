@@ -91,6 +91,12 @@ class BacktestSetupIn(_Request):
     exits: list[RuleIn] | None = Field(
         None, description="Exit rules on top of the initial stop; omit for the default exits, [] for the stop only"
     )
+    filters: list[RuleIn] = Field(
+        default_factory=list, description="Entry filters; a signal trades only when every one allows it"
+    )
+    benchmark: str | None = Field(
+        None, description="Benchmark the market filter compares; omit for the configured benchmark"
+    )
     period: str | None = None
 
 
@@ -99,8 +105,12 @@ class BacktestIn(BacktestSetupIn):
 
 
 class SweepAxisIn(_Request):
-    target: SweepTarget = Field(description="What holds the parameter: the signal, the entry rule, an exit rule or a settings section")
-    owner: str | None = Field(None, description="The exit rule or settings section; omit for the signal and the entry rule")
+    target: SweepTarget = Field(
+        description="What holds the parameter: the signal, the entry rule, an exit rule, an entry filter or a settings section"
+    )
+    owner: str | None = Field(
+        None, description="The exit rule, entry filter or settings section; omit for the signal and the entry rule"
+    )
     name: str = Field(description="The parameter, e.g. oversold")
     values: list[float] = Field(min_length=MIN_VALUES, max_length=MAX_VALUES, description="The values to try, in order")
 
@@ -162,6 +172,10 @@ class RuleOut(BaseModel):
     params: list[ParamSpecOut]
 
 
+class FilterRuleOut(RuleOut):
+    needs_benchmark: bool = Field(description="True when the filter compares the benchmark, which a backtest then loads")
+
+
 class WatchlistOut(BaseModel):
     name: str
     tickers: list[str]
@@ -188,6 +202,7 @@ class ConfigOut(BaseModel):
     engines: list[str]
     entry_rules: list[RuleOut]
     exit_rules: list[RuleOut]
+    filter_rules: list[FilterRuleOut] = Field(description="Entry filters; a backtest uses none unless it names them")
     default_entry: str
     default_exits: list[str]
     sweep: SweepLimitsOut
@@ -382,6 +397,8 @@ class BacktestSetupOut(BaseModel):
     config: BacktestConfigOut
     entry: AppliedRuleOut
     exits: list[AppliedRuleOut] = Field(description="Exit rules on top of the initial stop, in the order given")
+    filters: list[AppliedRuleOut] = Field(description="Entry filters, in the order given")
+    benchmark: str | None = Field(description="The benchmark the filters compared; null when no filter reads one")
 
 
 class BacktestOut(BacktestSetupOut):

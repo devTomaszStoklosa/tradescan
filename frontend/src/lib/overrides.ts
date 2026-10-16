@@ -2,7 +2,7 @@
  * Per-run parameter overrides, built from the API's parameter declarations.
  *
  * Only values that differ from the default are kept, so URLs stay short and a run is fully described
- * by its link. Owners are settings sections ("risk"), signal names ("connors_rsi2_long") or trade rule names ("limit").
+ * by its link. Owners are settings sections ("risk"), signal names ("connors_rsi2_long") or trade rule names ("limit", "trend").
  */
 import type { ParamSpecOut, SettingsSectionOut, SignalOut } from "../api/client";
 
@@ -14,12 +14,13 @@ export type Overrides = Record<string, Values>;
 
 /**
  * URL prefixes: `set.risk.atr_mult=3`, `sig.donchian_breakout.period=30`, `set.scoring.family_weights.breakout=2`,
- * and for a backtest's trade rules `en.limit.offset_atr=1` and `ex.target.target_r=3`.
+ * and for a backtest's trade rules `en.limit.offset_atr=1`, `ex.target.target_r=3` and `fi.trend.period=100`.
  */
 export const SETTINGS_PREFIX = "set";
 export const SIGNALS_PREFIX = "sig";
 export const ENTRY_PREFIX = "en";
 export const EXIT_PREFIX = "ex";
+export const FILTER_PREFIX = "fi";
 
 export const EMPTY: Overrides = {};
 

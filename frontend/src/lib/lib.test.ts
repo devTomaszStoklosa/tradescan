@@ -99,10 +99,31 @@ describe("url params", () => {
         { name: "target", params: {} },
         { name: "time", params: {} },
       ],
+      filters: [],
+      benchmark: null,
     });
     expect(writeBacktestForm(form, config).toString()).toBe(
       "ticker=SPY&signal=golden_cross&eng=vectorized%2Ccerebro&set.risk.atr_mult=2.5&sig.golden_cross.fast=20",
     );
+  });
+
+  it("keeps entry filters, their parameters and the benchmark in the URL", () => {
+    const url = "ticker=SPY&signal=golden_cross&filter=trend,market&fi.trend.period=100&fi.adx.period=5&b=qqq";
+    const form = readBacktestForm(new URLSearchParams(url), config);
+    expect(form).toMatchObject({ filters: ["trend", "market"], filterParams: { trend: { period: 100 } }, benchmark: "QQQ" });
+    expect(backtestBody(form)).toMatchObject({
+      filters: [
+        { name: "trend", params: { period: 100 } },
+        { name: "market", params: {} },
+      ],
+      benchmark: "QQQ",
+    });
+    expect(writeBacktestForm(form, config).toString()).toBe(
+      "ticker=SPY&signal=golden_cross&eng=vectorized&filter=trend%2Cmarket&b=QQQ&fi.trend.period=100",
+    );
+    const none = readBacktestForm(new URLSearchParams("ticker=SPY&signal=golden_cross"), config);
+    expect(none).toMatchObject({ filters: [], filterParams: {}, benchmark: "" });
+    expect(writeBacktestForm(none, config).has("filter")).toBe(false);
   });
 
   it("keeps trade rules in the URL only when they differ from the defaults", () => {

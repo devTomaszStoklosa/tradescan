@@ -254,6 +254,16 @@ export interface components {
              * @description Exit rules on top of the initial stop; omit for the default exits, [] for the stop only
              */
             exits?: components["schemas"]["RuleIn"][] | null;
+            /**
+             * Filters
+             * @description Entry filters; a signal trades only when every one allows it
+             */
+            filters?: components["schemas"]["RuleIn"][];
+            /**
+             * Benchmark
+             * @description Benchmark the market filter compares; omit for the configured benchmark
+             */
+            benchmark?: string | null;
             /** Period */
             period?: string | null;
             /** Engines */
@@ -289,6 +299,16 @@ export interface components {
              * @description Exit rules on top of the initial stop, in the order given
              */
             exits: components["schemas"]["AppliedRuleOut"][];
+            /**
+             * Filters
+             * @description Entry filters, in the order given
+             */
+            filters: components["schemas"]["AppliedRuleOut"][];
+            /**
+             * Benchmark
+             * @description The benchmark the filters compared; null when no filter reads one
+             */
+            benchmark: string | null;
             /** @description The in-sample/out-of-sample split; null when the history is too short */
             split: components["schemas"]["SplitOut"] | null;
             /** Buy Hold */
@@ -376,6 +396,11 @@ export interface components {
             entry_rules: components["schemas"]["RuleOut"][];
             /** Exit Rules */
             exit_rules: components["schemas"]["RuleOut"][];
+            /**
+             * Filter Rules
+             * @description Entry filters; a backtest uses none unless it names them
+             */
+            filter_rules: components["schemas"]["FilterRuleOut"][];
             /** Default Entry */
             default_entry: string;
             /** Default Exits */
@@ -489,6 +514,30 @@ export interface components {
          * @enum {string}
          */
         Family: "trend" | "momentum" | "breakout" | "mean_reversion" | "volume" | "pattern";
+        /** FilterRuleOut */
+        FilterRuleOut: {
+            /** Name */
+            name: string;
+            /** Label */
+            label: string;
+            /**
+             * Description
+             * @description The rule with the default parameters filled in
+             */
+            description: string;
+            /**
+             * Template
+             * @description The rule with {parameter} placeholders; format specs "", "g" and ".0%"
+             */
+            template: string;
+            /** Params */
+            params: components["schemas"]["ParamSpecOut"][];
+            /**
+             * Needs Benchmark
+             * @description True when the filter compares the benchmark, which a backtest then loads
+             */
+            needs_benchmark: boolean;
+        };
         /** FiredSignalOut */
         FiredSignalOut: {
             /** Name */
@@ -836,11 +885,11 @@ export interface components {
         };
         /** SweepAxisIn */
         SweepAxisIn: {
-            /** @description What holds the parameter: the signal, the entry rule, an exit rule or a settings section */
+            /** @description What holds the parameter: the signal, the entry rule, an exit rule, an entry filter or a settings section */
             target: components["schemas"]["SweepTarget"];
             /**
              * Owner
-             * @description The exit rule or settings section; omit for the signal and the entry rule
+             * @description The exit rule, entry filter or settings section; omit for the signal and the entry rule
              */
             owner?: string | null;
             /**
@@ -925,6 +974,16 @@ export interface components {
              * @description Exit rules on top of the initial stop; omit for the default exits, [] for the stop only
              */
             exits?: components["schemas"]["RuleIn"][] | null;
+            /**
+             * Filters
+             * @description Entry filters; a signal trades only when every one allows it
+             */
+            filters?: components["schemas"]["RuleIn"][];
+            /**
+             * Benchmark
+             * @description Benchmark the market filter compares; omit for the configured benchmark
+             */
+            benchmark?: string | null;
             /** Period */
             period?: string | null;
             /**
@@ -990,6 +1049,16 @@ export interface components {
              */
             exits: components["schemas"]["AppliedRuleOut"][];
             /**
+             * Filters
+             * @description Entry filters, in the order given
+             */
+            filters: components["schemas"]["AppliedRuleOut"][];
+            /**
+             * Benchmark
+             * @description The benchmark the filters compared; null when no filter reads one
+             */
+            benchmark: string | null;
+            /**
              * Engine
              * @description Sweeps run on this engine
              */
@@ -1007,7 +1076,7 @@ export interface components {
          * SweepTarget
          * @enum {string}
          */
-        SweepTarget: "signal" | "entry" | "exit" | "settings";
+        SweepTarget: "signal" | "entry" | "exit" | "filter" | "settings";
         /** TradeOut */
         TradeOut: {
             direction: components["schemas"]["Direction"];

@@ -60,13 +60,17 @@ function paramsOf(target: SweepTarget, owner: string | null, group: string, spec
 }
 
 /**
- * Every single-number parameter of the setup the Backtest form offers: the signal's, the entry rule's,
- * the active exits', the stop's and the costs'. The out-of-sample share is left out: it defines the split.
+ * Every single-number parameter of the setup the Backtest form offers: the signal's, the active filters',
+ * the entry rule's, the active exits', the stop's and the costs'. The out-of-sample share is left out: it defines the split.
  */
 export function sweepParams(setup: BacktestSetup, config: ConfigOut, signals: SignalOut[]): SweepParam[] {
   const result: SweepParam[] = [];
   const signal = signals.find((item) => item.name === setup.signal);
   if (signal) result.push(...paramsOf("signal", null, `Signal: ${signal.name}`, signal.params, setup.signalParams));
+  for (const name of setup.filters) {
+    const filter = findRule(config.filter_rules, name);
+    if (filter) result.push(...paramsOf("filter", filter.name, `Filter: ${filter.label}`, filter.params, setup.filterParams[filter.name]));
+  }
   const entry = findRule(config.entry_rules, setup.entry);
   if (entry) result.push(...paramsOf("entry", null, `Entry: ${entry.label}`, entry.params, setup.entryParams));
   for (const name of setup.exits) {
@@ -142,8 +146,8 @@ export function combinations(ranges: AxisRange[]): number | null {
 
 /** A sweep of `setup` with no axes picked yet. */
 export function newSweepForm(setup: BacktestSetup): SweepForm {
-  const { ticker, signal, period, settings, signalParams, entry, entryParams, exits, exitParams } = setup;
-  return { ticker, signal, period, settings, signalParams, entry, entryParams, exits, exitParams, axes: [] };
+  const { ticker, signal, period, settings, signalParams, entry, entryParams, exits, exitParams, filters, filterParams, benchmark } = setup;
+  return { ticker, signal, period, settings, signalParams, entry, entryParams, exits, exitParams, filters, filterParams, benchmark, axes: [] };
 }
 
 const number = (text: string | undefined): number | null => {
@@ -191,6 +195,9 @@ export function sweepBody(form: SweepForm, params: SweepParam[], limits: ConfigO
   return { ...setup, axes };
 }
 
+/** Where the setup keeps the values of parameters that belong to an owner, by sweep target. */
+const GROUPS: Partial<Record<SweepTarget, "exitParams" | "filterParams">> = { exit: "exitParams", filter: "filterParams" };
+
 /** The setup with one combination's values, e.g. to open it on the Backtest page. */
 export function withCombination(setup: BacktestSetup, params: SweepParam[], values: number[]): BacktestSetup {
   let next = setup;
@@ -201,7 +208,7 @@ export function withCombination(setup: BacktestSetup, params: SweepParam[], valu
     else if (param.target === "entry") next = { ...next, entryParams: withValue(next.entryParams, param.spec, value) };
     else {
       const owner = param.owner ?? "";
-      const group = param.target === "exit" ? "exitParams" : "settings";
+      const group = GROUPS[param.target] ?? "settings";
       next = { ...next, [group]: withOwner(next[group], owner, withValue(next[group][owner] ?? {}, param.spec, value)) };
     }
   });

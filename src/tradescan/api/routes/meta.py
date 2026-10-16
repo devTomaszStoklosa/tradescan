@@ -7,7 +7,7 @@ from fastapi import APIRouter
 from tradescan import __version__
 from tradescan.api import schemas
 from tradescan.api.context import ApiContext
-from tradescan.api.mappers import rule_out, section_out
+from tradescan.api.mappers import filter_rule_out, rule_out, section_out
 from tradescan.backtest import sweep
 from tradescan.backtest.oos import MIN_PERIOD_BARS
 from tradescan.config import adjustable_sections
@@ -36,6 +36,7 @@ def build_router(context: ApiContext) -> APIRouter:
             engines=context.use_cases.backtest.engine_names,
             entry_rules=[rule_out(rule) for rule in rules.entries.classes()],
             exit_rules=[rule_out(rule) for rule in rules.exits.classes()],
+            filter_rules=[filter_rule_out(rule) for rule in rules.filters.classes()],
             default_entry=rules.default_entry,
             default_exits=list(rules.default_exits),
             sweep=schemas.SweepLimitsOut(

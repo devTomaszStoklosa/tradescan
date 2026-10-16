@@ -1,4 +1,4 @@
-/** The fields of a backtest setup: ticker, signal and its parameters, trade rules and costs. Shared by Backtest and Sweep. */
+/** The fields of a backtest setup: ticker, signal and its parameters, entry filters, trade rules and costs. Shared by Backtest and Sweep. */
 import { useMemo } from "react";
 
 import type { ConfigOut, SignalOut } from "../api/client";
@@ -7,7 +7,7 @@ import { describeSignal, pickSections, type Overrides } from "../lib/overrides";
 import type { BacktestSetup } from "../lib/params";
 import { ParamFields, SectionFields } from "./ParamFields";
 import { FAMILY_LABELS } from "./SignalChip";
-import { EntryFields, ExitFields, GroupHeading } from "./TradeRuleFields";
+import { EntryFields, ExitFields, FilterFields, GroupHeading } from "./TradeRuleFields";
 import { Field, Input, Select } from "./ui";
 
 function SignalSelect({ value, onChange, signals }: { value: string; onChange: (value: string) => void; signals: SignalOut[] }) {
@@ -81,6 +81,15 @@ export function BacktestSetupFields<T extends BacktestSetup>({
       <section className="space-y-3">
         <h2 className="text-sm font-semibold">Trade rules</h2>
         <div className="grid gap-x-6 gap-y-4 md:grid-cols-2 lg:grid-cols-3">
+          <FilterFields
+            rules={config.filter_rules}
+            filters={draft.filters}
+            params={draft.filterParams}
+            benchmark={draft.benchmark}
+            defaultBenchmark={config.benchmark}
+            onChange={(filters, filterParams) => onChange({ ...draft, filters, filterParams })}
+            onBenchmarkChange={(benchmark) => set("benchmark", benchmark)}
+          />
           <EntryFields
             rules={config.entry_rules}
             entry={draft.entry}

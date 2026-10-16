@@ -32,6 +32,8 @@ def backtest_request(body: schemas.BacktestSetupIn, engines: tuple[str, ...]) ->
         settings=body.settings,
         entry=_choice(body.entry) if body.entry else None,
         exits=None if body.exits is None else tuple(_choice(rule) for rule in body.exits),
+        filters=tuple(_choice(rule) for rule in body.filters),
+        benchmark=body.benchmark,
         period=body.period,
     )
 

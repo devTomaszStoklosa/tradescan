@@ -30,9 +30,12 @@ export interface RunSnapshot {
   params: Record<string, number | number[]>;
   /** The stop, costs, account and out-of-sample share the run used. */
   config: RunConfig;
-  /** The entry rule and the exit rules the run used, with their parameters. */
+  /** The entry rule, the exit rules and the entry filters the run used, with their parameters. */
   entry: AppliedRuleOut;
   exits: AppliedRuleOut[];
+  filters: AppliedRuleOut[];
+  /** The benchmark the filters compared; null when no filter read one. */
+  benchmark: string | null;
   metrics: MetricsOut;
   /** Null for runs pinned before out-of-sample results, or with too short a history to split. */
   split: RunSplit | null;
@@ -75,6 +78,8 @@ export function snapshotRun(result: BacktestOut, engine: string, form: BacktestF
     config: result.config,
     entry: result.entry,
     exits: result.exits,
+    filters: result.filters,
+    benchmark: result.benchmark,
     metrics: run.metrics,
     split: result.split && run.in_sample && run.out_of_sample ? { ...result.split, in_sample: run.in_sample, out_of_sample: run.out_of_sample } : null,
     equity: run.equity,
@@ -97,6 +102,8 @@ export function runKey(run: RunSnapshot): string {
     sortedEntries(run.config),
     rule(run.entry),
     run.exits.map(rule),
+    run.filters.map(rule),
+    run.benchmark,
   ]);
 }
 

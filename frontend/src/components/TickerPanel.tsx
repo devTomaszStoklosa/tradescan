@@ -161,6 +161,7 @@ export function TickerPanel({
                       period: "",
                       settings: pickFields(settings, BACKTEST_FIELDS), // the scan's ATR stop rule
                       signalParams: signalParams[item.name] ?? {},
+                      benchmark: "",
                       ...defaultRules(defaults),
                     },
                     defaults,

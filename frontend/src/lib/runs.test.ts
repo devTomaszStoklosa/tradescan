@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { appliedRule, backtestForm, backtestResult, entryRules, exitRules, makeRun } from "../test/fixtures";
+import { appliedRule, backtestForm, backtestResult, entryRules, exitRules, filterRules, makeRun } from "../test/fixtures";
 import { freeSlot, MAX_RUNS, mergeRuns, runKey, snapshotRun, toPinnedRun } from "./runs";
 import { decodeRuns, encodeRuns, parseRunsFile, RUNS_FILE_VERSION } from "./runsFile";
 
@@ -44,6 +44,13 @@ describe("runKey", () => {
     expect(runKey(makeRun(1, { exits: [appliedRule(exitRules[0]!, { target_r: 3 }), run.exits[1]!] }))).not.toBe(runKey(run));
     expect(runKey(makeRun(1, { exits: [run.exits[0]!] }))).not.toBe(runKey(run));
     expect(runKey(makeRun(1, { entry: { ...run.entry, description: "other words" } }))).toBe(runKey(run));
+  });
+
+  it("tells runs apart by their entry filters and benchmark", () => {
+    const run = makeRun(1, { filters: [appliedRule(filterRules[1]!)], benchmark: "SPY" });
+    expect(runKey(run)).not.toBe(runKey(makeRun(1)));
+    expect(runKey(makeRun(1, { filters: [appliedRule(filterRules[1]!, { period: 100 })], benchmark: "SPY" }))).not.toBe(runKey(run));
+    expect(runKey(makeRun(1, { filters: run.filters, benchmark: "QQQ" }))).not.toBe(runKey(run));
   });
 });
 
@@ -103,6 +110,14 @@ describe("runs file", () => {
     expect(run!.split).toBeNull();
     expect(run!.config).not.toHaveProperty("oos_pct");
     expect(run!.metrics).toEqual(makeRun(1).metrics);
+  });
+
+  it("upgrades version 3 runs, which had no entry filters", () => {
+    const { filters: _filters, benchmark: _benchmark, ...current } = encodeRuns([makeRun(1)]).runs[0]!;
+    const { filters: _a, filterParams: _b, benchmark: _c, ...form } = current.form;
+    const [run] = decodeRuns({ version: 3, runs: [{ ...current, form }] });
+    expect(run).toMatchObject({ filters: [], benchmark: null, form: { filters: [], filterParams: {}, benchmark: "" } });
+    expect(runKey(run!)).toBe(runKey(makeRun(1)));
   });
 
   it("drops fields it does not know", () => {
