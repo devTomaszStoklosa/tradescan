@@ -31,8 +31,8 @@ URL, pinned runs, Compare and the sweep pick them up.
 | O1 | Parameter sweep and out-of-sample split | done ([#12], [PR #13]) | | F1 |
 | T1 | Trailing, channel and breakeven stops | done ([#14], [PR #15]) | | F1 |
 | M2 | RSI, SMA and Supertrend exits | done ([#16], [PR #17]) | | F1 |
-| B1 | Breakout exits: failed breakout, no progress | in progress ([#19]) | S | F1 |
-| F2 | Entry filters on any signal | planned | M | F1 |
+| B1 | Breakout exits: failed breakout, no progress | done ([#19], [PR #21]) | | F1 |
+| F2 | Entry filters on any signal | done ([#22], [PR #23]) | | F1 |
 | M1 | Mean-reversion signals | planned | S | |
 | O2 | One setup over a watchlist | planned | M | |
 | O3 | Monte Carlo of trades | planned | S | |
@@ -50,15 +50,6 @@ are weak. M1 is small. O2 and O3 show whether a result is robust before the larg
 which rotation (R1) needs. Pyramiding (T2), walk-forward analysis (O4) and the trade journal (O6) follow.
 
 ## Open items
-
-**B1 · Breakout exits.** Two exit rules that leave at the next open: `failed_breakout`, when a close in
-the first bars falls back beyond the entry reference by more than a buffer in ATRs, and `no_progress`,
-when the close a set number of bars in has not gained a minimum in R from the fill.
-
-**F2 · Entry filters.** Conditions that gate any signal, combinable like exit rules and evaluated at the
-signal bar: a trend filter (close above or below SMA(n)), a market regime filter (benchmark above or below
-its SMA200), an ADX minimum, a volume minimum (a multiple of the average volume) and an ATR% band. Both
-engines, the API, the UI (chips and fields like the exits), the URL, Compare and the sweep.
 
 **M1 · Mean-reversion signals.** New signals for the mean-reversion family: IBS (close in the bottom or
 top of the bar's range), N consecutive down or up closes, cumulative RSI(2) over several bars, and
@@ -103,3 +94,6 @@ server instead of only in the browser, with notes per trade and the backtest tha
 [#16]: https://github.com/devTomaszStoklosa/tradescan/issues/16
 [PR #17]: https://github.com/devTomaszStoklosa/tradescan/pull/17
 [#19]: https://github.com/devTomaszStoklosa/tradescan/issues/19
+[PR #21]: https://github.com/devTomaszStoklosa/tradescan/pull/21
+[#22]: https://github.com/devTomaszStoklosa/tradescan/issues/22
+[PR #23]: https://github.com/devTomaszStoklosa/tradescan/pull/23
