@@ -27,10 +27,14 @@ from tradescan.report.tables import (
     hits_to_frame,
     metrics_to_frame,
     periods_to_frame,
+    pooled_frame,
     signals_to_frame,
+    spread_frame,
     sweep_cells_frame,
     sweep_to_frame,
     trades_to_frame,
+    watchlist_export_frame,
+    watchlist_rows_frame,
 )
 from tradescan.services import (
     BacktestRequest,
@@ -40,6 +44,7 @@ from tradescan.services import (
     SignalFilter,
     SweepRequest,
     UseCases,
+    WatchlistBacktestRequest,
     build_scorer,
     build_use_cases,
     default_engines,
@@ -115,10 +120,10 @@ def _exits(args: argparse.Namespace) -> tuple[RuleChoice, ...]:
     return tuple(RuleChoice(name, params.get(name, {})) for name in names)
 
 
-def _backtest_request(args: argparse.Namespace, engines: tuple[str, ...]) -> BacktestRequest:
-    """The setup flags shared by `backtest` and `sweep`."""
+def _backtest_request(args: argparse.Namespace, ticker: str, engines: tuple[str, ...]) -> BacktestRequest:
+    """The setup flags shared by `backtest`, `sweep` and `watchlist-backtest`."""
     return BacktestRequest(
-        ticker=args.ticker,
+        ticker=ticker,
         signal=args.signal,
         engines=engines,
         settings=_overrides(
@@ -262,7 +267,7 @@ def cmd_edge(args: argparse.Namespace, settings: Settings, report: ConsoleReport
 def cmd_backtest(args: argparse.Namespace, settings: Settings, report: ConsoleReport) -> int:
     _loading(report, 1, args.period or settings.backtest.period)
     engines = tuple(default_engines()) if args.engine == "both" else (args.engine,)
-    result = _use_cases(settings, args).backtest.run(_backtest_request(args, engines))
+    result = _use_cases(settings, args).backtest.run(_backtest_request(args, args.ticker, engines))
     config, signal, rules = result.config, result.signal, result.rules
     exits = "; ".join(rule.describe() for rule in rules.exits) or "none"
     filters = "; ".join(rule.describe() for rule in rules.filters) or "none"
@@ -300,7 +305,7 @@ def cmd_backtest(args: argparse.Namespace, settings: Settings, report: ConsoleRe
 def cmd_sweep(args: argparse.Namespace, settings: Settings, report: ConsoleReport) -> int:
     _loading(report, 1, args.period or settings.backtest.period)
     axes = tuple(_axis(text) for text in args.axis)
-    result = _use_cases(settings, args).sweep.run(SweepRequest(setup=_backtest_request(args, ()), axes=axes))
+    result = _use_cases(settings, args).sweep.run(SweepRequest(setup=_backtest_request(args, args.ticker, ()), axes=axes))
     signal, split = result.base.signal, result.split
     names = " x ".join(f"{item.axis.name} ({item.spec.label})" for item in result.parameters)
     report.note(
@@ -320,6 +325,42 @@ def cmd_sweep(args: argparse.Namespace, settings: Settings, report: ConsoleRepor
     if errors:
         report.warning(f"{len(errors)} combination(s) could not run, e.g. {errors[0].error}")
     _export(report, sweep_cells_frame(result), args.export)
+    return 0
+
+
+def cmd_watchlist_backtest(args: argparse.Namespace, settings: Settings, report: ConsoleReport) -> int:
+    universe = _universe(args)
+    _loading(report, len(universe.tickers), args.period or settings.backtest.period)
+    result = _use_cases(settings, args).watchlist_backtest.run(
+        WatchlistBacktestRequest(universe=universe, setup=_backtest_request(args, "", ()))
+    )
+    _missing(report, result.missing)
+    base, metric = result.base, args.metric
+    signal, config, rules = base.signal, base.config, base.rules
+    exits = "; ".join(rule.describe() for rule in rules.exits) or "none"
+    filters = "; ".join(rule.describe() for rule in rules.filters) or "none"
+    benchmark = f" (benchmark {base.benchmark})" if base.benchmark else ""
+    report.note(
+        f"{signal.name} ({signal.direction.value}) on {len(result.rows)} tickers of {universe.name}, vectorized engine. "
+        f"Filters: {filters}{benchmark}. Entry: {rules.entry.describe()}. Stop {config.atr_mult:g} ATR, exits: {exits}. "
+        f"Risk {config.risk_pct:g}%/trade, costs {config.commission_pct:g}% + {config.slippage_pct:g}% slippage"
+    )
+    rows = watchlist_rows_frame(result, metric)
+    shown = rows if args.top <= 0 else rows.head(args.top)
+    report.frame(
+        shown,
+        title=f"{len(shown)} of {len(rows)} tickers, best {metric} first",
+        caption=f"each ticker split at its own last {config.oos_pct:g}%; '-' = too little history to split"
+        + ("" if len(shown) == len(rows) else "; --top 0 shows all, --export saves all"),
+    )
+    report.frame(
+        spread_frame(result, metric),
+        title=f"Spread of {metric} across tickers",
+        caption=f"tickers without a value (e.g. no trades) are left out; fewer than {FEW_TRADES} trades is noise",
+        show_index=True,
+    )
+    report.frame(pooled_frame(result), title="All tickers' trades pooled, in R", show_index=True)
+    _export(report, watchlist_export_frame(result), args.export)
     return 0
 
 
@@ -406,7 +447,7 @@ def _add_account_args(parser: argparse.ArgumentParser) -> None:
 
 
 def _add_backtest_setup_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("ticker")
+    """Everything a backtest setup takes apart from the ticker."""
     parser.add_argument("signal", help="signal name, see list-signals")
     _add_data_args(parser)
     _add_account_args(parser)
@@ -471,6 +512,7 @@ def build_parser() -> argparse.ArgumentParser:
     edge.set_defaults(handler=cmd_edge)
 
     backtest = commands.add_parser("backtest", help="backtest one signal on one ticker")
+    backtest.add_argument("ticker")
     _add_backtest_setup_args(backtest)
     backtest.add_argument("--engine", choices=ENGINE_CHOICES, default="vectorized")
     backtest.add_argument("--trades", type=int, default=10, help="recent trades to show")
@@ -478,6 +520,7 @@ def build_parser() -> argparse.ArgumentParser:
     backtest.set_defaults(handler=cmd_backtest)
 
     sweep = commands.add_parser("sweep", help="backtest one or two parameters over a range, in-sample and out-of-sample")
+    sweep.add_argument("ticker")
     _add_backtest_setup_args(sweep)
     sweep.add_argument(
         "--axis",
@@ -491,6 +534,18 @@ def build_parser() -> argparse.ArgumentParser:
     sweep.add_argument("--metric", choices=METRIC_CHOICES, default="sharpe", help="metric shown in the grids")
     sweep.add_argument("--export", help="save every combination with both periods' metrics to .csv or .json")
     sweep.set_defaults(handler=cmd_sweep)
+
+    watchlist_backtest = commands.add_parser(
+        "watchlist-backtest", help="backtest one setup on every ticker of a watchlist, in-sample and out-of-sample"
+    )
+    _add_backtest_setup_args(watchlist_backtest)
+    _add_universe_args(watchlist_backtest)
+    watchlist_backtest.add_argument(
+        "--metric", choices=METRIC_CHOICES, default="expectancy_r", help="metric the tickers are ranked and spread by"
+    )
+    watchlist_backtest.add_argument("--top", type=int, default=25, help="tickers to show, best first (0: all)")
+    watchlist_backtest.add_argument("--export", help="save every ticker with every period's metrics to .csv or .json")
+    watchlist_backtest.set_defaults(handler=cmd_watchlist_backtest)
 
     universes = commands.add_parser("update-universes", help="refresh the S&P 500 and Nasdaq-100 watchlists from Wikipedia")
     universes.add_argument("--only", help=f"comma separated: {', '.join(source.name for source in SOURCES)}")

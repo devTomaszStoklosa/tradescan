@@ -17,15 +17,15 @@ def build_router(context: ApiContext) -> APIRouter:
     @router.post("/backtest", response_model=schemas.BacktestOut)
     def backtest(body: schemas.BacktestIn) -> schemas.BacktestOut:
         context.check_signals([body.signal])
-        report = context.use_cases.backtest.run(backtest_request(body, tuple(body.engines)))
+        report = context.use_cases.backtest.run(backtest_request(body, body.ticker, tuple(body.engines)))
         return backtest_out(report)
 
     return router
 
 
-def backtest_request(body: schemas.BacktestSetupIn, engines: tuple[str, ...]) -> BacktestRequest:
+def backtest_request(body: schemas.BacktestRulesIn, ticker: str, engines: tuple[str, ...]) -> BacktestRequest:
     return BacktestRequest(
-        ticker=body.ticker,
+        ticker=ticker,
         signal=body.signal,
         engines=engines,
         params=body.params,

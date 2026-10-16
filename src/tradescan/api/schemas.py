@@ -8,6 +8,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from tradescan.backtest.sweep import MAX_VALUES, MIN_VALUES, SweepTarget
+from tradescan.backtest.tickers import Period
 from tradescan.params import ParamKind
 from tradescan.signals.base import Direction, Family
 
@@ -76,10 +77,9 @@ class RuleIn(_Request):
     params: SignalParamsIn = Field(default_factory=dict, description="The rule's parameters, e.g. {\"target_r\": 3}")
 
 
-class BacktestSetupIn(_Request):
-    """One backtest's setup, shared by a backtest and a sweep."""
+class BacktestRulesIn(_Request):
+    """What a backtest tests apart from the ticker, shared by a backtest, a sweep and a watchlist backtest."""
 
-    ticker: str = Field(min_length=1)
     signal: str
     params: SignalParamsIn = Field(default_factory=dict, description="The signal's parameters, e.g. {\"period\": 30}")
     settings: SettingsIn = Field(
@@ -100,6 +100,12 @@ class BacktestSetupIn(_Request):
     period: str | None = None
 
 
+class BacktestSetupIn(BacktestRulesIn):
+    """One backtest's setup, shared by a backtest and a sweep."""
+
+    ticker: str = Field(min_length=1)
+
+
 class BacktestIn(BacktestSetupIn):
     engines: list[str] = Field(default_factory=lambda: ["vectorized"], min_length=1)
 
@@ -117,6 +123,12 @@ class SweepAxisIn(_Request):
 
 class SweepIn(BacktestSetupIn):
     axes: list[SweepAxisIn] = Field(min_length=1, description="One or two parameters; the first changes slowest")
+
+
+class WatchlistBacktestIn(UniverseIn, BacktestRulesIn):
+    benchmark: str | None = Field(
+        None, description="Benchmark the market filter compares; omit for the watchlist's, else the configured benchmark"
+    )
 
 
 class ChartIn(_Request):
@@ -386,19 +398,22 @@ class SplitOut(BaseModel):
     out_of_sample_end: str
 
 
-class BacktestSetupOut(BaseModel):
-    ticker: str
+class BacktestRulesOut(BaseModel):
     signal: str
     direction: Direction
     description: str = Field(description="The signal's rule with this run's parameters")
     params: dict[str, float | list[float]] = Field(description="The signal's parameters used in this run")
-    start: str
-    end: str
     config: BacktestConfigOut
     entry: AppliedRuleOut
     exits: list[AppliedRuleOut] = Field(description="Exit rules on top of the initial stop, in the order given")
     filters: list[AppliedRuleOut] = Field(description="Entry filters, in the order given")
     benchmark: str | None = Field(description="The benchmark the filters compared; null when no filter reads one")
+
+
+class BacktestSetupOut(BacktestRulesOut):
+    ticker: str
+    start: str
+    end: str
 
 
 class BacktestOut(BacktestSetupOut):
@@ -431,6 +446,58 @@ class SweepOut(BacktestSetupOut):
     split: SplitOut
     axes: list[SweepAxisOut]
     cells: list[SweepCellOut] = Field(description="Every combination; the first axis changes slowest")
+
+
+# ---------------------------------------------------------------------------
+# Watchlist backtest
+
+
+class TickerRunOut(BaseModel):
+    ticker: str
+    start: str
+    end: str
+    split: SplitOut | None = Field(description="This ticker's in-sample/out-of-sample split; null when its history is too short")
+    metrics: MetricsOut = Field(description="The full history")
+    in_sample: MetricsOut | None
+    out_of_sample: MetricsOut | None
+
+
+class PooledTradesOut(BaseModel):
+    trades: int
+    win_rate_pct: float | None
+    expectancy_r: float | None
+    profit_factor_r: float | None = Field(description="Gross R won / gross R lost")
+    profit_factor_infinite: bool = Field(description="True when there were winners and no losers")
+    sqn: float | None
+
+
+class MetricSpreadOut(BaseModel):
+    metric: str
+    tickers: int = Field(description="Tickers with a value; a trade metric has none for a ticker without trades")
+    median: float | None = Field(
+        description="This and the other values are null when no ticker has a value, or when they are infinite "
+        "(a profit factor without losers)"
+    )
+    p25: float | None
+    p75: float | None
+    minimum: float | None
+    maximum: float | None
+    above_break_even_pct: float | None = Field(description="Share of the tickers above break-even; null for metrics without one")
+
+
+class PeriodSummaryOut(BaseModel):
+    period: Period
+    tickers: int = Field(description="Tickers that have this period")
+    pooled: PooledTradesOut = Field(description="Every ticker's closed trades taken together")
+    spread: list[MetricSpreadOut] = Field(description="How each metric is spread across the tickers")
+
+
+class WatchlistBacktestOut(BacktestRulesOut):
+    universe: str
+    engine: str = Field(description="Every ticker runs on this engine")
+    rows: list[TickerRunOut] = Field(description="One per ticker with data, in watchlist order")
+    periods: list[PeriodSummaryOut] = Field(description="The full history, in-sample and out-of-sample")
+    missing: list[str] = Field(description="Tickers without data")
 
 
 # ---------------------------------------------------------------------------

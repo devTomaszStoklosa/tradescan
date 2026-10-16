@@ -51,7 +51,7 @@ def compute_metrics(
         win_rate_pct=float((pnls > 0).mean() * 100.0) if len(pnls) else math.nan,
         profit_factor=float(gross_win / gross_loss) if gross_loss > 0 else (math.inf if gross_win > 0 else math.nan),
         expectancy_r=float(r_multiples.mean()) if len(r_multiples) else math.nan,
-        sqn=_sqn(r_multiples),
+        sqn=sqn(r_multiples),
         exposure_pct=_exposure(trades, equity.index) * 100.0,
         buy_hold_pct=(close.iloc[-1] / close.iloc[0] - 1.0) * 100.0,
     )
@@ -70,7 +70,7 @@ def _ratio(mean: float, deviation: float, bars_per_year: int) -> float:
     return float(mean / deviation * math.sqrt(bars_per_year))
 
 
-def _sqn(r_multiples: np.ndarray) -> float:
+def sqn(r_multiples: np.ndarray) -> float:
     """Van Tharp's System Quality Number: sqrt(N) * mean(R) / std(R)."""
     if len(r_multiples) < 2 or r_multiples.std(ddof=1) == 0:
         return math.nan

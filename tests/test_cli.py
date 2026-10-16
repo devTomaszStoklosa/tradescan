@@ -96,6 +96,30 @@ def test_sweep_exports_every_combination(provider, tmp_path, capsys):
     assert {"is_sharpe", "oos_expectancy_r", "error"} <= set(cells.columns)
 
 
+def test_watchlist_backtest_ranks_tickers_and_exports_every_period(provider, tmp_path, capsys):
+    target = tmp_path / "tickers.csv"
+    code = cli.main([
+        "watchlist-backtest", "connors_rsi2_long", "-t", "AAA,BBB,CCC,ZZZ", "--filters", "market", "--top", "2",
+        "--metric", "sharpe", "--export", str(target),
+    ])  # fmt: skip
+    assert code == 0
+    output = " ".join(capsys.readouterr().out.split())  # without the console's line breaks
+    assert "No data for: ZZZ" in output and "3 tickers of custom" in output and "(benchmark SPY)" in output
+    assert "2 of 3 tickers, best sharpe first" in output and "Spread of sharpe across tickers" in output
+    assert "trades pooled, in R" in output
+    assert provider.calls[-1][0] == ("AAA", "BBB", "CCC", "ZZZ", "SPY")
+    rows = pd.read_csv(target)
+    assert list(rows["ticker"]) == ["AAA", "BBB", "CCC"]
+    assert {"start", "oos_start", "full_sharpe", "is_trades", "oos_expectancy_r"} <= set(rows.columns)
+    with pytest.raises(SystemExit):
+        cli.main(["watchlist-backtest", "connors_rsi2_long", "-t", "AAA", "--metric", "nope"])
+
+
+def test_backtest_and_sweep_still_take_a_ticker(provider):
+    assert cli.build_parser().parse_args(["backtest", "AAA", "connors_rsi2_long"]).ticker == "AAA"
+    assert cli.build_parser().parse_args(["sweep", "AAA", "connors_rsi2_long", "--axis", "signal.oversold=5,10"]).signal == "connors_rsi2_long"
+
+
 @pytest.mark.parametrize(
     "axis",
     ["oversold=5:20:5", "signal.oversold", "nope.oversold=1,2", "signal.oversold=5:1:1", "signal.oversold=1:100:1", "signal.oversold=a,b"],
