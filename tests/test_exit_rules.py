@@ -1,4 +1,5 @@
-"""Levels of the trailing, channel and breakeven stops and the indicator exits, close by close, on hand-made bars."""
+"""Levels of the trailing, channel and breakeven stops and the indicator and breakout exits, close by close, on
+hand-made bars."""
 
 import math
 
@@ -10,6 +11,8 @@ from tradescan.backtest.exits import (
     BreakevenStop,
     ChannelStop,
     ExitRule,
+    FailedBreakoutExit,
+    NoProgressExit,
     OpenTrade,
     RsiExit,
     SmaRevertExit,
@@ -85,9 +88,11 @@ def test_breakeven_lock_must_be_below_the_trigger():
     assert exit_rules.create("breakeven", {"trigger_r": 2, "lock_r": 1.5}).lock_r == 1.5
 
 
-def _exits(rule: ExitRule, bars: Bars, direction=Direction.LONG, entry_index=0) -> list[bool]:
+def _exits(
+    rule: ExitRule, bars: Bars, direction=Direction.LONG, entry_index=0, entry_price=100.0, reference=100.0, risk=4.0
+) -> list[bool]:
     """Whether the rule asks to exit at the next open, at every close from the entry bar on."""
-    trade = OpenTrade(direction, entry_index, 100.0, 100.0, 100.0 - direction.sign * 4.0, 4.0)
+    trade = OpenTrade(direction, entry_index, entry_price, reference, reference - direction.sign * risk, risk)
     tracker = rule.prepare(bars, direction)(trade)
     orders = [tracker.orders(index) for index in range(entry_index, len(bars))]
     assert all(order.stop is None and order.target is None for order in orders)
@@ -123,3 +128,34 @@ def test_supertrend_exit_follows_the_direction_against_the_trade():
     np.testing.assert_array_equal(long, direction == -1)
     np.testing.assert_array_equal(short, direction == 1)
     assert long.any() and short.any() and not (long | short)[np.isnan(direction)].any()
+
+
+def test_failed_breakout_exit_checks_the_first_closes_against_the_reference():
+    # Reference 100 (the fill, 97, is not used), ATR 2: a 0.5 ATR buffer needs a close below 99. Only the first
+    # three closes count, the entry bar's included, so the closes of bars 4 and 5 never exit.
+    rule = FailedBreakoutExit(buffer_atr=0.5, within_bars=3)
+    long = _bars(close=[90, 100, 99, 98.9, 97, 95], atr=[2] * 6)
+    assert _exits(rule, long, entry_index=1, entry_price=97.0) == [False, False, True, False, False]
+    short = _bars(close=[110, 100, 101, 101.1, 103, 105], atr=[2] * 6)
+    assert _exits(rule, short, Direction.SHORT, entry_index=1, entry_price=103.0) == [False, False, True, False, False]
+    # Without a buffer any close below the reference exits, but not one on it.
+    bare = FailedBreakoutExit(buffer_atr=0.0, within_bars=3)
+    assert _exits(bare, long, entry_index=1) == [False, True, True, False, False]
+    assert _exits(FailedBreakoutExit(buffer_atr=0.0, within_bars=1), long, entry_index=2) == [True, False, False, False]
+    # Bars without an ATR never exit.
+    assert not any(_exits(bare, _bars(close=[90, 100, 99, 98.9, 97, 95], atr=[math.nan] * 6), entry_index=1))
+
+
+def test_no_progress_exit_checks_one_close_against_the_gain_from_the_fill():
+    # Fill 100 (the reference, 99, is not used), risk 4. The third close from the entry on (bar 3) has gained 1,
+    # which is below 0.5R (2) but not below 0.25R (1).
+    long = _bars(close=[90, 100, 102, 101, 103])
+    assert _exits(NoProgressExit(after_bars=3, min_r=0.5), long, entry_index=1, reference=99.0) == [False, False, True, False]
+    assert not any(_exits(NoProgressExit(after_bars=3, min_r=0.25), long, entry_index=1, reference=99.0))
+    short = _bars(close=[110, 100, 98, 99, 97])
+    assert _exits(NoProgressExit(after_bars=3, min_r=0.5), short, Direction.SHORT, entry_index=1, reference=101.0) == [
+        False, False, True, False
+    ]
+    # One bar means the entry bar's close; a later close with enough gain keeps the trade.
+    assert _exits(NoProgressExit(after_bars=1, min_r=0.5), long, entry_index=1) == [True, False, False, False]
+    assert not any(_exits(NoProgressExit(after_bars=4, min_r=0.5), long, entry_index=1))

@@ -371,3 +371,86 @@ class SupertrendExit(_ConditionExit):
     def _exits(self, bars: Bars, direction: Direction) -> np.ndarray:
         frame = pd.DataFrame({"high": bars.high, "low": bars.low, "close": bars.close})
         return (supertrend(frame, self.period, self.mult)["direction"] == -direction.sign).to_numpy(dtype=bool)
+
+
+@exit_rules.register
+@dataclass(frozen=True)
+class FailedBreakoutExit(ExitRule):
+    buffer_atr: float = param(
+        0.5, minimum=0.0, maximum=5.0, step=0.1, label="Buffer", unit="ATR",
+        help="How far the close has to fall below the entry reference (rise above it for shorts), in ATRs of that bar",
+    )
+    within_bars: int = param(
+        5, minimum=1, maximum=250, step=1, label="Checked for", unit="bars",
+        help="Closes checked, counting the entry bar",
+    )
+    name = "failed_breakout"
+    label = "Failed breakout exit"
+    description = (
+        "Exit at the next open once one of the first {within_bars} closes is more than {buffer_atr:g} ATR below the "
+        "entry reference (above it for shorts)"
+    )
+
+    def prepare(self, bars: Bars, direction: Direction) -> TrackerFactory:
+        buffer = self.buffer_atr * bars.atr
+
+        def track(trade: OpenTrade) -> ExitTracker:
+            last_index = trade.entry_index + self.within_bars - 1
+            return _FailedBreakout(bars.close, buffer, trade.direction.sign, trade.reference, last_index, self.name)
+
+        return track
+
+
+@dataclass(frozen=True, eq=False)
+class _FailedBreakout:
+    close: np.ndarray
+    buffer: np.ndarray  # in price, for every bar; NaN while the ATR is
+    sign: float
+    reference: float
+    last_index: int  # the last close checked
+    reason: str
+
+    def orders(self, index: int) -> ExitOrders:
+        failed = index <= self.last_index and self.sign * (self.reference - self.close[index]) > self.buffer[index]
+        return ExitOrders(at_open=self.reason) if failed else NO_ORDERS
+
+
+@exit_rules.register
+@dataclass(frozen=True)
+class NoProgressExit(ExitRule):
+    after_bars: int = param(
+        5, minimum=1, maximum=250, step=1, label="Check after", unit="bars",
+        help="The close checked, counting the entry bar",
+    )
+    min_r: float = param(
+        0.5, minimum=0.0, maximum=10.0, step=0.05, label="Minimum gain", unit="R",
+        help="From the fill price, as a multiple of the initial risk",
+    )
+    name = "no_progress"
+    label = "No-progress exit"
+    description = (
+        "Exit at the next open if the close {after_bars} bars in has gained less than {min_r:g}R from the fill"
+    )
+
+    def prepare(self, bars: Bars, direction: Direction) -> TrackerFactory:
+        def track(trade: OpenTrade) -> ExitTracker:
+            check_index = trade.entry_index + self.after_bars - 1
+            min_gain = self.min_r * trade.risk
+            sign = trade.direction.sign
+            return _NoProgress(bars.close, sign, trade.entry_price, min_gain, check_index, self.name)
+
+        return track
+
+
+@dataclass(frozen=True, eq=False)
+class _NoProgress:
+    close: np.ndarray
+    sign: float
+    entry_price: float
+    min_gain: float  # in price
+    check_index: int  # the only close checked
+    reason: str
+
+    def orders(self, index: int) -> ExitOrders:
+        stalled = index == self.check_index and self.sign * (self.close[index] - self.entry_price) < self.min_gain
+        return ExitOrders(at_open=self.reason) if stalled else NO_ORDERS
