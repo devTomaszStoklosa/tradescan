@@ -36,7 +36,7 @@ URL, pinned runs, Compare and the sweep pick them up.
 | M1 | Mean-reversion signals | done ([#24], [PR #25]) | | |
 | O2 | One setup over a watchlist | done ([#26], [PR #27]) | | |
 | O3 | Monte Carlo of trades | done ([#28], [PR #29]) | | |
-| F3 | Portfolio backtest | done ([#30]) | | |
+| F3 | Portfolio backtest | done ([#30], [PR #31]) | | |
 | R1 | Momentum rotation | planned | L | F3 |
 | T2 | Pyramiding | planned | M | F1 |
 | O4 | Walk-forward analysis | planned | M/L | O1 |
@@ -88,3 +88,4 @@ server instead of only in the browser, with notes per trade and the backtest tha
 [#28]: https://github.com/devTomaszStoklosa/tradescan/issues/28
 [PR #29]: https://github.com/devTomaszStoklosa/tradescan/pull/29
 [#30]: https://github.com/devTomaszStoklosa/tradescan/issues/30
+[PR #31]: https://github.com/devTomaszStoklosa/tradescan/pull/31
