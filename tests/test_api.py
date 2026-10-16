@@ -48,7 +48,7 @@ def test_meta_endpoints(client):
     assert "target_r" not in str(config["sections"])
 
     signals = client.get("/api/signals").json()
-    assert len(signals) == 30 and {"name", "family", "direction", "weight", "description", "template", "params"} <= set(signals[0])
+    assert len(signals) == 38 and {"name", "family", "direction", "weight", "description", "template", "params"} <= set(signals[0])
     rsi2 = next(signal for signal in signals if signal["name"] == "connors_rsi2_long")
     assert [param["name"] for param in rsi2["params"]] == ["rsi_period", "trend_period", "oversold"]
     assert rsi2["description"].startswith("RSI(2) < 10 while") and "{oversold:g}" in rsi2["template"]

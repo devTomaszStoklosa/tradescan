@@ -33,7 +33,7 @@ URL, pinned runs, Compare and the sweep pick them up.
 | M2 | RSI, SMA and Supertrend exits | done ([#16], [PR #17]) | | F1 |
 | B1 | Breakout exits: failed breakout, no progress | done ([#19], [PR #21]) | | F1 |
 | F2 | Entry filters on any signal | done ([#22], [PR #23]) | | F1 |
-| M1 | Mean-reversion signals | planned | S | |
+| M1 | Mean-reversion signals | done ([#24], [PR #25]) | | |
 | O2 | One setup over a watchlist | planned | M | |
 | O3 | Monte Carlo of trades | planned | S | |
 | F3 | Portfolio backtest | planned | L | |
@@ -50,10 +50,6 @@ are weak. M1 is small. O2 and O3 show whether a result is robust before the larg
 which rotation (R1) needs. Pyramiding (T2), walk-forward analysis (O4) and the trade journal (O6) follow.
 
 ## Open items
-
-**M1 · Mean-reversion signals.** New signals for the mean-reversion family: IBS (close in the bottom or
-top of the bar's range), N consecutive down or up closes, cumulative RSI(2) over several bars, and
-Bollinger %b beyond a level. Signal classes only.
 
 **O2 · One setup over a watchlist.** Run one backtest setup on every ticker of a watchlist, on all cores:
 a table of each ticker's metrics (in-sample and out-of-sample), the pooled trade statistics and the spread
@@ -97,3 +93,5 @@ server instead of only in the browser, with notes per trade and the backtest tha
 [PR #21]: https://github.com/devTomaszStoklosa/tradescan/pull/21
 [#22]: https://github.com/devTomaszStoklosa/tradescan/issues/22
 [PR #23]: https://github.com/devTomaszStoklosa/tradescan/pull/23
+[#24]: https://github.com/devTomaszStoklosa/tradescan/issues/24
+[PR #25]: https://github.com/devTomaszStoklosa/tradescan/pull/25

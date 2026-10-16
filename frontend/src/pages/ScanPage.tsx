@@ -209,7 +209,7 @@ export function ScanPage() {
         busy={scan.isFetching}
         onSubmit={(next) => setParams(writeScanForm(next))}
       />
-      {!body && <EmptyState title="Pick a universe and press Scan">The scan downloads daily bars, evaluates 30 signals and ranks the setups.</EmptyState>}
+      {!body && <EmptyState title="Pick a universe and press Scan">The scan downloads daily bars, evaluates 38 signals and ranks the setups.</EmptyState>}
       {scan.isLoading && <Loading message={loadingMessage} />}
       {scan.isError && <ErrorBox error={scan.error} onRetry={() => scan.refetch()} />}
       {scan.data && (

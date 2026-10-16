@@ -11,7 +11,7 @@ WALK = random_walk()
 
 
 def test_registry_contains_paired_library():
-    assert len(ALL_SIGNALS) == 30
+    assert len(ALL_SIGNALS) == 38
     longs = default_registry.select(directions={Direction.LONG})
     assert {signal.direction for signal in longs} == {Direction.LONG}
     breakouts = default_registry.select(families={Family.BREAKOUT})
@@ -70,6 +70,51 @@ def test_gap_and_go_needs_gap_body_and_volume():
     assert events.iloc[-1]
     quiet = default_registry.create("gap_and_go_up").events(make_ohlcv(close, opens=opens, volume=1_000.0))
     assert not quiet.iloc[-1]
+
+
+def test_ibs_fires_on_a_close_at_the_edge_of_the_range():
+    # IBS: 0.5, 0.1, 0.05, 0.85, 0.0, 0.5, then a bar without range.
+    close = [11.0, 10.2, 10.1, 11.7, 10.0, 11.0, 10.0]
+    high = [12.0] * 6 + [10.0]
+    df = pd.DataFrame(
+        {"open": 11.0, "high": high, "low": 10.0, "close": close, "volume": 1.0},
+        index=pd.bdate_range("2020-01-01", periods=len(close)),
+    )
+    assert np.flatnonzero(default_registry.create("ibs_low").events(df).to_numpy()).tolist() == [1, 4]
+    assert np.flatnonzero(default_registry.create("ibs_high").events(df).to_numpy()).tolist() == [3]
+    assert np.flatnonzero(default_registry.create("ibs_low", {"zone": 0.03}).events(df).to_numpy()).tolist() == [4]
+
+
+def test_streak_fires_once_on_the_nth_close_in_a_row():
+    df = make_ohlcv([10.0, 9.0, 8.0, 7.0, 6.0, 7.0, 6.0, 5.0, 4.0])
+    assert np.flatnonzero(default_registry.create("down_streak").events(df).to_numpy()).tolist() == [3, 8]
+    assert np.flatnonzero(default_registry.create("down_streak", {"bars": 4}).events(df).to_numpy()).tolist() == [4]
+    assert not default_registry.create("up_streak").events(df).any()
+
+
+def test_cumulative_rsi_fires_when_the_summed_rsi_drops_below_the_level():
+    close = list(np.linspace(100.0, 130.0, 31)) + [125.0, 120.0]
+    events = default_registry.create("cumulative_rsi_long").events(make_ohlcv(close))
+    # RSI(2) is 100 on the rise, then about 17 and 6: only the second drop takes the sum below 35.
+    assert np.flatnonzero(events.to_numpy()).tolist() == [32]
+
+
+@pytest.mark.parametrize(
+    ("name", "params"),
+    [("cumulative_rsi_long", {"oversold": 200}), ("cumulative_rsi_short", {"overbought": 250})],
+)
+def test_cumulative_rsi_level_must_be_reachable(name, params):
+    with pytest.raises(ValueError, match="must be below 200"):
+        default_registry.create(name, params)
+    assert default_registry.create(name, {**params, "bars": 3}).bars == 3
+
+
+def test_percent_b_fires_beyond_the_bands_but_not_without_width():
+    df = make_ohlcv([100.0, 101.0] * 15 + [95.0])
+    assert np.flatnonzero(default_registry.create("bb_pctb_low").events(df).to_numpy()).tolist() == [30]
+    flat = make_ohlcv([100.0] * 40)
+    assert not default_registry.create("bb_pctb_low").events(flat).any()
+    assert not default_registry.create("bb_pctb_high").events(flat).any()
 
 
 def test_condition_helpers():

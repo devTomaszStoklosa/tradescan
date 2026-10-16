@@ -67,6 +67,17 @@ def bollinger(close: pd.Series, period: int = 20, mult: float = 2.0) -> pd.DataF
     return pd.DataFrame({"mid": mid, "upper": mid + width, "lower": mid - width})
 
 
+def percent_b(close: pd.Series, period: int = 20, mult: float = 2.0) -> pd.Series:
+    """Where the close sits in its Bollinger Bands: 0 at the lower band, 1 at the upper, NaN without width."""
+    bands = bollinger(close, period, mult)
+    return (close - bands["lower"]) / (bands["upper"] - bands["lower"]).replace(0.0, np.nan)
+
+
+def internal_bar_strength(df: pd.DataFrame) -> pd.Series:
+    """Where the close sits in the bar's range: 0 at the low, 1 at the high, NaN for a bar without range."""
+    return (df["close"] - df["low"]) / (df["high"] - df["low"]).replace(0.0, np.nan)
+
+
 def keltner(df: pd.DataFrame, period: int = 20, mult: float = 1.5) -> pd.DataFrame:
     mid = ema(df["close"], period)
     band = atr(df, period) * mult
