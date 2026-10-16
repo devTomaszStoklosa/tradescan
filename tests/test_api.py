@@ -34,7 +34,8 @@ def test_meta_endpoints(client):
     assert set(config["engines"]) == {"vectorized", "cerebro"}
     assert [rule["name"] for rule in config["entry_rules"]] == ["next_open", "stop", "limit"]
     assert [rule["name"] for rule in config["exit_rules"]] == [
-        "target", "time", "trailing", "channel", "breakeven", "rsi", "sma_revert", "sma_trend", "supertrend"
+        "target", "time", "trailing", "channel", "breakeven", "rsi", "sma_revert", "sma_trend", "supertrend",
+        "failed_breakout", "no_progress",
     ]
     assert (config["default_entry"], config["default_exits"]) == ("next_open", ["target", "time"])
     limit = config["entry_rules"][2]

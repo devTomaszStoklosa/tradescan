@@ -8,6 +8,8 @@ from tradescan.backtest.entries import LimitEntry, NextOpenEntry, StopEntry, ent
 from tradescan.backtest.exits import (
     BreakevenStop,
     ChannelStop,
+    FailedBreakoutExit,
+    NoProgressExit,
     RsiExit,
     SmaRevertExit,
     SmaTrendExit,
@@ -204,6 +206,35 @@ def test_rsi_exit_closes_a_short_once_rsi_falls_to_the_mirrored_level(engine):
     assert trade.pnl == pytest.approx(1_000.0) and trade.r_multiple == pytest.approx(1.0)
 
 
+# --- Breakout exits ------------------------------------------------------------------------------------
+
+
+def test_failed_breakout_exit_leaves_at_the_open_after_a_close_back_below_the_reference(engine):
+    # Reference 100 (the signal bar's close). Bar 22 closes 2 below it: more than 0.5 ATR, less than 1 ATR.
+    df = _bars({22: (100.0, 100.5, 97.5, 98.0), 23: (98.5, 99.0, 97.5, 98.0)})
+    atr = Bars.from_frame(df, NO_COSTS.atr_period).atr
+    assert 0.5 * atr[22] < 2.0 < min(atr[22], atr[23])
+    (trade,) = _run(engine, df, rules=TradeRules(exits=(FailedBreakoutExit(buffer_atr=0.5),))).trades
+    assert (trade.exit_reason, trade.exit_date, trade.exit_price) == ("failed_breakout", df.index[23], 98.5)
+    assert trade.r_multiple == pytest.approx(-0.375)
+
+    # With a 1 ATR buffer, or with only the entry bar's close checked, the trade is still open on the last bar.
+    for rule in (FailedBreakoutExit(buffer_atr=1.0), FailedBreakoutExit(buffer_atr=0.5, within_bars=1)):
+        assert _run(engine, df, rules=TradeRules(exits=(rule,))).trades[0].exit_reason == ExitReason.OPEN
+
+
+def test_no_progress_exit_closes_a_short_that_has_not_gained_enough(engine):
+    # Fill 100, risk 4. The third close from the entry bar on (bar 23, 99) has gained 1: below 0.5R, exactly 0.25R.
+    df = _bars({22: (100.0, 100.5, 98.0, 98.5), 23: (98.5, 99.5, 98.5, 99.0), 24: (99.5, 100.0, 99.0, 99.5)})
+    rules = TradeRules(exits=(NoProgressExit(after_bars=3, min_r=0.5),))
+    (trade,) = _run(engine, df, side=Direction.SHORT, rules=rules).trades
+    assert (trade.exit_reason, trade.exit_date, trade.exit_price) == ("no_progress", df.index[24], 99.5)
+    assert trade.pnl == pytest.approx(125.0) and trade.r_multiple == pytest.approx(0.125)
+
+    rules = TradeRules(exits=(NoProgressExit(after_bars=3, min_r=0.25),))
+    assert _run(engine, df, side=Direction.SHORT, rules=rules).trades[0].exit_reason == ExitReason.OPEN
+
+
 def test_unfilled_orders_expire_and_signals_wait_for_them(engine):
     # The 99 buy-limit is out of reach on bars 21 and 22 and reachable from bar 23 on.
     df = _bars({21: (100.0, 101.0, 99.5, 100.0), 22: (100.0, 101.0, 99.5, 100.0)})
@@ -296,13 +327,19 @@ EXITS = [(cls(),) for cls in exit_rules.classes()] + [
     (RsiExit(), TimeExit(max_hold_bars=10)),
     (SmaTrendExit(), TrailingStop(atr_mult=1.5)),
     (SupertrendExit(), SmaRevertExit(period=10), TargetExit(target_r=3.0)),
+    (FailedBreakoutExit(), TrailingStop(atr_mult=1.5)),
+    (NoProgressExit(after_bars=3, min_r=0.25), TargetExit(target_r=3.0)),
     (RatchetStop(),),
     (AdverseCloseExit(),),
     (RatchetStop(atr_mult=1.0), TargetExit(target_r=3.0), TimeExit(max_hold_bars=30)),
 ]
 
-# Rules that must close some of the trades in the engine check whenever they are among its exits.
-MUST_CLOSE = (TrailingStop, ChannelStop, BreakevenStop, RsiExit, SmaRevertExit, SmaTrendExit, SupertrendExit)
+# Rules that must close some of the trades in the engine check whenever they are among its exits. Not the failed
+# breakout exit: alone on `connors_rsi2_long`, only the stop is left to close its two trades, which last for years;
+# the stop-entry check below asserts that it closes trades on both engines.
+MUST_CLOSE = (
+    TrailingStop, ChannelStop, BreakevenStop, RsiExit, SmaRevertExit, SmaTrendExit, SupertrendExit, NoProgressExit,
+)  # fmt: skip
 
 ENGINE_CHECK_CONFIG = BacktestConfig(commission_pct=0.1, slippage_pct=0.05)
 
@@ -328,3 +365,12 @@ def test_engines_match_for_every_exit_rule(exits, entry, signal_name):
     for rule in exits:
         if isinstance(rule, MUST_CLOSE):
             assert rule.name in reasons
+
+
+def test_engines_match_for_breakout_exits_after_a_stop_entry():
+    # With a stop entry the reference is the order level above the signal bar's high (below its low for shorts).
+    df = random_walk(1000, seed=23)
+    rules = TradeRules(StopEntry(offset_atr=0.3, valid_bars=3), (FailedBreakoutExit(), NoProgressExit(), TrailingStop()))
+    for name in ("donchian_breakout", "donchian_breakdown"):
+        result = _assert_engines_match(df, default_registry.create(name), ENGINE_CHECK_CONFIG, rules)
+        assert {"failed_breakout", "no_progress"} <= {trade.exit_reason for trade in result.trades}, name

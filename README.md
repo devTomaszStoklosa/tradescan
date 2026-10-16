@@ -45,8 +45,8 @@ the built UI. The screens:
   history on that ticker.
 - **Backtest**: one signal on one ticker with either or both engines; pick the entry (next open, stop
   or limit order) and the exits (target, time exit, trailing, channel and breakeven stops, RSI, SMA and
-  Supertrend exits) on top of the ATR stop; the signal's and the rules'
-  parameters are editable; key metrics, equity vs. buy & hold, in-sample vs. out-of-sample metrics,
+  Supertrend exits, failed breakout and no-progress exits) on top of the ATR stop; the signal's and the
+  rules' parameters are editable; key metrics, equity vs. buy & hold, in-sample vs. out-of-sample metrics,
   trades on the chart and in a sortable table.
 - **Sweep**: the same setup as Backtest over a range of one or two of its parameters (signal, entry,
   exits, stop or costs), as two heatmaps of a metric you pick: in-sample and out-of-sample. Click a cell
@@ -101,6 +101,7 @@ tradescan backtest SPY donchian_breakout --engine both
 tradescan backtest SPY connors_rsi2_long --entry limit --exits time --max-hold 5
 tradescan backtest QQQ donchian_breakout --exits trailing,breakeven
 tradescan backtest SPY connors_rsi2_long --exits rsi,time --engine both
+tradescan backtest QQQ donchian_breakout --entry stop --exits failed_breakout,no_progress,trailing
 tradescan backtest SPY connors_rsi2_long --oos 20
 tradescan sweep SPY connors_rsi2_long --axis signal.oversold=4:16:2 --axis exit.target.target_r=1,2,3 --metric expectancy_r
 tradescan scan -w crypto --lot-size 0.0001
@@ -179,6 +180,8 @@ ATR stop. Both engines read the same precomputed levels and execute them the sam
 | `sma_revert` | at the next open once the close is above SMA(`period`) (below it for shorts): the mean-reversion exit |
 | `sma_trend` | at the next open once the close is below SMA(`period`) (above it for shorts): the trend-break exit |
 | `supertrend` | at the next open once Supertrend(`period`, `mult`) points against the trade |
+| `failed_breakout` | at the next open once one of the first `within_bars` closes, the entry bar's included, is more than `buffer_atr` x ATR (of that bar) below the entry reference (above it for shorts) |
+| `no_progress` | at the next open if the close `after_bars` bars in, the entry bar counted as the first, has gained less than `min_r` R from the fill price |
 
 - the trailing, channel and breakeven stops are set at each close for the next bar and only ever tighten.
   Together with the initial stop and each other, the tightest stop applies, so they only matter once
@@ -188,9 +191,13 @@ ATR stop. Both engines read the same precomputed levels and execute them the sam
   trade whose entry bar already meets it (say `sma_revert` after a trend entry) leaves at the next open.
   The close has to be strictly beyond the average, and bars before an indicator has enough history never
   exit. An exit at the open comes before the stop and the target of that bar;
+- the failed breakout exit compares closes with the entry reference: the signal bar's close for a next-open
+  entry, the order level for a stop entry. After a limit entry the reference lies below the close (above it
+  for shorts), so there it only catches a further drop. The no-progress exit checks a single close and
+  leaves at the same open as a time exit of `after_bars` bars would; a close exactly `min_r` R up stays in;
 - each trade records why it closed: `stop` (the initial stop), the name of the exit rule that closed it
-  (`target`, `time`, `trailing`, `channel`, `breakeven`, `rsi`, `sma_revert`, `sma_trend`, `supertrend`),
-  or `open` (still open on the last bar);
+  (`target`, `time`, `trailing`, `channel`, `breakeven`, `rsi`, `sma_revert`, `sma_trend`, `supertrend`,
+  `failed_breakout`, `no_progress`), or `open` (still open on the last bar);
 - the size risks `risk_pct` of equity at bar t at the initial stop; signals are ignored while an entry
   order waits or a position is open, and an order that does not fill in time is cancelled;
 - exit orders are placed on the entry bar and checked from the next bar (as backtrader's bracket orders
