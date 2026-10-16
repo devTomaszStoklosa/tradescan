@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from tradescan.backtest.base import BacktestConfig, BacktestEngine
+from tradescan.backtest.base import BacktestConfig, BacktestEngine, BacktestResult
 from tradescan.backtest.metrics import Metrics, compute_metrics
 from tradescan.backtest.trade_rules import TradeRules
 from tradescan.signals.base import Signal
@@ -83,6 +83,37 @@ class SignalFrom(Signal):
         return self._signal.describe()
 
 
+@dataclass(frozen=True)
+class PeriodResults:
+    in_sample: BacktestResult  # on the bars before the split
+    out_of_sample: BacktestResult  # on the full history, with trades from the split on only
+
+
+def run_period_results(
+    engine: BacktestEngine,
+    ticker: str,
+    df: pd.DataFrame,
+    signal: Signal,
+    config: BacktestConfig,
+    rules: TradeRules,
+    split: int,
+) -> PeriodResults:
+    """The in-sample and the out-of-sample run, split at bar `split` (see the module docstring)."""
+    return PeriodResults(
+        in_sample=engine.run(ticker, df.iloc[:split], signal, config, rules),
+        out_of_sample=engine.run(ticker, df, SignalFrom(signal, split), config, rules),
+    )
+
+
+def period_metrics(results: PeriodResults, df: pd.DataFrame, split: int, bars_per_year: int) -> PeriodMetrics:
+    """Metrics of both runs; the out-of-sample ones start at the split bar."""
+    early, late = results.in_sample, results.out_of_sample
+    return PeriodMetrics(
+        in_sample=compute_metrics(early.equity, early.trades, df["close"].iloc[:split], bars_per_year),
+        out_of_sample=compute_metrics(late.equity.iloc[split:], late.trades, df["close"].iloc[split:], bars_per_year),
+    )
+
+
 def run_periods(
     engine: BacktestEngine,
     ticker: str,
@@ -93,12 +124,5 @@ def run_periods(
     split: int,
 ) -> PeriodMetrics:
     """Metrics of the in-sample and the out-of-sample run, split at bar `split` (see the module docstring)."""
-    early = df.iloc[:split]
-    in_sample = engine.run(ticker, early, signal, config, rules)
-    late = engine.run(ticker, df, SignalFrom(signal, split), config, rules)
-    return PeriodMetrics(
-        in_sample=compute_metrics(in_sample.equity, in_sample.trades, early["close"], config.bars_per_year),
-        out_of_sample=compute_metrics(
-            late.equity.iloc[split:], late.trades, df["close"].iloc[split:], config.bars_per_year
-        ),
-    )
+    results = run_period_results(engine, ticker, df, signal, config, rules, split)
+    return period_metrics(results, df, split, config.bars_per_year)

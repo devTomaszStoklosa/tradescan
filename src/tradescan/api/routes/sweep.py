@@ -22,7 +22,7 @@ def build_router(context: ApiContext) -> APIRouter:
             SweepAxis(target=axis.target, name=axis.name, values=tuple(axis.values), owner=axis.owner or "")
             for axis in body.axes
         )
-        report = context.use_cases.sweep.run(SweepRequest(setup=backtest_request(body, ()), axes=axes))
+        report = context.use_cases.sweep.run(SweepRequest(setup=backtest_request(body, body.ticker, ()), axes=axes))
         return sweep_out(report)
 
     return router

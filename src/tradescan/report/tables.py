@@ -10,9 +10,10 @@ import pandas as pd
 
 from tradescan.backtest.base import Trade
 from tradescan.backtest.oos import PeriodMetrics
+from tradescan.backtest.tickers import Period
 from tradescan.scanner import ScanHit
 from tradescan.scoring import Scorer
-from tradescan.services import EdgeRow, EngineRun, SweepReport
+from tradescan.services import METRIC_NAMES, EdgeRow, EngineRun, SweepReport, WatchlistBacktestReport
 from tradescan.signals.base import Signal
 
 SCAN_COLUMNS: tuple[str, ...] = (
@@ -149,6 +150,84 @@ def sweep_cells_frame(report: SweepReport) -> pd.DataFrame:
         if cell.periods is not None:
             for prefix, metrics in (("is", cell.periods.in_sample), ("oos", cell.periods.out_of_sample)):
                 record.update({f"{prefix}_{item.name}": getattr(metrics, item.name) for item in fields(metrics)})
+        records.append(record)
+    return pd.DataFrame(records)
+
+
+PERIOD_LABELS = {Period.FULL: "full", Period.IN_SAMPLE: "in-sample", Period.OUT_OF_SAMPLE: "out-of-sample"}
+
+
+def watchlist_rows_frame(report: WatchlistBacktestReport, metric: str) -> pd.DataFrame:
+    """One row per ticker: trades and `metric` in every period, then the full history's return, drawdown and
+    buy & hold; the best full-history `metric` first, tickers without a value last."""
+    records = []
+    for row in report.rows:
+        record: dict[str, object] = {"ticker": row.ticker}
+        parts = {period: row.run.period(period) for period in Period}
+        for period, part in parts.items():
+            record[f"trades {PERIOD_LABELS[period]}"] = str(part.metrics.trades) if part else "-"  # no split: no count
+        for period, part in parts.items():
+            record[f"{metric} {PERIOD_LABELS[period]}"] = getattr(part.metrics, metric) if part else math.nan
+        full = row.run.full.metrics
+        record.update({"return%": full.total_return_pct, "max DD%": full.max_drawdown_pct, "buy&hold%": full.buy_hold_pct})
+        records.append(record)
+    frame = pd.DataFrame(records)
+    return frame.sort_values(f"{metric} full", ascending=False, na_position="last", kind="stable", ignore_index=True)
+
+
+def spread_frame(report: WatchlistBacktestReport, metric: str) -> pd.DataFrame:
+    """How `metric` is spread across the tickers, one row per period."""
+    rows = {}
+    for period, summary in report.periods.items():
+        spread = summary.spreads[metric]
+        rows[PERIOD_LABELS[period]] = {
+            "tickers": spread.tickers,
+            "median": spread.median,
+            "25%": spread.p25,
+            "75%": spread.p75,
+            "min": spread.minimum,
+            "max": spread.maximum,
+            "above break-even%": spread.above_break_even_pct,
+        }
+    return _whole_counts(pd.DataFrame.from_dict(rows, orient="index"), "tickers")
+
+
+def pooled_frame(report: WatchlistBacktestReport) -> pd.DataFrame:
+    """Every ticker's closed trades taken together, one row per period."""
+    rows = {}
+    for period, summary in report.periods.items():
+        pooled = summary.pooled
+        rows[PERIOD_LABELS[period]] = {
+            "tickers": summary.tickers,
+            "trades": pooled.trades,
+            "win%": pooled.win_rate_pct,
+            "expectancy R": pooled.expectancy_r,
+            "profit factor R": pooled.profit_factor_r,
+            "SQN": pooled.sqn,
+        }
+    return _whole_counts(pd.DataFrame.from_dict(rows, orient="index"), "tickers", "trades")
+
+
+def _whole_counts(frame: pd.DataFrame, *columns: str) -> pd.DataFrame:
+    """Counts kept as Python ints, so a row that also holds floats still shows them as whole numbers."""
+    return frame.astype({column: object for column in columns})
+
+
+def watchlist_export_frame(report: WatchlistBacktestReport) -> pd.DataFrame:
+    """Every ticker with every metric of every period, one row each (for export)."""
+    prefixes = {Period.FULL: "full", Period.IN_SAMPLE: "is", Period.OUT_OF_SAMPLE: "oos"}
+    records = []
+    for row in report.rows:
+        split = row.run.split
+        record: dict[str, object] = {
+            "ticker": row.ticker,
+            "start": row.start.date().isoformat(),
+            "end": row.end.date().isoformat(),
+            "oos_start": split.out_of_sample[0].date().isoformat() if split else "",
+        }
+        for period, prefix in prefixes.items():
+            part = row.run.period(period)
+            record.update({f"{prefix}_{name}": getattr(part.metrics, name) if part else math.nan for name in METRIC_NAMES})
         records.append(record)
     return pd.DataFrame(records)
 

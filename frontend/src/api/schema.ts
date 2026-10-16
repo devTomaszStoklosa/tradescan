@@ -157,6 +157,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/watchlist-backtest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Watchlist Backtest */
+        post: operations["watchlist_backtest_api_watchlist_backtest_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chart": {
         parameters: {
             query?: never;
@@ -225,8 +242,6 @@ export interface components {
         };
         /** BacktestIn */
         BacktestIn: {
-            /** Ticker */
-            ticker: string;
             /** Signal */
             signal: string;
             /**
@@ -266,13 +281,13 @@ export interface components {
             benchmark?: string | null;
             /** Period */
             period?: string | null;
+            /** Ticker */
+            ticker: string;
             /** Engines */
             engines?: string[];
         };
         /** BacktestOut */
         BacktestOut: {
-            /** Ticker */
-            ticker: string;
             /** Signal */
             signal: string;
             direction: components["schemas"]["Direction"];
@@ -288,10 +303,6 @@ export interface components {
             params: {
                 [key: string]: number | number[];
             };
-            /** Start */
-            start: string;
-            /** End */
-            end: string;
             config: components["schemas"]["BacktestConfigOut"];
             entry: components["schemas"]["AppliedRuleOut"];
             /**
@@ -309,6 +320,12 @@ export interface components {
              * @description The benchmark the filters compared; null when no filter reads one
              */
             benchmark: string | null;
+            /** Ticker */
+            ticker: string;
+            /** Start */
+            start: string;
+            /** End */
+            end: string;
             /** @description The in-sample/out-of-sample split; null when the history is too short */
             split: components["schemas"]["SplitOut"] | null;
             /** Buy Hold */
@@ -618,6 +635,34 @@ export interface components {
             /** Missing */
             missing: string[];
         };
+        /** MetricSpreadOut */
+        MetricSpreadOut: {
+            /** Metric */
+            metric: string;
+            /**
+             * Tickers
+             * @description Tickers with a value; a trade metric has none for a ticker without trades
+             */
+            tickers: number;
+            /**
+             * Median
+             * @description This and the other values are null when no ticker has a value, or when they are infinite (a profit factor without losers)
+             */
+            median: number | null;
+            /** P25 */
+            p25: number | null;
+            /** P75 */
+            p75: number | null;
+            /** Minimum */
+            minimum: number | null;
+            /** Maximum */
+            maximum: number | null;
+            /**
+             * Above Break Even Pct
+             * @description Share of the tickers above break-even; null for metrics without one
+             */
+            above_break_even_pct: number | null;
+        };
         /** MetricsOut */
         MetricsOut: {
             /** Total Return Pct */
@@ -682,12 +727,54 @@ export interface components {
              */
             keys?: string[] | null;
         };
+        /**
+         * Period
+         * @enum {string}
+         */
+        Period: "full" | "in_sample" | "out_of_sample";
+        /** PeriodSummaryOut */
+        PeriodSummaryOut: {
+            period: components["schemas"]["Period"];
+            /**
+             * Tickers
+             * @description Tickers that have this period
+             */
+            tickers: number;
+            /** @description Every ticker's closed trades taken together */
+            pooled: components["schemas"]["PooledTradesOut"];
+            /**
+             * Spread
+             * @description How each metric is spread across the tickers
+             */
+            spread: components["schemas"]["MetricSpreadOut"][];
+        };
         /** Point */
         Point: {
             /** Time */
             time: string;
             /** Value */
             value: number;
+        };
+        /** PooledTradesOut */
+        PooledTradesOut: {
+            /** Trades */
+            trades: number;
+            /** Win Rate Pct */
+            win_rate_pct: number | null;
+            /** Expectancy R */
+            expectancy_r: number | null;
+            /**
+             * Profit Factor R
+             * @description Gross R won / gross R lost
+             */
+            profit_factor_r: number | null;
+            /**
+             * Profit Factor Infinite
+             * @description True when there were winners and no losers
+             */
+            profit_factor_infinite: boolean;
+            /** Sqn */
+            sqn: number | null;
         };
         /** RegimeOut */
         RegimeOut: {
@@ -945,8 +1032,6 @@ export interface components {
         };
         /** SweepIn */
         SweepIn: {
-            /** Ticker */
-            ticker: string;
             /** Signal */
             signal: string;
             /**
@@ -986,6 +1071,8 @@ export interface components {
             benchmark?: string | null;
             /** Period */
             period?: string | null;
+            /** Ticker */
+            ticker: string;
             /**
              * Axes
              * @description One or two parameters; the first changes slowest
@@ -1020,8 +1107,6 @@ export interface components {
         };
         /** SweepOut */
         SweepOut: {
-            /** Ticker */
-            ticker: string;
             /** Signal */
             signal: string;
             direction: components["schemas"]["Direction"];
@@ -1037,10 +1122,6 @@ export interface components {
             params: {
                 [key: string]: number | number[];
             };
-            /** Start */
-            start: string;
-            /** End */
-            end: string;
             config: components["schemas"]["BacktestConfigOut"];
             entry: components["schemas"]["AppliedRuleOut"];
             /**
@@ -1058,6 +1139,12 @@ export interface components {
              * @description The benchmark the filters compared; null when no filter reads one
              */
             benchmark: string | null;
+            /** Ticker */
+            ticker: string;
+            /** Start */
+            start: string;
+            /** End */
+            end: string;
             /**
              * Engine
              * @description Sweeps run on this engine
@@ -1077,6 +1164,21 @@ export interface components {
          * @enum {string}
          */
         SweepTarget: "signal" | "entry" | "exit" | "filter" | "settings";
+        /** TickerRunOut */
+        TickerRunOut: {
+            /** Ticker */
+            ticker: string;
+            /** Start */
+            start: string;
+            /** End */
+            end: string;
+            /** @description This ticker's in-sample/out-of-sample split; null when its history is too short */
+            split: components["schemas"]["SplitOut"] | null;
+            /** @description The full history */
+            metrics: components["schemas"]["MetricsOut"];
+            in_sample: components["schemas"]["MetricsOut"] | null;
+            out_of_sample: components["schemas"]["MetricsOut"] | null;
+        };
         /** TradeOut */
         TradeOut: {
             direction: components["schemas"]["Direction"];
@@ -1111,6 +1213,115 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** WatchlistBacktestIn */
+        WatchlistBacktestIn: {
+            /** Signal */
+            signal: string;
+            /**
+             * Params
+             * @description The signal's parameters, e.g. {"period": 30}
+             */
+            params?: {
+                [key: string]: number | number[];
+            };
+            /**
+             * Settings
+             * @description Per-run overrides by settings section, e.g. {"risk": {"atr_mult": 3}}; backtest.oos_pct sets the out-of-sample share
+             */
+            settings?: {
+                [key: string]: {
+                    [key: string]: number | number[] | {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /** @description Entry rule; omit for the default entry */
+            entry?: components["schemas"]["RuleIn"] | null;
+            /**
+             * Exits
+             * @description Exit rules on top of the initial stop; omit for the default exits, [] for the stop only
+             */
+            exits?: components["schemas"]["RuleIn"][] | null;
+            /**
+             * Filters
+             * @description Entry filters; a signal trades only when every one allows it
+             */
+            filters?: components["schemas"]["RuleIn"][];
+            /**
+             * Benchmark
+             * @description Benchmark the market filter compares; omit for the watchlist's, else the configured benchmark
+             */
+            benchmark?: string | null;
+            /** Period */
+            period?: string | null;
+            /**
+             * Watchlist
+             * @description Watchlist name, e.g. us_large
+             */
+            watchlist?: string | null;
+            /**
+             * Tickers
+             * @description Ad-hoc tickers instead of a watchlist
+             */
+            tickers?: string[] | null;
+        };
+        /** WatchlistBacktestOut */
+        WatchlistBacktestOut: {
+            /** Signal */
+            signal: string;
+            direction: components["schemas"]["Direction"];
+            /**
+             * Description
+             * @description The signal's rule with this run's parameters
+             */
+            description: string;
+            /**
+             * Params
+             * @description The signal's parameters used in this run
+             */
+            params: {
+                [key: string]: number | number[];
+            };
+            config: components["schemas"]["BacktestConfigOut"];
+            entry: components["schemas"]["AppliedRuleOut"];
+            /**
+             * Exits
+             * @description Exit rules on top of the initial stop, in the order given
+             */
+            exits: components["schemas"]["AppliedRuleOut"][];
+            /**
+             * Filters
+             * @description Entry filters, in the order given
+             */
+            filters: components["schemas"]["AppliedRuleOut"][];
+            /**
+             * Benchmark
+             * @description The benchmark the filters compared; null when no filter reads one
+             */
+            benchmark: string | null;
+            /** Universe */
+            universe: string;
+            /**
+             * Engine
+             * @description Every ticker runs on this engine
+             */
+            engine: string;
+            /**
+             * Rows
+             * @description One per ticker with data, in watchlist order
+             */
+            rows: components["schemas"]["TickerRunOut"][];
+            /**
+             * Periods
+             * @description The full history, in-sample and out-of-sample
+             */
+            periods: components["schemas"]["PeriodSummaryOut"][];
+            /**
+             * Missing
+             * @description Tickers without data
+             */
+            missing: string[];
         };
         /** WatchlistOut */
         WatchlistOut: {
@@ -1364,6 +1575,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SweepOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watchlist_backtest_api_watchlist_backtest_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatchlistBacktestIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistBacktestOut"];
                 };
             };
             /** @description Validation Error */

@@ -5,11 +5,13 @@ import type {
   FilterRuleOut,
   HitOut,
   MetricsOut,
+  MetricSpreadOut,
   ParamSpecOut,
   RuleOut,
   ScanOut,
   SignalOut,
   SweepOut,
+  WatchlistBacktestOut,
   WatchlistOut,
 } from "../api/client";
 import { formatTemplate } from "../lib/overrides";
@@ -401,4 +403,75 @@ export const sweepResult: SweepOut = {
     sweepCell([15, 2], [0.7, 0.4]),
     { values: [15, 3], in_sample: null, out_of_sample: null, error: "connors_rsi2_long: test failure" },
   ],
+};
+
+const spread = (metric: string, values: Partial<MetricSpreadOut>): MetricSpreadOut => ({
+  metric,
+  tickers: 2,
+  median: null,
+  p25: null,
+  p75: null,
+  minimum: null,
+  maximum: null,
+  above_break_even_pct: null,
+  ...values,
+});
+
+/** The RSI2 setup with the market filter on us_large: AAPL holds up, MSFT is too short to split, TSLA had no data. */
+export const watchlistResult: WatchlistBacktestOut = {
+  signal: "connors_rsi2_long",
+  direction: "long",
+  description: backtestResult.description,
+  params: backtestResult.params,
+  config: backtestResult.config,
+  entry: backtestResult.entry,
+  exits: backtestResult.exits,
+  filters: [appliedRule(filterRules[1]!)],
+  benchmark: "SPY",
+  universe: "us_large",
+  engine: "vectorized",
+  rows: [
+    {
+      ticker: "AAPL",
+      start: "2016-01-04",
+      end: "2026-10-13",
+      split: backtestResult.split,
+      metrics: makeMetrics({ expectancy_r: 0.3, trades: 40 }),
+      in_sample: makeMetrics({ expectancy_r: 0.4, trades: 28 }),
+      out_of_sample: makeMetrics({ expectancy_r: -0.1, trades: 12 }),
+    },
+    {
+      ticker: "MSFT",
+      start: "2026-03-02",
+      end: "2026-10-13",
+      split: null,
+      metrics: makeMetrics({ expectancy_r: 0.5, trades: 6, profit_factor: null, profit_factor_infinite: true }),
+      in_sample: null,
+      out_of_sample: null,
+    },
+  ],
+  periods: [
+    {
+      period: "full",
+      tickers: 2,
+      pooled: { trades: 46, win_rate_pct: 58.7, expectancy_r: 0.33, profit_factor_r: 1.8, profit_factor_infinite: false, sqn: 2.1 },
+      spread: [
+        spread("expectancy_r", { median: 0.4, p25: 0.35, p75: 0.45, minimum: 0.3, maximum: 0.5, above_break_even_pct: 100 }),
+        spread("profit_factor", { median: null, p25: 1.6, p75: null, minimum: 1.6, maximum: null, above_break_even_pct: 100 }),
+      ],
+    },
+    {
+      period: "in_sample",
+      tickers: 1,
+      pooled: { trades: 28, win_rate_pct: 60, expectancy_r: 0.4, profit_factor_r: 2, profit_factor_infinite: false, sqn: 2.3 },
+      spread: [spread("expectancy_r", { tickers: 1, median: 0.4, p25: 0.4, p75: 0.4, minimum: 0.4, maximum: 0.4, above_break_even_pct: 100 })],
+    },
+    {
+      period: "out_of_sample",
+      tickers: 1,
+      pooled: { trades: 12, win_rate_pct: 41.7, expectancy_r: -0.1, profit_factor_r: 0.8, profit_factor_infinite: false, sqn: -0.4 },
+      spread: [spread("expectancy_r", { tickers: 1, median: -0.1, p25: -0.1, p75: -0.1, minimum: -0.1, maximum: -0.1, above_break_even_pct: 0 })],
+    },
+  ],
+  missing: ["TSLA"],
 };

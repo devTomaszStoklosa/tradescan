@@ -300,6 +300,43 @@ def test_sweep(client):
     assert data["cells"][4]["in_sample"] == single["in_sample"]
 
 
+def test_watchlist_backtest(client):
+    setup = {"signal": "connors_rsi2_long", "filters": [{"name": "market"}]}
+    response = client.post("/api/watchlist-backtest", json={"watchlist": "demo", **setup})
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert (data["universe"], data["engine"], data["benchmark"], data["missing"]) == ("demo", "vectorized", "SPY", [])
+    assert [row["ticker"] for row in data["rows"]] == ["AAA", "BBB", "CCC"]
+    assert data["filters"][0]["name"] == "market" and "ticker" not in data
+
+    # A row is the backtest of that ticker alone.
+    single = client.post("/api/backtest", json={**setup, "ticker": "BBB", "benchmark": "SPY"}).json()
+    row = data["rows"][1]
+    assert row["metrics"] == single["runs"][0]["metrics"] and row["out_of_sample"] == single["runs"][0]["out_of_sample"]
+    assert row["split"] == single["split"] and (row["start"], row["end"]) == (single["start"], single["end"])
+
+    periods = {period["period"]: period for period in data["periods"]}
+    assert list(periods) == ["full", "in_sample", "out_of_sample"]
+    full = periods["full"]
+    assert full["tickers"] == 3 and full["pooled"]["trades"] == sum(row["metrics"]["trades"] for row in data["rows"])
+    spread = {item["metric"]: item for item in full["spread"]}
+    assert len(spread) == 12 and spread["trades"]["above_break_even_pct"] is None
+    assert spread["expectancy_r"]["minimum"] <= spread["expectancy_r"]["median"] <= spread["expectancy_r"]["maximum"]
+
+    tickers = client.post("/api/watchlist-backtest", json={"tickers": ["aaa", "zzz"], "signal": "connors_rsi2_long"}).json()
+    assert [row["ticker"] for row in tickers["rows"]] == ["AAA"] and tickers["missing"] == ["ZZZ"] and tickers["benchmark"] is None
+
+    def status(**extra):
+        return client.post("/api/watchlist-backtest", json={"signal": "connors_rsi2_long", **extra}).status_code
+
+    assert status(watchlist="nope") == 404
+    assert status(watchlist="demo", tickers=["AAA"]) == 422
+    assert status(watchlist="demo", ticker="AAA") == 422  # the watchlist names the tickers
+    assert status(tickers=["ZZZ"]) == 400
+    assert status(watchlist="demo", filters=[{"name": "market"}], benchmark="NOPE") == 400
+    assert client.post("/api/watchlist-backtest", json={"watchlist": "demo", "signal": "nope"}).status_code == 400
+
+
 def test_sweep_limits_and_errors(client):
     limits = client.get("/api/config").json()["sweep"]
     assert limits == {

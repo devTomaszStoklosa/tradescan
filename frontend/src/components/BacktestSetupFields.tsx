@@ -1,10 +1,13 @@
-/** The fields of a backtest setup: ticker, signal and its parameters, entry filters, trade rules and costs. Shared by Backtest and Sweep. */
+/**
+ * The fields of a backtest setup: ticker, signal and its parameters, entry filters, trade rules and costs. Shared by Backtest, Sweep
+ * and Watchlist; a setup without a `ticker` (one run on a whole watchlist) gets no ticker field.
+ */
 import { useMemo } from "react";
 
 import type { ConfigOut, SignalOut } from "../api/client";
 import { BACKTEST_FIELDS, BACKTEST_SECTIONS, PERIODS } from "../lib/choices";
 import { describeSignal, pickSections, type Overrides } from "../lib/overrides";
-import type { BacktestSetup } from "../lib/params";
+import type { BacktestRules } from "../lib/params";
 import { ParamFields, SectionFields } from "./ParamFields";
 import { FAMILY_LABELS } from "./SignalChip";
 import { EntryFields, ExitFields, FilterFields, GroupHeading } from "./TradeRuleFields";
@@ -34,16 +37,19 @@ function SignalSelect({ value, onChange, signals }: { value: string; onChange: (
   );
 }
 
-export function BacktestSetupFields<T extends BacktestSetup>({
+export function BacktestSetupFields<T extends BacktestRules & { ticker?: string }>({
   draft,
   onChange,
   config,
   signals,
+  defaultBenchmark = config.benchmark,
 }: {
   draft: T;
   onChange: (next: T) => void;
   config: ConfigOut;
   signals: SignalOut[];
+  /** The benchmark the server compares when the setup names none. */
+  defaultBenchmark?: string;
 }) {
   const set = <K extends keyof T>(key: K, value: T[K]) => onChange({ ...draft, [key]: value });
   const selected = signals.find((signal) => signal.name === draft.signal);
@@ -53,10 +59,12 @@ export function BacktestSetupFields<T extends BacktestSetup>({
 
   return (
     <>
-      <div className="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)_8rem]">
-        <Field label="Ticker">
-          <Input value={draft.ticker} placeholder="SPY" required onChange={(event) => set("ticker", event.target.value.toUpperCase())} />
-        </Field>
+      <div className={`grid gap-3 ${draft.ticker === undefined ? "sm:grid-cols-[minmax(0,1fr)_8rem]" : "sm:grid-cols-[10rem_minmax(0,1fr)_8rem]"}`}>
+        {draft.ticker !== undefined && (
+          <Field label="Ticker">
+            <Input value={draft.ticker} placeholder="SPY" required onChange={(event) => set("ticker", event.target.value.toUpperCase() as T["ticker"])} />
+          </Field>
+        )}
         <Field label="Signal" hint={selected ? describeSignal(selected, draft.signalParams) : undefined}>
           {/* Parameters belong to one signal, so switching signals starts from its defaults. */}
           <SignalSelect value={draft.signal} onChange={(signal) => onChange({ ...draft, signal, signalParams: {} })} signals={signals} />
@@ -86,7 +94,7 @@ export function BacktestSetupFields<T extends BacktestSetup>({
             filters={draft.filters}
             params={draft.filterParams}
             benchmark={draft.benchmark}
-            defaultBenchmark={config.benchmark}
+            defaultBenchmark={defaultBenchmark}
             onChange={(filters, filterParams) => onChange({ ...draft, filters, filterParams })}
             onBenchmarkChange={(benchmark) => set("benchmark", benchmark)}
           />

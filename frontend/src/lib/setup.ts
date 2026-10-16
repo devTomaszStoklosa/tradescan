@@ -1,12 +1,12 @@
-/** Checks and resets of a backtest setup, shared by the Backtest and the Sweep form. */
+/** Checks and resets of a backtest setup, shared by the Backtest, Sweep and Watchlist forms. */
 import type { ConfigOut, SignalOut } from "../api/client";
 import { BACKTEST_SECTIONS } from "./choices";
 import { countChanges, hasProblems, pickSections, sectionSpecs } from "./overrides";
-import { setupBody, type BacktestSetup } from "./params";
+import { rulesBody, type BacktestRules } from "./params";
 import { countRuleChanges, defaultRules, hasRuleProblems } from "./rules";
 
 /** How many settings, signal parameters, trade rules and the benchmark differ from the defaults. */
-export function setupChanges(setup: BacktestSetup, config: ConfigOut): number {
+export function setupChanges(setup: BacktestRules, config: ConfigOut): number {
   return (
     countChanges(setup.settings) +
     Object.keys(setup.signalParams).length +
@@ -15,12 +15,13 @@ export function setupChanges(setup: BacktestSetup, config: ConfigOut): number {
   );
 }
 
-/** True while the ticker or signal is missing or any value is invalid. */
-export function hasSetupProblems(setup: BacktestSetup, config: ConfigOut, signals: SignalOut[]): boolean {
+/** True while the signal or, in a setup that has one, the ticker is missing, or any value is invalid. */
+export function hasSetupProblems(setup: BacktestRules & { ticker?: string }, config: ConfigOut, signals: SignalOut[]): boolean {
   const sections = pickSections(config.sections, BACKTEST_SECTIONS);
   const selected = signals.find((signal) => signal.name === setup.signal);
   return (
-    !setupBody(setup) ||
+    setup.ticker?.trim() === "" ||
+    !rulesBody(setup) ||
     hasProblems(setup.settings, sectionSpecs(sections)) ||
     hasRuleProblems(setup, config) ||
     (selected !== undefined && hasProblems({ [selected.name]: setup.signalParams }, { [selected.name]: selected.params }))
@@ -28,6 +29,6 @@ export function hasSetupProblems(setup: BacktestSetup, config: ConfigOut, signal
 }
 
 /** The setup with every setting, signal parameter, trade rule and the benchmark back at its default. */
-export function resetSetup<T extends BacktestSetup>(setup: T, config: ConfigOut): T {
+export function resetSetup<T extends BacktestRules>(setup: T, config: ConfigOut): T {
   return { ...setup, settings: {}, signalParams: {}, ...defaultRules(config), benchmark: "" };
 }

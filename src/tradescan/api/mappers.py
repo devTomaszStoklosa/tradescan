@@ -13,7 +13,9 @@ from tradescan.backtest.edge import EdgeStats
 from tradescan.backtest.filters import EntryFilter
 from tradescan.backtest.metrics import Metrics
 from tradescan.backtest.oos import Split
+from tradescan.backtest.pooled import PooledTrades, Spread
 from tradescan.backtest.rules import Rule
+from tradescan.backtest.tickers import PeriodRun
 from tradescan.backtest.trade_rules import TradeRules
 from tradescan.backtest.vectorized import VectorizedEngine
 from tradescan.config import SettingsSection
@@ -21,7 +23,15 @@ from tradescan.params import ParamSpec, parameters_of
 from tradescan.regime import MarketRegime
 from tradescan.scanner import ScanHit
 from tradescan.scoring import Scorer
-from tradescan.services import BacktestReport, ChartData, EdgeReport, MarketReport, ScanReport, SweepReport
+from tradescan.services import (
+    BacktestReport,
+    ChartData,
+    EdgeReport,
+    MarketReport,
+    ScanReport,
+    SweepReport,
+    WatchlistBacktestReport,
+)
 from tradescan.signals.base import Signal
 from tradescan.watchlist import Watchlist
 
@@ -249,12 +259,19 @@ def _setup_out(
     """The fields a backtest and a sweep share: what was tested, on which data, with which rules."""
     return {
         "ticker": ticker,
+        "start": day(close.index[0]),
+        "end": day(close.index[-1]),
+        **_rules_out(signal, config, rules, benchmark),
+    }
+
+
+def _rules_out(signal: Signal, config: BacktestConfig, rules: TradeRules, benchmark: str | None) -> dict[str, object]:
+    """What was tested apart from the ticker: the signal, the settings and the rules."""
+    return {
         "signal": signal.name,
         "direction": signal.direction,
         "description": signal.describe(),
         "params": signal_params(signal),
-        "start": day(close.index[0]),
-        "end": day(close.index[-1]),
         "config": schemas.BacktestConfigOut(**{item.name: getattr(config, item.name) for item in fields(config)}),
         "entry": applied_rule_out(rules.entry),
         "exits": [applied_rule_out(rule) for rule in rules.exits],
@@ -323,6 +340,65 @@ def sweep_out(report: SweepReport) -> schemas.SweepOut:
             )
             for cell in report.cells
         ],
+    )
+
+
+def pooled_trades_out(pooled: PooledTrades) -> schemas.PooledTradesOut:
+    return schemas.PooledTradesOut(
+        trades=pooled.trades,
+        win_rate_pct=finite(pooled.win_rate_pct),
+        expectancy_r=finite(pooled.expectancy_r),
+        profit_factor_r=finite(pooled.profit_factor_r),
+        profit_factor_infinite=math.isinf(pooled.profit_factor_r),
+        sqn=finite(pooled.sqn),
+    )
+
+
+def spread_out(metric: str, spread: Spread) -> schemas.MetricSpreadOut:
+    return schemas.MetricSpreadOut(
+        metric=metric,
+        tickers=spread.tickers,
+        median=finite(spread.median),
+        p25=finite(spread.p25),
+        p75=finite(spread.p75),
+        minimum=finite(spread.minimum),
+        maximum=finite(spread.maximum),
+        above_break_even_pct=finite(spread.above_break_even_pct),
+    )
+
+
+def watchlist_backtest_out(report: WatchlistBacktestReport) -> schemas.WatchlistBacktestOut:
+    base = report.base
+
+    def metrics(run: PeriodRun | None) -> schemas.MetricsOut | None:
+        return metrics_out(run.metrics) if run else None
+
+    return schemas.WatchlistBacktestOut(
+        **_rules_out(base.signal, base.config, base.rules, base.benchmark),  # type: ignore[arg-type]
+        universe=report.universe.name,
+        engine=VectorizedEngine.name,
+        rows=[
+            schemas.TickerRunOut(
+                ticker=row.ticker,
+                start=day(row.start),
+                end=day(row.end),
+                split=split_out(row.run.split) if row.run.split else None,
+                metrics=metrics_out(row.run.full.metrics),
+                in_sample=metrics(row.run.in_sample),
+                out_of_sample=metrics(row.run.out_of_sample),
+            )
+            for row in report.rows
+        ],
+        periods=[
+            schemas.PeriodSummaryOut(
+                period=period,
+                tickers=summary.tickers,
+                pooled=pooled_trades_out(summary.pooled),
+                spread=[spread_out(metric, value) for metric, value in summary.spreads.items()],
+            )
+            for period, summary in report.periods.items()
+        ],
+        missing=report.missing,
     )
 
 

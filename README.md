@@ -15,6 +15,7 @@ Trading signal scanner for daily bars: **vectorized pandas signals on yfinance d
 - market regime: benchmark vs. SMA200, breadth, new highs/lows
 - two backtest engines that produce identical trades (pandas for speed, Cerebro as reference)
 - an out-of-sample check on every backtest, and parameter sweeps shown as in-sample and out-of-sample heatmaps
+- one setup on every ticker of a watchlist: each ticker's metrics, all trades pooled, and how the results spread
 - a React web UI on top of a small FastAPI server (`tradescan serve`)
 
 > Not investment advice. This is a research tool; every number it prints is a historical statistic.
@@ -52,6 +53,10 @@ the built UI. The screens:
 - **Sweep**: the same setup as Backtest over a range of one or two of its parameters (signal, filters,
   entry, exits, stop or costs), as two heatmaps of a metric you pick: in-sample and out-of-sample. Click a
   cell for its metrics, the average of its neighbours, and a link that opens it on the Backtest page.
+- **Watchlist**: the same setup as Backtest on every ticker of a watchlist (or your own tickers): the
+  spread of a metric you pick across the tickers (worst, quartiles, median, best and the share above
+  break-even) in-sample and out-of-sample, every ticker's trades pooled in R, and a sortable table of
+  each ticker's metrics, where a ticker opens its own backtest.
 - **Edge**: signal statistics across a watchlist at several horizons, coloured by edge.
 - **Compare**: backtest runs pinned with **Pin run** on the Backtest page, side by side: the parameters
   that differ, an out-of-sample check (key metrics in-sample next to out-of-sample), every metric of the
@@ -106,6 +111,7 @@ tradescan backtest QQQ donchian_breakout --entry stop --exits failed_breakout,no
 tradescan backtest AAPL donchian_breakout --filters trend,market,volume --benchmark QQQ
 tradescan backtest SPY connors_rsi2_long --oos 20
 tradescan sweep SPY connors_rsi2_long --axis signal.oversold=4:16:2 --axis exit.target.target_r=1,2,3 --metric expectancy_r
+tradescan watchlist-backtest connors_rsi2_long -w etf --filters market --metric expectancy_r
 tradescan scan -w crypto --lot-size 0.0001
 tradescan update-universes
 ```
@@ -117,6 +123,7 @@ tradescan update-universes
 | `edge` | For each signal, pooled across the watchlist: events, win rate, average and edge vs. baseline at several horizons. |
 | `backtest` | One signal on one ticker with the pandas engine, Cerebro, or `both` side by side, plus its in-sample and out-of-sample metrics. `--filters` picks the entry filters (none by default) and `--benchmark` the benchmark the market filter compares, `--entry` the entry rule, `--exits` the exit rules (`none` keeps only the stop), `--oos` the out-of-sample share. |
 | `sweep` | The `backtest` setup over one or two `--axis` parameters (`target[.owner].name=FROM:TO:STEP` or `=V1,V2,...`), as in-sample and out-of-sample grids of `--metric`; `--export` saves every combination. |
+| `watchlist-backtest` | The `backtest` setup (without the ticker) on every ticker of `-w`/`-t` with the vectorized engine: the best `--top` tickers by `--metric` with their in-sample and out-of-sample values, the spread of `--metric` across tickers and all trades pooled; `--export` saves every ticker with every period's metrics. |
 | `list-signals` | All signals with family, direction, scoring weight and rule. |
 | `update-universes` | Refresh the `sp500` and `nasdaq100` watchlists from Wikipedia's constituent tables (`--only sp500`). |
 | `serve` | Web UI and HTTP API. |
@@ -245,6 +252,21 @@ since it defines the split. A combination that breaks a rule between parameters 
 average that is not shorter than the slow one) is shown as failed and the others still run. On 10 years
 of daily bars a sweep of 200 combinations takes a few seconds.
 
+**Watchlist backtests.** One setup runs on every ticker of a watchlist, with the pandas engine on all CPU
+cores. Each ticker is split on its own bars as a backtest of it alone would be, so a ticker's row is that
+ticker's backtest; a ticker with too little history to split has only full-history metrics. The market
+filter compares the setup's benchmark, else the watchlist's (`# benchmark:`), else `scan.benchmark`.
+
+- **Spread:** for every metric and period, the worst, 25%, median, 75% and best value across the tickers,
+  and the share above break-even (0 for returns, Sharpe, Sortino, expectancy and SQN, 1 for the profit
+  factor). Tickers without a value, e.g. without trades, are left out.
+- **Pooled trades:** every ticker's closed trades taken together, in R: win rate, expectancy, profit
+  factor (R won / R lost) and SQN. Profits in money are not pooled, since each ticker's equity compounds
+  on its own.
+
+A setting that works on one or two tickers and not on the rest is fitted to them. On 20 ETFs with
+10 years of daily bars a watchlist backtest takes a few seconds once the data is cached.
+
 ## Configuration
 
 `config/settings.toml` holds account size, risk per trade, ATR stop multiple, targets, freshness,
@@ -265,8 +287,10 @@ signals and rules; a single run can override any of them without touching the fi
   `"signal_params": {"connors_rsi2_long": {"oversold": 15}}` (a backtest takes its signal's values as
   `"params"`, and its rules as `"entry": {"name": "limit", "params": {"offset_atr": 1}}`,
   `"exits": [{"name": "target", "params": {"target_r": 3}}]` and
-  `"filters": [{"name": "trend", "params": {"period": 100}}]` with `"benchmark": "QQQ"`), and a sweep its
-  parameters as `"axes": [{"target": "exit", "owner": "target", "name": "target_r", "values": [1, 2, 3]}]`);
+  `"filters": [{"name": "trend", "params": {"period": 100}}]` with `"benchmark": "QQQ"`), a sweep its
+  parameters as `"axes": [{"target": "exit", "owner": "target", "name": "target_r", "values": [1, 2, 3]}]`,
+  and a watchlist backtest (`/api/watchlist-backtest`) the same setup with `"watchlist": "etf"` or
+  `"tickers": [...]` instead of the ticker);
   `/api/config` lists the settings, the rules and the sweep limits, `/api/signals` the signals, each
   parameter with its range;
 - on the CLI, through the existing flags (`--atr-mult`, `--fresh`, `--equity`, `--target-r`, `--oos`, ...).
