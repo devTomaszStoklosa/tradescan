@@ -3,7 +3,9 @@
  * Labels and units come from the API's parameter specs, so parameters added later appear without frontend changes.
  */
 import type { MetricsOut, ParamSpecOut, Point, SettingsSectionOut, SignalOut } from "../api/client";
+import { MONTE_CARLO_SECTION } from "./choices";
 import { DASH } from "./format";
+import { MONTE_CARLO_SETTINGS } from "./monteCarlo";
 import type { RuleSpecs } from "./rules";
 import type { PinnedRun } from "./runs";
 
@@ -69,8 +71,8 @@ function ownedRows(
 
 /**
  * Every input of the runs as rows: what was tested, the data range, the stop, costs and account,
- * the entry filters (and the benchmark they compared), the entry and exit rules with their parameters,
- * and the signal parameters.
+ * the Monte Carlo settings, the entry filters (and the benchmark they compared), the entry and exit rules
+ * with their parameters, and the signal parameters.
  */
 export function parameterRows(
   runs: PinnedRun[],
@@ -89,6 +91,14 @@ export function parameterRows(
     const spec = settingSpecs.find((item) => item.name === name);
     const values = runs.map((run) => (run.config as unknown as Record<string, number | undefined>)[name]);
     rows.push(row(`config.${name}`, spec?.label ?? humanize(name), spec?.unit ?? "", values));
+  }
+  if (runs.some((run) => run.monteCarlo)) {
+    const section = sections.find((item) => item.name === MONTE_CARLO_SECTION);
+    for (const name of MONTE_CARLO_SETTINGS) {
+      const spec = section?.params.find((item) => item.name === name);
+      const label = `${section?.label ?? "Monte Carlo"} · ${spec?.label ?? humanize(name)}`;
+      rows.push(row(`monte_carlo.${name}`, label, spec?.unit ?? "", runs.map((run) => run.monteCarlo?.[name])));
+    }
   }
 
   const filterLabels = new Map(runs.flatMap((run) => run.filters.map((filter) => [filter.name, filter.label] as const)));

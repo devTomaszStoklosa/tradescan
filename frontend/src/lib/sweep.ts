@@ -6,7 +6,7 @@
  * axes: `ax1=signal.oversold&ax1v=5:20:1`. An axis key is `target[.owner].name`, as the API reports it.
  */
 import type { ConfigOut, MetricsOut, ParamSpecOut, SignalOut, SweepAxisIn, SweepCellOut, SweepIn, SweepTarget } from "../api/client";
-import { BACKTEST_FIELDS, BACKTEST_SECTIONS } from "./choices";
+import { BACKTEST_FIELDS, BACKTEST_SECTIONS, MONTE_CARLO_SECTION } from "./choices";
 import { metricValue, type MetricKey } from "./compare";
 import { withOwner, withValue, type Values } from "./overrides";
 import { readBacktestSetup, setupBody, writeBacktestSetup, type BacktestSetup } from "./params";
@@ -145,9 +145,11 @@ export function combinations(ranges: AxisRange[]): number | null {
 // --- Form, URL and request ----------------------------------------------------------------------
 
 /** A sweep of `setup` with no axes picked yet. */
+/** A sweep runs no Monte Carlo, so a backtest's Monte Carlo settings stay behind. */
 export function newSweepForm(setup: BacktestSetup): SweepForm {
   const { ticker, signal, period, settings, signalParams, entry, entryParams, exits, exitParams, filters, filterParams, benchmark } = setup;
-  return { ticker, signal, period, settings, signalParams, entry, entryParams, exits, exitParams, filters, filterParams, benchmark, axes: [] };
+  const { [MONTE_CARLO_SECTION]: _monteCarlo, ...setupSettings } = settings;
+  return { ticker, signal, period, settings: setupSettings, signalParams, entry, entryParams, exits, exitParams, filters, filterParams, benchmark, axes: [] };
 }
 
 const number = (text: string | undefined): number | null => {

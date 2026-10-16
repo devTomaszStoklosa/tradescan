@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { appliedRule, backtestForm, backtestResult, entryRules, exitRules, filterRules, makeRun } from "../test/fixtures";
+import { appliedRule, backtestForm, backtestResult, entryRules, exitRules, filterRules, makeMonteCarlo, makeRun } from "../test/fixtures";
 import { freeSlot, MAX_RUNS, mergeRuns, runKey, snapshotRun, toPinnedRun } from "./runs";
 import { decodeRuns, encodeRuns, parseRunsFile, RUNS_FILE_VERSION } from "./runsFile";
 
@@ -24,6 +24,12 @@ describe("snapshotRun", () => {
     expect(snapshot?.split).toMatchObject({ oos_pct: 30, out_of_sample_start: "2023-07-03", in_sample: { sharpe: 1.1 }, out_of_sample: { sharpe: 0.2 } });
     const short = { ...backtestResult, split: null, runs: backtestResult.runs.map((run) => ({ ...run, in_sample: null, out_of_sample: null })) };
     expect(snapshotRun(short, "vectorized", backtestForm)?.split).toBeNull();
+  });
+
+  it("keeps the Monte Carlo of the run's trades", () => {
+    expect(snapshotRun(backtestResult, "vectorized", backtestForm)?.monteCarlo).toEqual(makeMonteCarlo());
+    const few = { ...backtestResult, runs: backtestResult.runs.map((run) => ({ ...run, monte_carlo: null })) };
+    expect(snapshotRun(few, "vectorized", backtestForm)?.monteCarlo).toBeNull();
   });
 });
 
@@ -51,6 +57,14 @@ describe("runKey", () => {
     expect(runKey(run)).not.toBe(runKey(makeRun(1)));
     expect(runKey(makeRun(1, { filters: [appliedRule(filterRules[1]!, { period: 100 })], benchmark: "SPY" }))).not.toBe(runKey(run));
     expect(runKey(makeRun(1, { filters: run.filters, benchmark: "QQQ" }))).not.toBe(runKey(run));
+  });
+
+  it("tells runs apart by their Monte Carlo settings but not by its results", () => {
+    const run = makeRun(1);
+    expect(runKey(makeRun(1, { monteCarlo: makeMonteCarlo({ seed: 1 }) }))).not.toBe(runKey(run));
+    expect(runKey(makeRun(1, { monteCarlo: makeMonteCarlo({ simulations: 5000 }) }))).not.toBe(runKey(run));
+    expect(runKey(makeRun(1, { monteCarlo: makeMonteCarlo({ ruin_drawdown_pct: 30 }) }))).not.toBe(runKey(run));
+    expect(runKey(makeRun(1, { monteCarlo: makeMonteCarlo({ methods: [] }) }))).toBe(runKey(run));
   });
 });
 
@@ -100,7 +114,7 @@ describe("runs file", () => {
     expect(run!.entry).toEqual(appliedRule(entryRules[0]!));
     expect(run!.exits).toEqual([appliedRule(exitRules[0]!, { target_r: 3 }), appliedRule(exitRules[1]!)]);
     expect(run!.form).toMatchObject({ settings: {}, entry: "next_open", entryParams: {}, exits: ["target", "time"], exitParams: { target: { target_r: 3 } } });
-    expect(runKey(run!)).toBe(runKey(makeRun(1, { exits: [appliedRule(exitRules[0]!, { target_r: 3 }), appliedRule(exitRules[1]!)] })));
+    expect(runKey(run!)).toBe(runKey(makeRun(1, { exits: [appliedRule(exitRules[0]!, { target_r: 3 }), appliedRule(exitRules[1]!)], monteCarlo: null })));
   });
 
   it("upgrades version 2 runs, which have no out-of-sample results", () => {
@@ -117,7 +131,14 @@ describe("runs file", () => {
     const { filters: _a, filterParams: _b, benchmark: _c, ...form } = current.form;
     const [run] = decodeRuns({ version: 3, runs: [{ ...current, form }] });
     expect(run).toMatchObject({ filters: [], benchmark: null, form: { filters: [], filterParams: {}, benchmark: "" } });
-    expect(runKey(run!)).toBe(runKey(makeRun(1)));
+    expect(runKey(run!)).toBe(runKey(makeRun(1, { monteCarlo: null })));
+  });
+
+  it("upgrades version 4 runs, which have no Monte Carlo", () => {
+    const { monteCarlo: _monteCarlo, ...current } = encodeRuns([makeRun(1)]).runs[0]!;
+    const [run] = decodeRuns({ version: 4, runs: [current] });
+    expect(run!.monteCarlo).toBeNull();
+    expect(runKey(run!)).toBe(runKey(makeRun(1, { monteCarlo: null })));
   });
 
   it("drops fields it does not know", () => {
@@ -141,6 +162,19 @@ describe("runs file", () => {
       "a split without metrics",
       JSON.stringify({ version: 3, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], split: { ...makeRun(1).split, out_of_sample: null } }] }),
       'Run 1 has an invalid "split"',
+    ],
+    [
+      "a Monte Carlo without methods",
+      JSON.stringify({ version: RUNS_FILE_VERSION, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], monteCarlo: { ...makeMonteCarlo(), methods: null } }] }),
+      'Run 1 has an invalid "monteCarlo"',
+    ],
+    [
+      "a Monte Carlo method without percentiles",
+      JSON.stringify({
+        version: RUNS_FILE_VERSION,
+        runs: [{ ...encodeRuns([makeRun(1)]).runs[0], monteCarlo: { ...makeMonteCarlo(), methods: [{ ...makeMonteCarlo().methods[0], max_drawdown_pct: { p5: 1 } }] } }],
+      }),
+      'Run 1 has an invalid "monteCarlo"',
     ],
     ["a bad rule", JSON.stringify({ version: 2, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], exits: [{ name: "target" }] }] }), 'Run 1 has an invalid "exits"'],
     [

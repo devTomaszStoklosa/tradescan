@@ -521,6 +521,8 @@ export interface components {
             in_sample: components["schemas"]["MetricsOut"] | null;
             /** @description The run from the split on, with fresh equity; null without a split */
             out_of_sample: components["schemas"]["MetricsOut"] | null;
+            /** @description The full history's closed trades resampled in R; null with fewer than two closed trades */
+            monte_carlo: components["schemas"]["MonteCarloOut"] | null;
             /** Equity */
             equity: components["schemas"]["Point"][];
             /** Trades */
@@ -695,6 +697,68 @@ export interface components {
             /** Buy Hold Pct */
             buy_hold_pct: number | null;
         };
+        /** MonteCarloMethodOut */
+        MonteCarloMethodOut: {
+            /** Name */
+            name: string;
+            /** Label */
+            label: string;
+            /** Description */
+            description: string;
+            final_return_pct: components["schemas"]["PercentilesOut"];
+            /** @description Negative: the 5th percentile is the deepest drawdown but 5% */
+            max_drawdown_pct: components["schemas"]["PercentilesOut"];
+            longest_losing_streak: components["schemas"]["PercentilesOut"];
+            /**
+             * Ruin Pct
+             * @description Share of the simulations whose drawdown reached the ruin level
+             */
+            ruin_pct: number;
+        };
+        /** MonteCarloOut */
+        MonteCarloOut: {
+            /**
+             * Simulations
+             * @description Simulations per method
+             */
+            simulations: number;
+            /**
+             * Ruin Drawdown Pct
+             * @description A drawdown from the peak at least this deep counts as ruin
+             */
+            ruin_drawdown_pct: number;
+            /** Seed */
+            seed: number;
+            /**
+             * Risk Pct
+             * @description Each trade changes equity by this percent times its R multiple
+             */
+            risk_pct: number;
+            /**
+             * Trades
+             * @description Closed trades resampled; every simulated sequence has as many
+             */
+            trades: number;
+            /** @description The run's own order of trades under the same model */
+            actual: components["schemas"]["MonteCarloPathOut"];
+            /** Methods */
+            methods: components["schemas"]["MonteCarloMethodOut"][];
+        };
+        /** MonteCarloPathOut */
+        MonteCarloPathOut: {
+            /** Final Return Pct */
+            final_return_pct: number | null;
+            /**
+             * Max Drawdown Pct
+             * @description Negative, like the run's max drawdown
+             */
+            max_drawdown_pct: number | null;
+            /**
+             * Longest Losing Streak
+             * @description Consecutive losing trades
+             */
+            longest_losing_streak: number;
+        };
         /**
          * ParamKind
          * @enum {string}
@@ -726,6 +790,22 @@ export interface components {
              * @description Allowed keys of a weights parameter; null means any
              */
             keys?: string[] | null;
+        };
+        /** PercentilesOut */
+        PercentilesOut: {
+            /** P5 */
+            p5: number | null;
+            /** P25 */
+            p25: number | null;
+            /**
+             * P50
+             * @description The median
+             */
+            p50: number | null;
+            /** P75 */
+            p75: number | null;
+            /** P95 */
+            p95: number | null;
         };
         /**
          * Period

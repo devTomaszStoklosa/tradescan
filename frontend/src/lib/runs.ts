@@ -2,7 +2,8 @@
  * Pinned backtest runs: frozen snapshots of one engine's result, kept in the browser for comparison.
  * A pin keeps what was seen; it is never re-run, so new bars do not change it.
  */
-import type { AppliedRuleOut, BacktestConfigOut, BacktestOut, Direction, MetricsOut, Point, SplitOut } from "../api/client";
+import type { AppliedRuleOut, BacktestConfigOut, BacktestOut, Direction, MetricsOut, MonteCarloOut, Point, SplitOut } from "../api/client";
+import { MONTE_CARLO_SETTINGS } from "./monteCarlo";
 import type { BacktestForm } from "./params";
 
 /** One chart and one table stay legible up to this many runs, and the run palette has as many colours. */
@@ -39,6 +40,8 @@ export interface RunSnapshot {
   metrics: MetricsOut;
   /** Null for runs pinned before out-of-sample results, or with too short a history to split. */
   split: RunSplit | null;
+  /** The Monte Carlo of the run's trades; null for runs pinned before Monte Carlo results, or with fewer than two closed trades. */
+  monteCarlo: MonteCarloOut | null;
   equity: Point[];
   /** Reopens the run on the Backtest page. */
   form: BacktestForm;
@@ -82,6 +85,7 @@ export function snapshotRun(result: BacktestOut, engine: string, form: BacktestF
     benchmark: result.benchmark,
     metrics: run.metrics,
     split: result.split && run.in_sample && run.out_of_sample ? { ...result.split, in_sample: run.in_sample, out_of_sample: run.out_of_sample } : null,
+    monteCarlo: run.monte_carlo,
     equity: run.equity,
     form: { ...form, engines: [engine] },
   };
@@ -92,6 +96,7 @@ const sortedEntries = (record: object) => Object.entries(record).sort(([left], [
 /** Equal for runs with the same inputs and data range, so the same run is never pinned twice. */
 export function runKey(run: RunSnapshot): string {
   const rule = ({ name, params }: AppliedRuleOut) => [name, sortedEntries(params)];
+  const { monteCarlo } = run;
   return JSON.stringify([
     run.ticker,
     run.signal,
@@ -104,6 +109,7 @@ export function runKey(run: RunSnapshot): string {
     run.exits.map(rule),
     run.filters.map(rule),
     run.benchmark,
+    monteCarlo && MONTE_CARLO_SETTINGS.map((name) => monteCarlo[name]),
   ]);
 }
 
