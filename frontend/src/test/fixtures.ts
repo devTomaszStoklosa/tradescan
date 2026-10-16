@@ -2,6 +2,7 @@ import type {
   AppliedRuleOut,
   BacktestOut,
   ConfigOut,
+  FilterRuleOut,
   HitOut,
   MetricsOut,
   ParamSpecOut,
@@ -73,6 +74,26 @@ export const exitRules: RuleOut[] = [
   },
 ];
 
+/** What /api/config lists as entry filters. */
+export const filterRules: FilterRuleOut[] = [
+  {
+    name: "trend",
+    label: "Trend filter",
+    description: "Close above SMA(200) for longs, below it for shorts",
+    template: "Close above SMA({period}) for longs, below it for shorts",
+    params: [spec("period", "SMA length", 200, [2, 400, 1], "int", { unit: "bars" })],
+    needs_benchmark: false,
+  },
+  {
+    name: "market",
+    label: "Market filter",
+    description: "Benchmark close above its SMA(200) for longs, below it for shorts",
+    template: "Benchmark close above its SMA({period}) for longs, below it for shorts",
+    params: [spec("period", "Benchmark SMA", 200, [2, 400, 1], "int", { unit: "bars" })],
+    needs_benchmark: true,
+  },
+];
+
 /** A rule as a backtest result reports it. */
 export function appliedRule(rule: RuleOut, params: Record<string, number> = {}): AppliedRuleOut {
   const values = { ...Object.fromEntries(rule.params.map((item) => [item.name, item.default as number])), ...params };
@@ -137,6 +158,7 @@ export const config: ConfigOut = {
   engines: ["vectorized", "cerebro"],
   entry_rules: entryRules,
   exit_rules: exitRules,
+  filter_rules: filterRules,
   default_entry: "next_open",
   default_exits: ["target", "time"],
   sweep: {
@@ -274,6 +296,8 @@ export const backtestResult: BacktestOut = {
   },
   entry: appliedRule(entryRules[0]!),
   exits: exitRules.map((rule) => appliedRule(rule)),
+  filters: [],
+  benchmark: null,
   split: {
     oos_pct: 30,
     in_sample_start: "2016-01-04",
@@ -312,6 +336,9 @@ export const backtestForm: BacktestForm = {
   entryParams: {},
   exits: ["target", "time"],
   exitParams: {},
+  filters: [],
+  filterParams: {},
+  benchmark: "",
 };
 
 /** A pinned run of `backtestResult`, changed by `overrides`, with a fixed slot. */
@@ -328,6 +355,8 @@ export function makeRun(slot: number, overrides: Partial<RunSnapshot> = {}, extr
     config: backtestResult.config,
     entry: backtestResult.entry,
     exits: backtestResult.exits,
+    filters: backtestResult.filters,
+    benchmark: backtestResult.benchmark,
     metrics: makeMetrics(),
     split: { ...backtestResult.split!, in_sample: makeMetrics({ sharpe: 1.1, trades: 30 }), out_of_sample: makeMetrics({ sharpe: 0.2, trades: 12 }) },
     equity: backtestResult.runs[0]!.equity,
@@ -356,6 +385,8 @@ export const sweepResult: SweepOut = {
   config: backtestResult.config,
   entry: backtestResult.entry,
   exits: backtestResult.exits,
+  filters: backtestResult.filters,
+  benchmark: backtestResult.benchmark,
   engine: "vectorized",
   split: backtestResult.split!,
   axes: [

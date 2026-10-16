@@ -1,11 +1,11 @@
-/** Entry and exit rule pickers with the chosen rules' parameters, built from the API's rule declarations. */
-import { useId } from "react";
+/** Entry filter, entry and exit rule pickers with the chosen rules' parameters, built from the API's rule declarations. */
+import { useId, type ReactNode } from "react";
 
-import type { RuleOut } from "../api/client";
+import type { FilterRuleOut, RuleOut } from "../api/client";
 import { pickOwners, withOwner, type Overrides, type Values } from "../lib/overrides";
-import { describeRule, findRule, toggleExit } from "../lib/rules";
+import { describeRule, findRule, needsBenchmark, toggleRule } from "../lib/rules";
 import { ParamFields } from "./ParamFields";
-import { Select, ToggleChip } from "./ui";
+import { Field, Input, Select, ToggleChip } from "./ui";
 
 const FIELDS = "grid grid-cols-2 gap-3";
 
@@ -53,31 +53,40 @@ export function EntryFields({
   );
 }
 
-export function ExitFields({
+/** Rules switched on and off as chips, each chosen one with its parameters: the exits and the filters. */
+function RuleSetFields({
+  heading,
   rules,
-  exits,
+  chosen,
   params,
   onChange,
+  empty,
+  children,
 }: {
+  heading: string;
   rules: RuleOut[];
-  exits: string[];
-  /** Parameters by exit rule name. */
+  chosen: string[];
+  /** Parameters by rule name. */
   params: Overrides;
-  onChange: (exits: string[], params: Overrides) => void;
+  onChange: (chosen: string[], params: Overrides) => void;
+  /** Shown while no rule is chosen. */
+  empty: string;
+  /** Extra fields below the chosen rules. */
+  children?: ReactNode;
 }) {
   const id = useId();
-  const selected = exits.flatMap((name) => findRule(rules, name) ?? []);
+  const selected = chosen.flatMap((name) => findRule(rules, name) ?? []);
   // A rule switched off forgets its changed parameters, so switching it on again starts from the defaults.
   const toggle = (name: string) => {
-    const next = toggleExit(exits, name, rules);
+    const next = toggleRule(chosen, name, rules);
     onChange(next, pickOwners(params, next));
   };
   return (
     <div className="space-y-2">
-      <GroupHeading id={id}>Exits</GroupHeading>
+      <GroupHeading id={id}>{heading}</GroupHeading>
       <div role="group" aria-labelledby={id} className="flex flex-wrap gap-1.5 py-1">
         {rules.map((rule) => (
-          <ToggleChip key={rule.name} active={exits.includes(rule.name)} onClick={() => toggle(rule.name)} color="var(--accent)">
+          <ToggleChip key={rule.name} active={chosen.includes(rule.name)} onClick={() => toggle(rule.name)} color="var(--accent)">
             {rule.label}
           </ToggleChip>
         ))}
@@ -92,15 +101,79 @@ export function ExitFields({
               <ParamFields
                 specs={rule.params}
                 values={params[rule.name] ?? {}}
-                onChange={(values) => onChange(exits, withOwner(params, rule.name, values))}
+                onChange={(values) => onChange(chosen, withOwner(params, rule.name, values))}
                 className={FIELDS}
               />
             )}
           </div>
         ))
       ) : (
-        <p className="text-xs text-muted">No exit rules: only the initial stop closes a trade.</p>
+        <p className="text-xs text-muted">{empty}</p>
       )}
+      {children}
     </div>
+  );
+}
+
+export function ExitFields({
+  rules,
+  exits,
+  params,
+  onChange,
+}: {
+  rules: RuleOut[];
+  exits: string[];
+  /** Parameters by exit rule name. */
+  params: Overrides;
+  onChange: (exits: string[], params: Overrides) => void;
+}) {
+  return (
+    <RuleSetFields
+      heading="Exits"
+      rules={rules}
+      chosen={exits}
+      params={params}
+      onChange={onChange}
+      empty="No exit rules: only the initial stop closes a trade."
+    />
+  );
+}
+
+export function FilterFields({
+  rules,
+  filters,
+  params,
+  benchmark,
+  defaultBenchmark,
+  onChange,
+  onBenchmarkChange,
+}: {
+  rules: FilterRuleOut[];
+  filters: string[];
+  /** Parameters by filter name. */
+  params: Overrides;
+  benchmark: string;
+  /** The benchmark the server compares when none is given. */
+  defaultBenchmark: string;
+  onChange: (filters: string[], params: Overrides) => void;
+  onBenchmarkChange: (benchmark: string) => void;
+}) {
+  return (
+    <RuleSetFields
+      heading="Entry filters"
+      rules={rules}
+      chosen={filters}
+      params={params}
+      onChange={onChange}
+      empty="No filters: every signal places its order."
+    >
+      {needsBenchmark(filters, rules) && (
+        <div className={FIELDS}>
+          <Field label="Benchmark" hint="Compared by the market filter">
+            <Input value={benchmark} placeholder={defaultBenchmark} onChange={(event) => onBenchmarkChange(event.target.value.toUpperCase())} />
+          </Field>
+        </div>
+      )}
+    </RuleSetFields>
   );
 }

@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AccountProvider } from "../state/account";
 import { PinnedRunsProvider } from "../state/pinnedRuns";
 import { ThemeProvider } from "../state/theme";
-import { backtestResult, config, signals } from "../test/fixtures";
+import { appliedRule, backtestResult, config, filterRules, signals } from "../test/fixtures";
 import { BacktestPage } from "./BacktestPage";
 
 vi.mock("../components/charts/EquityChart", () => ({ EquityChart: () => null }));
@@ -113,5 +113,46 @@ describe("BacktestPage trade rules", () => {
     await userEvent.click(screen.getByRole("button", { name: "Reset 4 changed" }));
     expect(screen.getByRole("combobox", { name: "Entry" })).toHaveValue("next_open");
     expect(screen.getByRole("button", { name: "Profit target", pressed: true })).toBeInTheDocument();
+  });
+
+  it("sends the chosen filters, with a benchmark only once a filter compares one", async () => {
+    renderPage("/backtest?ticker=SPY&signal=connors_rsi2_long");
+    await screen.findByRole("button", { name: "Pin run" });
+    expect(backtestBodies().at(-1)).toMatchObject({ filters: [], benchmark: null });
+    expect(screen.getByText("No filters: every signal places its order.")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Trend filter", pressed: false }));
+    await userEvent.type(screen.getByLabelText("SMA length (bars)"), "100");
+    expect(screen.getByText("Close above SMA(100) for longs, below it for shorts")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /^Benchmark/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Market filter", pressed: false }));
+    const benchmark = screen.getByRole("textbox", { name: /^Benchmark/ });
+    expect(benchmark).toHaveAttribute("placeholder", "SPY");
+    await userEvent.type(benchmark, "qqq");
+    await userEvent.click(screen.getByRole("button", { name: "Run backtest" }));
+
+    await waitFor(() =>
+      expect(backtestBodies().at(-1)).toMatchObject({
+        filters: [
+          { name: "trend", params: { period: 100 } },
+          { name: "market", params: {} },
+        ],
+        benchmark: "QQQ",
+      }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Reset 3 changed" }));
+    expect(screen.getByRole("button", { name: "Trend filter", pressed: false })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /^Benchmark/ })).not.toBeInTheDocument();
+  });
+
+  it("lists the filters and the benchmark a run used", async () => {
+    RESPONSES["/backtest"] = { ...backtestResult, filters: [appliedRule(filterRules[1]!)], benchmark: "QQQ" };
+    try {
+      renderPage("/backtest?ticker=SPY&signal=connors_rsi2_long&filter=market&b=QQQ");
+      const line = await screen.findByText(/^Filters: Benchmark close above its SMA\(200\)/);
+      expect(line).toHaveTextContent("Filters: Benchmark close above its SMA(200) for longs, below it for shorts · benchmark QQQ");
+    } finally {
+      RESPONSES["/backtest"] = backtestResult;
+    }
   });
 });

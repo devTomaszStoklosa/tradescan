@@ -69,13 +69,14 @@ function ownedRows(
 
 /**
  * Every input of the runs as rows: what was tested, the data range, the stop, costs and account,
- * the entry and exit rules with their parameters, and the signal parameters.
+ * the entry filters (and the benchmark they compared), the entry and exit rules with their parameters,
+ * and the signal parameters.
  */
 export function parameterRows(
   runs: PinnedRun[],
   sections: SettingsSectionOut[] = [],
   signals: SignalOut[] = [],
-  rules: RuleSpecs = { entry_rules: [], exit_rules: [] },
+  rules: RuleSpecs = { entry_rules: [], exit_rules: [], filter_rules: [] },
 ): ParamRow[] {
   const settingSpecs = sections.flatMap((section) => section.params);
   const rows: ParamRow[] = [
@@ -89,6 +90,20 @@ export function parameterRows(
     const values = runs.map((run) => (run.config as unknown as Record<string, number | undefined>)[name]);
     rows.push(row(`config.${name}`, spec?.label ?? humanize(name), spec?.unit ?? "", values));
   }
+
+  const filterLabels = new Map(runs.flatMap((run) => run.filters.map((filter) => [filter.name, filter.label] as const)));
+  rows.push(row("filters", "Filters", "", runs.map((run) => run.filters.map((filter) => filter.label).join(", ") || "none")));
+  if (runs.some((run) => run.benchmark)) rows.push(row("benchmark", "Benchmark", "", runs.map((run) => run.benchmark ?? undefined)));
+  rows.push(
+    ...ownedRows(
+      "filter",
+      filterLabels.keys(),
+      (name) => filterLabels.get(name) ?? name,
+      (name) => rules.filter_rules.find((rule) => rule.name === name)?.params ?? [],
+      (run, name) => run.filters.find((filter) => filter.name === name)?.params,
+      runs,
+    ),
+  );
 
   const entryLabels = new Map(runs.map((run) => [run.entry.name, run.entry.label]));
   rows.push(row("entry", "Entry", "", runs.map((run) => run.entry.label)));

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { appliedRule, config, entryRules, exitRules, makeMetrics, makeRun, signals } from "../test/fixtures";
+import { appliedRule, config, entryRules, exitRules, filterRules, makeMetrics, makeRun, signals } from "../test/fixtures";
 import { bestIndexes, metricValue, parameterRows, returnCurve } from "./compare";
 
 const differing = (rows: ReturnType<typeof parameterRows>) => rows.filter((row) => row.differs);
@@ -47,6 +47,18 @@ describe("parameterRows", () => {
       { key: "exit.time.max_hold_bars", label: "Time exit · Hold for", unit: "bars", values: ["20", "5"], differs: true },
     ]);
     expect(parameterRows([makeRun(1, { exits: [] })]).find((row) => row.key === "exits")?.values).toEqual(["stop only"]);
+  });
+
+  it("shows the entry filters with their parameters, and the benchmark when a run compared one", () => {
+    const market = makeRun(2, { filters: [appliedRule(filterRules[1]!, { period: 100 })], benchmark: "QQQ" });
+    const rows = parameterRows([makeRun(1), market], config.sections, signals, config);
+
+    expect(differing(rows)).toEqual([
+      { key: "filters", label: "Filters", unit: "", values: ["none", "Market filter"], differs: true },
+      { key: "benchmark", label: "Benchmark", unit: "", values: ["–", "QQQ"], differs: true },
+      { key: "filter.market.period", label: "Market filter · Benchmark SMA", unit: "bars", values: ["–", "100"], differs: true },
+    ]);
+    expect(parameterRows([makeRun(1)]).some((row) => row.key === "benchmark")).toBe(false);
   });
 
   it("shows the data range so runs on different days are told apart", () => {

@@ -2,14 +2,14 @@
  * Pinned runs on disk. Browser storage and the JSON export use the same format:
  * `{version, runs}`, with each equity curve as two arrays (dates, values rounded to cents),
  * about half the size of one object per point. Older files are upgraded when read: version 1 is from
- * before entry and exit rules, version 2 from before out-of-sample results.
+ * before entry and exit rules, version 2 from before out-of-sample results, version 3 from before entry filters.
  */
 import type { AppliedRuleOut, MetricsOut } from "../api/client";
 import { formatTemplate, type Overrides } from "./overrides";
 import { moveLegacyExitSettings } from "./rules";
 import { MAX_RUNS, type PinnedRun } from "./runs";
 
-export const RUNS_FILE_VERSION = 3;
+export const RUNS_FILE_VERSION = 4;
 
 interface StoredEquity {
   time: string[];
@@ -62,7 +62,10 @@ const form: Check = (value) =>
   text(value.entry) &&
   recordOf(paramValue)(value.entryParams) &&
   arrayOf(text)(value.exits) &&
-  recordOf(recordOf(paramValue))(value.exitParams);
+  recordOf(recordOf(paramValue))(value.exitParams) &&
+  arrayOf(text)(value.filters) &&
+  recordOf(recordOf(paramValue))(value.filterParams) &&
+  text(value.benchmark);
 
 const split: Check = (value) =>
   isRecord(value) &&
@@ -91,6 +94,8 @@ const RUN_FIELDS: Record<keyof StoredRun, Check> = {
   config: recordOf(finite),
   entry: appliedRule,
   exits: arrayOf(appliedRule),
+  filters: arrayOf(appliedRule),
+  benchmark: oneOf((value) => value === null, text),
   metrics,
   split: oneOf((value) => value === null, split),
   equity,
@@ -140,9 +145,17 @@ function upgradeV1(value: unknown): unknown {
 
 const upgradeV2 = (value: unknown): unknown => (isRecord(value) ? { ...value, split: null } : value);
 
+// --- Version 3: runs had no entry filters, so a signal always traded and no benchmark was compared --
+
+const upgradeV3 = (value: unknown): unknown =>
+  isRecord(value) && isRecord(value.form)
+    ? { ...value, filters: [], benchmark: null, form: { ...value.form, filters: [], filterParams: {}, benchmark: "" } }
+    : value;
+
 const UPGRADES: Record<number, (value: unknown) => unknown> = {
-  1: (value) => upgradeV2(upgradeV1(value)),
-  2: upgradeV2,
+  1: (value) => upgradeV3(upgradeV2(upgradeV1(value))),
+  2: (value) => upgradeV3(upgradeV2(value)),
+  3: upgradeV3,
   [RUNS_FILE_VERSION]: (value) => value,
 };
 

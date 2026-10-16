@@ -5,9 +5,14 @@ import { countChanges, hasProblems, pickSections, sectionSpecs } from "./overrid
 import { setupBody, type BacktestSetup } from "./params";
 import { countRuleChanges, defaultRules, hasRuleProblems } from "./rules";
 
-/** How many settings, signal parameters and trade rules differ from the defaults. */
+/** How many settings, signal parameters, trade rules and the benchmark differ from the defaults. */
 export function setupChanges(setup: BacktestSetup, config: ConfigOut): number {
-  return countChanges(setup.settings) + Object.keys(setup.signalParams).length + countRuleChanges(setup, config);
+  return (
+    countChanges(setup.settings) +
+    Object.keys(setup.signalParams).length +
+    countRuleChanges(setup, config) +
+    Number(setup.benchmark.trim() !== "")
+  );
 }
 
 /** True while the ticker or signal is missing or any value is invalid. */
@@ -22,7 +27,7 @@ export function hasSetupProblems(setup: BacktestSetup, config: ConfigOut, signal
   );
 }
 
-/** The setup with every setting, signal parameter and trade rule back at its default. */
+/** The setup with every setting, signal parameter, trade rule and the benchmark back at its default. */
 export function resetSetup<T extends BacktestSetup>(setup: T, config: ConfigOut): T {
-  return { ...setup, settings: {}, signalParams: {}, ...defaultRules(config) };
+  return { ...setup, settings: {}, signalParams: {}, ...defaultRules(config), benchmark: "" };
 }

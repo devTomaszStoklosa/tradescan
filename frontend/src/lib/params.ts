@@ -2,12 +2,14 @@
  * Form state <-> URL search params. Keeping requests in the URL makes results shareable,
  * survives reloads, and lets the query cache show earlier results on back navigation.
  * Parameter overrides travel as `set.<section>.<name>` and `sig.<signal>.<name>`, a backtest's rules as
- * `entry=<rule>`, `exit=<rule>,<rule>` (`none` for no exits) and `en.<rule>.<name>` / `ex.<rule>.<name>` (see overrides.ts).
+ * `entry=<rule>`, `exit=<rule>,<rule>` (`none` for no exits), `filter=<rule>,<rule>` (left out for no filters) and
+ * `en.<rule>.<name>` / `ex.<rule>.<name>` / `fi.<rule>.<name>` (see overrides.ts), and its benchmark as `b=<ticker>`.
  */
 import type { BacktestIn, BacktestSetupIn, Direction, EdgeIn, Family, ScanIn } from "../api/client";
 import {
   ENTRY_PREFIX,
   EXIT_PREFIX,
+  FILTER_PREFIX,
   pickOwners,
   readOverrides,
   SETTINGS_PREFIX,
@@ -53,6 +55,8 @@ export interface BacktestSetup extends TradeRulesForm {
   settings: Overrides;
   /** Parameters of the selected signal. */
   signalParams: Values;
+  /** The benchmark the market filter compares; empty for the server's default. */
+  benchmark: string;
 }
 
 export interface BacktestForm extends BacktestSetup {
@@ -204,6 +208,7 @@ export function readBacktestSetup(params: URLSearchParams, defaults: RuleDefault
   const entry = params.get("entry") || defaults.default_entry;
   const exitList = params.get("exit");
   const exits = exitList === null ? [...defaults.default_exits] : list(exitList).filter((name) => name !== "none");
+  const filters = list(params.get("filter"));
   const { settings, exitParams } = moveLegacyExitSettings(readOverrides(params, SETTINGS_PREFIX), readOverrides(params, EXIT_PREFIX));
   return {
     ticker: (params.get("ticker") ?? "").toUpperCase(),
@@ -215,6 +220,9 @@ export function readBacktestSetup(params: URLSearchParams, defaults: RuleDefault
     entryParams: readOverrides(params, ENTRY_PREFIX)[entry] ?? {},
     exits,
     exitParams: pickOwners(exitParams, exits),
+    filters,
+    filterParams: pickOwners(readOverrides(params, FILTER_PREFIX), filters),
+    benchmark: (params.get("b") ?? "").toUpperCase(),
   };
 }
 
@@ -232,10 +240,13 @@ export function writeBacktestSetup(form: BacktestSetup, defaults?: RuleDefaults,
   setIf(params, "p", form.period);
   if (form.entry !== defaults?.default_entry) setIf(params, "entry", form.entry);
   if (!defaults || !sameList(form.exits, defaults.default_exits)) params.set("exit", form.exits.join(",") || "none");
+  setIf(params, "filter", form.filters.join(","));
+  setIf(params, "b", form.benchmark.trim().toUpperCase());
   writeOverrides(params, SETTINGS_PREFIX, form.settings);
   if (form.signal) writeOverrides(params, SIGNALS_PREFIX, { [form.signal]: form.signalParams });
   writeOverrides(params, ENTRY_PREFIX, { [form.entry]: form.entryParams });
   writeOverrides(params, EXIT_PREFIX, pickOwners(form.exitParams, form.exits));
+  writeOverrides(params, FILTER_PREFIX, pickOwners(form.filterParams, form.filters));
   return params;
 }
 
@@ -256,5 +267,7 @@ export function setupBody(form: BacktestSetup): BacktestSetupIn | null {
     settings: form.settings,
     entry: { name: form.entry, params: form.entryParams as SignalParamsIn[string] },
     exits: form.exits.map((name) => ({ name, params: (form.exitParams[name] ?? {}) as SignalParamsIn[string] })),
+    filters: form.filters.map((name) => ({ name, params: (form.filterParams[name] ?? {}) as SignalParamsIn[string] })),
+    benchmark: form.benchmark.trim().toUpperCase() || null,
   };
 }

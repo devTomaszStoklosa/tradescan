@@ -111,6 +111,7 @@ function BacktestView({ result, form, config }: { result: BacktestOut; form: Bac
   if (!run) return null;
   const used = result.config;
   const exits = result.exits.map((exit) => exit.description).join("; ") || "none, only the stop";
+  const filters = result.filters.map((filter) => filter.description).join("; ");
   return (
     <div className="space-y-4">
       <div className="space-y-1 text-sm">
@@ -127,6 +128,12 @@ function BacktestView({ result, form, config }: { result: BacktestOut; form: Bac
           {result.start} → {result.end} · risk {fmtNumber(used.risk_pct, 2)}%, max position {fmtNumber(used.max_position_pct, 0)}% · costs{" "}
           {fmtNumber(used.commission_pct, 2)}% + {fmtNumber(used.slippage_pct, 2)}%
         </p>
+        {filters && (
+          <p className="text-muted">
+            Filters: {filters}
+            {result.benchmark && ` · benchmark ${result.benchmark}`}
+          </p>
+        )}
         <p className="text-muted">
           Entry: {result.entry.description} · initial stop {fmtNumber(used.atr_mult, 2)} × ATR({used.atr_period}) · exits: {exits}
         </p>

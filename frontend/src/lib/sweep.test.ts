@@ -62,6 +62,16 @@ describe("sweepParams", () => {
   });
 });
 
+describe("sweepParams with entry filters", () => {
+  it("offers the parameters of the chosen filters after the signal's", () => {
+    const filtered = sweepParams({ ...setup, filters: ["trend"], filterParams: { trend: { period: 100 } } }, config, signals);
+    expect(filtered.map((item) => item.key).slice(2, 5)).toEqual(["signal.oversold", "filter.trend.period", "exit.target.target_r"]);
+    const trend = filtered.find((item) => item.key === "filter.trend.period");
+    expect(trend).toMatchObject({ target: "filter", owner: "trend", name: "period", group: "Filter: Trend filter", current: 100 });
+    expect(withCombination({ ...setup, filters: ["trend"] }, [trend!], [150]).filterParams).toEqual({ trend: { period: 150 } });
+  });
+});
+
 describe("axis ranges", () => {
   it("centres a default range on the setup's value in the declared steps", () => {
     expect(defaultAxis(param("signal.oversold"))).toEqual({ key: "signal.oversold", from: 6, to: 14, step: 1 });
