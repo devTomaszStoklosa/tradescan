@@ -43,14 +43,15 @@ the built UI. The screens:
 - **Scanner**: market regime, ranked setups, CSV export; click a row for a candlestick chart with
   signal markers and stop/target lines, the risk plan, the score breakdown and each fired signal's
   history on that ticker.
-- **Backtest**: one signal on one ticker with either or both engines; pick the entry (next open, stop
-  or limit order) and the exits (target, time exit, trailing, channel and breakeven stops, RSI, SMA and
-  Supertrend exits, failed breakout and no-progress exits) on top of the ATR stop; the signal's and the
-  rules' parameters are editable; key metrics, equity vs. buy & hold, in-sample vs. out-of-sample metrics,
-  trades on the chart and in a sortable table.
-- **Sweep**: the same setup as Backtest over a range of one or two of its parameters (signal, entry,
-  exits, stop or costs), as two heatmaps of a metric you pick: in-sample and out-of-sample. Click a cell
-  for its metrics, the average of its neighbours, and a link that opens it on the Backtest page.
+- **Backtest**: one signal on one ticker with either or both engines; pick the entry filters a signal
+  has to pass (trend, market, ADX, volume, ATR% band, with a benchmark for the market filter), the entry
+  (next open, stop or limit order) and the exits (target, time exit, trailing, channel and breakeven stops,
+  RSI, SMA and Supertrend exits, failed breakout and no-progress exits) on top of the ATR stop; the
+  signal's and the rules' parameters are editable; key metrics, equity vs. buy & hold, in-sample vs.
+  out-of-sample metrics, trades on the chart and in a sortable table.
+- **Sweep**: the same setup as Backtest over a range of one or two of its parameters (signal, filters,
+  entry, exits, stop or costs), as two heatmaps of a metric you pick: in-sample and out-of-sample. Click a
+  cell for its metrics, the average of its neighbours, and a link that opens it on the Backtest page.
 - **Edge**: signal statistics across a watchlist at several horizons, coloured by edge.
 - **Compare**: backtest runs pinned with **Pin run** on the Backtest page, side by side: the parameters
   that differ, an out-of-sample check (key metrics in-sample next to out-of-sample), every metric of the
@@ -102,6 +103,7 @@ tradescan backtest SPY connors_rsi2_long --entry limit --exits time --max-hold 5
 tradescan backtest QQQ donchian_breakout --exits trailing,breakeven
 tradescan backtest SPY connors_rsi2_long --exits rsi,time --engine both
 tradescan backtest QQQ donchian_breakout --entry stop --exits failed_breakout,no_progress,trailing
+tradescan backtest AAPL donchian_breakout --filters trend,market,volume --benchmark QQQ
 tradescan backtest SPY connors_rsi2_long --oos 20
 tradescan sweep SPY connors_rsi2_long --axis signal.oversold=4:16:2 --axis exit.target.target_r=1,2,3 --metric expectancy_r
 tradescan scan -w crypto --lot-size 0.0001
@@ -113,7 +115,7 @@ tradescan update-universes
 | `scan` | Signals that fired within the last `--fresh` bars, scored and ranked, with stop/target/size and the edge of the most recent signal on that ticker. |
 | `market` | Regime label (risk-on / neutral / risk-off) from the benchmark trend and watchlist breadth. |
 | `edge` | For each signal, pooled across the watchlist: events, win rate, average and edge vs. baseline at several horizons. |
-| `backtest` | One signal on one ticker with the pandas engine, Cerebro, or `both` side by side, plus its in-sample and out-of-sample metrics. `--entry` picks the entry rule, `--exits` the exit rules (`none` keeps only the stop), `--oos` the out-of-sample share. |
+| `backtest` | One signal on one ticker with the pandas engine, Cerebro, or `both` side by side, plus its in-sample and out-of-sample metrics. `--filters` picks the entry filters (none by default) and `--benchmark` the benchmark the market filter compares, `--entry` the entry rule, `--exits` the exit rules (`none` keeps only the stop), `--oos` the out-of-sample share. |
 | `sweep` | The `backtest` setup over one or two `--axis` parameters (`target[.owner].name=FROM:TO:STEP` or `=V1,V2,...`), as in-sample and out-of-sample grids of `--metric`; `--export` saves every combination. |
 | `list-signals` | All signals with family, direction, scoring weight and rule. |
 | `update-universes` | Refresh the `sp500` and `nasdaq100` watchlists from Wikipedia's constituent tables (`--only sp500`). |
@@ -159,8 +161,17 @@ of that risk. Size risks `risk_pct` of equity at the stop, capped at `max_positi
 **Edge.** Return from the next bar's open to the close `h` bars after each past event, in the
 signal's direction, compared with the same measure over all bars ("vs base").
 
-**Backtests.** A backtest combines one entry rule with any number of exit rules on top of an initial
-ATR stop. Both engines read the same precomputed levels and execute them the same way:
+**Backtests.** A backtest combines entry filters (none by default), one entry rule and any number of
+exit rules on top of an initial ATR stop. Both engines read the same precomputed levels and execute them
+the same way:
+
+| Filter | A signal on bar t may trade when |
+| --- | --- |
+| `trend` | the close is above SMA(`period`) (below it for shorts) |
+| `market` | the benchmark's close is above its SMA(`period`) (below it for shorts) |
+| `adx` | ADX(`period`) is at least `min_adx`, in either direction |
+| `volume` | the bar's volume is at least `min_ratio` x the average of the `period` bars before it |
+| `atr_pct` | the ATR (of `risk.atr_period`) is between `min_pct` and `max_pct` % of the close; `min_pct` must be below `max_pct` |
 
 | Entry | Order placed when the signal fires on bar t | Stop and target measured from |
 | --- | --- | --- |
@@ -183,6 +194,13 @@ ATR stop. Both engines read the same precomputed levels and execute them the sam
 | `failed_breakout` | at the next open once one of the first `within_bars` closes, the entry bar's included, is more than `buffer_atr` x ATR (of that bar) below the entry reference (above it for shorts) |
 | `no_progress` | at the next open if the close `after_bars` bars in, the entry bar counted as the first, has gained less than `min_r` R from the fill price |
 
+- every chosen filter has to allow a signal at the close of its bar. A blocked signal is ignored, like one
+  without a price or size, even when the filter allows the next bars, and bars where a filter's indicator
+  has too little history block signals. Tickers without volume (indices, some FX) never pass the volume filter;
+- the market filter compares the backtest's `benchmark` (default `scan.benchmark`, SPY), which is loaded
+  only when a filter needs it. Its SMA is computed on the benchmark's own bars, and each ticker date takes
+  the benchmark's last close at or before it, so a ticker that trades on other days (crypto, another
+  exchange) still gets a value;
 - the trailing, channel and breakeven stops are set at each close for the next bar and only ever tighten.
   Together with the initial stop and each other, the tightest stop applies, so they only matter once
   they are tighter than the initial stop. The high since the entry bar includes the entry bar itself,
@@ -220,12 +238,12 @@ period and treat the out-of-sample one as the check: a setting that only works i
 the past.
 
 **Sweeps.** A sweep runs one setup for every combination of one or two parameters' values (at most 200
-combinations, 2–50 values per parameter), each on both periods, with the pandas engine on all CPU
-cores. Any single-number parameter of the signal, the entry rule, the setup's exit rules or the
-`account`, `risk` and `backtest` settings can be swept; the out-of-sample share cannot, since it defines
-the split. A combination that breaks a rule between parameters (for example a fast average that is not
-shorter than the slow one) is shown as failed and the others still run. On 10 years of daily bars a
-sweep of 200 combinations takes a few seconds.
+combinations, 2–50 values per parameter), each on both periods, with the pandas engine on all CPU cores.
+Any single-number parameter of the signal, the setup's entry filters, the entry rule, the setup's exit
+rules or the `account`, `risk` and `backtest` settings can be swept; the out-of-sample share cannot,
+since it defines the split. A combination that breaks a rule between parameters (for example a fast
+average that is not shorter than the slow one) is shown as failed and the others still run. On 10 years
+of daily bars a sweep of 200 combinations takes a few seconds.
 
 ## Configuration
 
@@ -236,18 +254,19 @@ Data is cached as Parquet in `.cache/` for `cache_ttl_hours`; use `--no-cache` t
 
 ## Parameters
 
-Every number that changes a result is a declared parameter with a default, an allowed range and a
-label: the settings of all 30 signals (periods, thresholds, multipliers), of the backtest's entry and
-exit rules, and the settings sections `account`, `risk`, `scan`, `scoring`, `trend`, `regime` and
-`backtest`. `settings.toml` holds the defaults of the settings sections, the code those of signals and
-rules; a single run can override any of them without touching the file:
+Every number that changes a result is a declared parameter with a default, an allowed range and a label:
+the settings of all 30 signals (periods, thresholds, multipliers), of the backtest's entry filters,
+entry rules and exit rules, and the settings sections `account`, `risk`, `scan`, `scoring`, `trend`,
+`regime` and `backtest`. `settings.toml` holds the defaults of the settings sections, the code those of
+signals and rules; a single run can override any of them without touching the file:
 
 - in the web UI, where changed values are highlighted, kept in the URL and checked against their range;
 - through the API: `"settings": {"risk": {"atr_mult": 3}}` and
   `"signal_params": {"connors_rsi2_long": {"oversold": 15}}` (a backtest takes its signal's values as
-  `"params"`, and its rules as `"entry": {"name": "limit", "params": {"offset_atr": 1}}` and
-  `"exits": [{"name": "target", "params": {"target_r": 3}}]`), and a sweep its parameters as
-  `"axes": [{"target": "exit", "owner": "target", "name": "target_r", "values": [1, 2, 3]}]`);
+  `"params"`, and its rules as `"entry": {"name": "limit", "params": {"offset_atr": 1}}`,
+  `"exits": [{"name": "target", "params": {"target_r": 3}}]` and
+  `"filters": [{"name": "trend", "params": {"period": 100}}]` with `"benchmark": "QQQ"`), and a sweep its
+  parameters as `"axes": [{"target": "exit", "owner": "target", "name": "target_r", "values": [1, 2, 3]}]`);
   `/api/config` lists the settings, the rules and the sweep limits, `/api/signals` the signals, each
   parameter with its range;
 - on the CLI, through the existing flags (`--atr-mult`, `--fresh`, `--equity`, `--target-r`, `--oos`, ...).
@@ -286,11 +305,13 @@ The code follows SOLID; each extension point is a new class, not an edit to exis
           return inside.shift(1, fill_value=False) & (df["close"] > level)
   ```
 
-- **New entry or exit rule:** subclass `EntryRule` (in `backtest/entries.py`) and return the order type
-  and level for every bar from `orders`, or subclass `ExitRule` (in `backtest/exits.py`) and return a
-  tracker from `prepare` that names, at every close, the stop level, target level or exit at the next
-  open it wants. Register it with `@entry_rules.register` or `@exit_rules.register` and declare its
-  numbers with `param(...)`. Both engines, the API, the CLI and the UI pick it up, and the engine-parity
+- **New entry filter, entry or exit rule:** subclass `EntryFilter` (in `backtest/filters.py`) and return
+  from `allows` whether a signal at each bar's close may trade (set `needs_benchmark` when it reads the
+  benchmark's closes), subclass `EntryRule` (in `backtest/entries.py`) and return the order type and level
+  for every bar from `orders`, or subclass `ExitRule` (in `backtest/exits.py`) and return a tracker from
+  `prepare` that names, at every close, the stop level, target level or exit at the next open it wants.
+  Register it with `@entry_filters.register`, `@entry_rules.register` or `@exit_rules.register` and declare
+  its numbers with `param(...)`. Both engines, the API, the CLI and the UI pick it up, and the engine-parity
   test runs it on both engines.
 - **New data source:** implement the `DataProvider` protocol (`history(tickers, period, interval)`);
   `CachedProvider` wraps any provider.
