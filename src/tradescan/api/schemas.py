@@ -361,11 +361,48 @@ class TradeOut(BaseModel):
     exit_reason: str
 
 
+class PercentilesOut(BaseModel):
+    p5: float | None
+    p25: float | None
+    p50: float | None = Field(description="The median")
+    p75: float | None
+    p95: float | None
+
+
+class MonteCarloPathOut(BaseModel):
+    final_return_pct: float | None
+    max_drawdown_pct: float | None = Field(description="Negative, like the run's max drawdown")
+    longest_losing_streak: int = Field(description="Consecutive losing trades")
+
+
+class MonteCarloMethodOut(BaseModel):
+    name: str
+    label: str
+    description: str
+    final_return_pct: PercentilesOut
+    max_drawdown_pct: PercentilesOut = Field(description="Negative: the 5th percentile is the deepest drawdown but 5%")
+    longest_losing_streak: PercentilesOut
+    ruin_pct: float = Field(description="Share of the simulations whose drawdown reached the ruin level")
+
+
+class MonteCarloOut(BaseModel):
+    simulations: int = Field(description="Simulations per method")
+    ruin_drawdown_pct: float = Field(description="A drawdown from the peak at least this deep counts as ruin")
+    seed: int
+    risk_pct: float = Field(description="Each trade changes equity by this percent times its R multiple")
+    trades: int = Field(description="Closed trades resampled; every simulated sequence has as many")
+    actual: MonteCarloPathOut = Field(description="The run's own order of trades under the same model")
+    methods: list[MonteCarloMethodOut]
+
+
 class EngineRunOut(BaseModel):
     engine: str
     metrics: MetricsOut
     in_sample: MetricsOut | None = Field(description="The run on the history before the split; null without a split")
     out_of_sample: MetricsOut | None = Field(description="The run from the split on, with fresh equity; null without a split")
+    monte_carlo: MonteCarloOut | None = Field(
+        description="The full history's closed trades resampled in R; null with fewer than two closed trades"
+    )
     equity: list[Point]
     trades: list[TradeOut]
 

@@ -7,9 +7,12 @@ import { KeyMetrics, MetricsComparison, TradesTable } from "../components/Backte
 import { BacktestSetupFields } from "../components/BacktestSetupFields";
 import { EquityChart, type EquityEvent, type EquitySeries } from "../components/charts/EquityChart";
 import { PriceChart, type ChartMarker } from "../components/charts/PriceChart";
+import { MonteCarloPanel } from "../components/MonteCarlo";
 import { PeriodsPanel } from "../components/OutOfSample";
+import { SectionFields } from "../components/ParamFields";
 import { PinRunButton } from "../components/PinRunButton";
 import { Button, DirectionBadge, EmptyState, ErrorBox, Field, Loading, PageHeader, Panel, Segmented, ToggleChip } from "../components/ui";
+import { BACKTEST_PAGE_SECTIONS, MONTE_CARLO_SECTION } from "../lib/choices";
 import { downloadCsv } from "../lib/csv";
 import { fmtNumber } from "../lib/format";
 import { backtestBody, readBacktestForm, writeBacktestForm, type BacktestForm } from "../lib/params";
@@ -37,7 +40,8 @@ function BacktestFormPanel({
   const toggleEngine = (engine: string) =>
     setDraft({ ...draft, engines: draft.engines.includes(engine) ? draft.engines.filter((item) => item !== engine) : [...draft.engines, engine] });
   const changes = setupChanges(draft, config);
-  const invalid = !draft.engines.length || hasSetupProblems(draft, config, signals);
+  const invalid = !draft.engines.length || hasSetupProblems(draft, config, signals, BACKTEST_PAGE_SECTIONS);
+  const monteCarlo = config.sections.find((section) => section.name === MONTE_CARLO_SECTION);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -48,6 +52,12 @@ function BacktestFormPanel({
     <Panel>
       <form onSubmit={submit} noValidate className="space-y-4">
         <BacktestSetupFields draft={draft} onChange={setDraft} config={config} signals={signals} />
+        {monteCarlo && (
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold">Monte Carlo of the trades</h2>
+            <SectionFields section={monteCarlo} overrides={draft.settings} onChange={(settings) => setDraft({ ...draft, settings })} />
+          </section>
+        )}
         <div className="flex flex-wrap items-end justify-between gap-3">
           <Field label="Engines">
             <div className="flex gap-1.5 py-1">
@@ -153,6 +163,7 @@ function BacktestView({ result, form, config }: { result: BacktestOut; form: Bac
         <MetricsComparison result={result} />
       </div>
       <PeriodsPanel run={run} split={result.split} start={result.start} end={result.end} />
+      <MonteCarloPanel run={run} />
       <Panel>
         <h2 className="mb-2 text-sm font-semibold">Trades on the chart</h2>
         {chart.isLoading && <Loading message="Loading chart…" />}

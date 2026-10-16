@@ -35,7 +35,7 @@ URL, pinned runs, Compare and the sweep pick them up.
 | F2 | Entry filters on any signal | done ([#22], [PR #23]) | | F1 |
 | M1 | Mean-reversion signals | done ([#24], [PR #25]) | | |
 | O2 | One setup over a watchlist | done ([#26], [PR #27]) | | |
-| O3 | Monte Carlo of trades | planned | S | |
+| O3 | Monte Carlo of trades | done ([#28], [PR #29]) | | |
 | F3 | Portfolio backtest | planned | L | |
 | R1 | Momentum rotation | planned | L | F3 |
 | T2 | Pyramiding | planned | M | F1 |
@@ -50,10 +50,6 @@ are weak. M1 is small. O2 and O3 show whether a result is robust before the larg
 which rotation (R1) needs. Pyramiding (T2), walk-forward analysis (O4) and the trade journal (O6) follow.
 
 ## Open items
-
-**O3 · Monte Carlo of trades.** Resample a run's R sequence (shuffled and bootstrapped) to show the spread
-of maximum drawdown, final return and losing streaks, and the risk of ruin at the run's risk per trade.
-On the Backtest page and in Compare.
 
 **F3 · Portfolio backtest.** One setup across a watchlist with shared equity: a cap on open positions and
 on total exposure, a priority (score, relative strength) when more signals fire than slots are free, and
@@ -93,3 +89,5 @@ server instead of only in the browser, with notes per trade and the backtest tha
 [PR #25]: https://github.com/devTomaszStoklosa/tradescan/pull/25
 [#26]: https://github.com/devTomaszStoklosa/tradescan/issues/26
 [PR #27]: https://github.com/devTomaszStoklosa/tradescan/pull/27
+[#28]: https://github.com/devTomaszStoklosa/tradescan/issues/28
+[PR #29]: https://github.com/devTomaszStoklosa/tradescan/pull/29

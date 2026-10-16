@@ -6,6 +6,7 @@ import type {
   HitOut,
   MetricsOut,
   MetricSpreadOut,
+  MonteCarloOut,
   ParamSpecOut,
   RuleOut,
   ScanOut,
@@ -155,6 +156,15 @@ export const config: ConfigOut = {
         spec("oos_pct", "Out-of-sample share", 30, [10, 50, 5], "float", { unit: "% of history" }),
       ],
     },
+    {
+      name: "monte_carlo",
+      label: "Monte Carlo",
+      params: [
+        spec("simulations", "Simulations", 1000, [100, 10000, 100], "int"),
+        spec("ruin_drawdown_pct", "Ruin level", 50, [1, 100, 5], "float", { unit: "% drawdown" }),
+        spec("seed", "Random seed", 0, [0, 2147483647, 1], "int"),
+      ],
+    },
   ],
   families: ["trend", "momentum", "breakout", "mean_reversion", "volume", "pattern"],
   engines: ["vectorized", "cerebro"],
@@ -276,6 +286,39 @@ export function makeMetrics(overrides: Partial<MetricsOut> = {}): MetricsOut {
   };
 }
 
+/** The Monte Carlo of 42 trades: shuffling keeps the final return, bootstrapping spreads it. */
+export function makeMonteCarlo(overrides: Partial<MonteCarloOut> = {}): MonteCarloOut {
+  return {
+    simulations: 1000,
+    ruin_drawdown_pct: 50,
+    seed: 0,
+    risk_pct: 1,
+    trades: 42,
+    actual: { final_return_pct: 9.1, max_drawdown_pct: -6.2, longest_losing_streak: 5 },
+    methods: [
+      {
+        name: "shuffled",
+        label: "Shuffled",
+        description: "The same trades in a random order; the final return stays the same",
+        final_return_pct: { p5: 9.1, p25: 9.1, p50: 9.1, p75: 9.1, p95: 9.1 },
+        max_drawdown_pct: { p5: -14.8, p25: -10.2, p50: -8.4, p75: -6.9, p95: -5.1 },
+        longest_losing_streak: { p5: 4, p25: 5, p50: 6, p75: 7, p95: 9 },
+        ruin_pct: 0,
+      },
+      {
+        name: "bootstrapped",
+        label: "Bootstrapped",
+        description: "As many trades drawn at random with replacement",
+        final_return_pct: { p5: -7.3, p25: 2.4, p50: 8.8, p75: 15.6, p95: 26.4 },
+        max_drawdown_pct: { p5: -21.5, p25: -13.1, p50: -9.7, p75: -7.2, p95: -4.8 },
+        longest_losing_streak: { p5: 4, p25: 5, p50: 6.5, p75: 8, p95: 10 },
+        ruin_pct: 0.4,
+      },
+    ],
+    ...overrides,
+  };
+}
+
 export const backtestResult: BacktestOut = {
   ticker: "SPY",
   signal: "connors_rsi2_long",
@@ -317,6 +360,7 @@ export const backtestResult: BacktestOut = {
       metrics: makeMetrics(),
       in_sample: makeMetrics({ sharpe: 1.1, trades: 30 }),
       out_of_sample: makeMetrics({ sharpe: 0.2, trades: 12 }),
+      monte_carlo: makeMonteCarlo(),
       equity: [
         { time: "2016-01-04", value: 100000 },
         { time: "2021-06-01", value: 105000.123 },
@@ -361,6 +405,7 @@ export function makeRun(slot: number, overrides: Partial<RunSnapshot> = {}, extr
     benchmark: backtestResult.benchmark,
     metrics: makeMetrics(),
     split: { ...backtestResult.split!, in_sample: makeMetrics({ sharpe: 1.1, trades: 30 }), out_of_sample: makeMetrics({ sharpe: 0.2, trades: 12 }) },
+    monteCarlo: makeMonteCarlo(),
     equity: backtestResult.runs[0]!.equity,
     form: backtestForm,
     ...overrides,

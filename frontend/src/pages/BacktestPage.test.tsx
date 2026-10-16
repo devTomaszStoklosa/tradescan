@@ -90,6 +90,31 @@ describe("BacktestPage out-of-sample results", () => {
   });
 });
 
+describe("BacktestPage Monte Carlo", () => {
+  it("shows the run's order next to each method's spread and sends the Monte Carlo settings", async () => {
+    renderPage("/backtest?ticker=SPY&signal=connors_rsi2_long&set.monte_carlo.seed=7&set.monte_carlo.simulations=2000");
+    const table = await screen.findByRole("table", { name: "Monte Carlo of the run's trades" });
+    const cells = (name: RegExp) => within(within(table).getByRole("row", { name })).getAllByRole("cell").map((cell) => cell.textContent);
+    expect(cells(/Final return/)).toEqual(["+9.1%", "+9.1%", "+9.1%", "+9.1%", "-7.3%", "+8.8%", "+26.4%"]);
+    expect(cells(/Max drawdown/)).toEqual(["-6.2%", "-14.8%", "-8.4%", "-5.1%", "-21.5%", "-9.7%", "-4.8%"]);
+    expect(cells(/losing streak/)).toEqual(["5", "9", "6", "4", "10", "6.5", "4"]);
+    expect(cells(/Chance of ruin \(drawdown ≥ 50%\)/)).toEqual(["not reached", "0.0%", "0.4%"]);
+    expect(screen.getByText(/42 closed trades resampled 1,000 times per method/)).toBeInTheDocument();
+
+    expect(backtestBodies().at(-1)).toMatchObject({ settings: { monte_carlo: { seed: 7, simulations: 2000 } } });
+    expect(screen.getByLabelText("Random seed")).toHaveValue(7);
+    expect(screen.getByRole("button", { name: "Run backtest" })).toBeEnabled();
+    expect(screen.getByRole("link", { name: "Sweep parameters of this setup →" })).toHaveAttribute("href", "/sweep?ticker=SPY&signal=connors_rsi2_long");
+  });
+
+  it("explains a run with too few trades", async () => {
+    RESPONSES["/backtest"] = { ...backtestResult, runs: backtestResult.runs.map((run) => ({ ...run, monte_carlo: null })) };
+    renderPage("/backtest?ticker=SPY&signal=connors_rsi2_long");
+    expect(await screen.findByText(/Too few closed trades for a Monte Carlo/)).toBeInTheDocument();
+    RESPONSES["/backtest"] = backtestResult;
+  });
+});
+
 describe("BacktestPage trade rules", () => {
   it("sends the chosen entry and exits", async () => {
     renderPage("/backtest?ticker=SPY&signal=connors_rsi2_long");

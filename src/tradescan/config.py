@@ -158,6 +158,21 @@ class BacktestSettings:
 
 
 @dataclass(frozen=True)
+class MonteCarloSettings:
+    label: ClassVar[str] = "Monte Carlo"
+    simulations: int = param(
+        1000, minimum=100, maximum=10_000, step=100, label="Simulations", help="Resampled sequences of the run's trades per method"
+    )
+    ruin_drawdown_pct: float = param(
+        50.0, minimum=1.0, maximum=100.0, step=5.0, label="Ruin level", unit="% drawdown",
+        help="A drawdown from the peak at least this deep counts as ruin",
+    )
+    seed: int = param(
+        0, minimum=0, maximum=2**31 - 1, step=1, label="Random seed", help="The same seed repeats the same simulations"
+    )
+
+
+@dataclass(frozen=True)
 class Settings:
     data: DataSettings = field(default_factory=DataSettings)
     account: AccountSettings = field(default_factory=AccountSettings)
@@ -167,6 +182,7 @@ class Settings:
     trend: TrendSettings = field(default_factory=TrendSettings)
     regime: RegimeSettings = field(default_factory=RegimeSettings)
     backtest: BacktestSettings = field(default_factory=BacktestSettings)
+    monte_carlo: MonteCarloSettings = field(default_factory=MonteCarloSettings)
 
     def with_overrides(self, overrides: GroupOverrides | None) -> Settings:
         """These settings with validated overrides for one run, e.g. {"risk": {"atr_mult": 3}}."""

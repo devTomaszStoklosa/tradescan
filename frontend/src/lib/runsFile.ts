@@ -2,14 +2,15 @@
  * Pinned runs on disk. Browser storage and the JSON export use the same format:
  * `{version, runs}`, with each equity curve as two arrays (dates, values rounded to cents),
  * about half the size of one object per point. Older files are upgraded when read: version 1 is from
- * before entry and exit rules, version 2 from before out-of-sample results, version 3 from before entry filters.
+ * before entry and exit rules, version 2 from before out-of-sample results, version 3 from before entry filters,
+ * version 4 from before Monte Carlo results.
  */
 import type { AppliedRuleOut, MetricsOut } from "../api/client";
 import { formatTemplate, type Overrides } from "./overrides";
 import { moveLegacyExitSettings } from "./rules";
 import { MAX_RUNS, type PinnedRun } from "./runs";
 
-export const RUNS_FILE_VERSION = 4;
+export const RUNS_FILE_VERSION = 5;
 
 interface StoredEquity {
   time: string[];
@@ -74,6 +75,29 @@ const split: Check = (value) =>
   metrics(value.in_sample) &&
   metrics(value.out_of_sample);
 
+const optionalNumber = oneOf(finite, (value) => value === null);
+
+const percentiles: Check = (value) => isRecord(value) && ["p5", "p25", "p50", "p75", "p95"].every((key) => optionalNumber(value[key]));
+
+const monteCarloMethod: Check = (value) =>
+  isRecord(value) &&
+  text(value.name) &&
+  text(value.label) &&
+  text(value.description) &&
+  percentiles(value.final_return_pct) &&
+  percentiles(value.max_drawdown_pct) &&
+  percentiles(value.longest_losing_streak) &&
+  finite(value.ruin_pct);
+
+const monteCarlo: Check = (value) =>
+  isRecord(value) &&
+  ["simulations", "ruin_drawdown_pct", "seed", "risk_pct", "trades"].every((key) => finite(value[key])) &&
+  isRecord(value.actual) &&
+  optionalNumber(value.actual.final_return_pct) &&
+  optionalNumber(value.actual.max_drawdown_pct) &&
+  finite(value.actual.longest_losing_streak) &&
+  arrayOf(monteCarloMethod)(value.methods);
+
 const appliedRule: Check = (value) =>
   isRecord(value) && text(value.name) && text(value.label) && text(value.description) && recordOf(oneOf(finite, arrayOf(finite)))(value.params);
 
@@ -98,6 +122,7 @@ const RUN_FIELDS: Record<keyof StoredRun, Check> = {
   benchmark: oneOf((value) => value === null, text),
   metrics,
   split: oneOf((value) => value === null, split),
+  monteCarlo: oneOf((value) => value === null, monteCarlo),
   equity,
   form,
 };
@@ -152,10 +177,15 @@ const upgradeV3 = (value: unknown): unknown =>
     ? { ...value, filters: [], benchmark: null, form: { ...value.form, filters: [], filterParams: {}, benchmark: "" } }
     : value;
 
+// --- Version 4: runs had no Monte Carlo, and cannot get one without a rerun -------------------------
+
+const upgradeV4 = (value: unknown): unknown => (isRecord(value) ? { ...value, monteCarlo: null } : value);
+
 const UPGRADES: Record<number, (value: unknown) => unknown> = {
-  1: (value) => upgradeV3(upgradeV2(upgradeV1(value))),
-  2: (value) => upgradeV3(upgradeV2(value)),
-  3: upgradeV3,
+  1: (value) => upgradeV4(upgradeV3(upgradeV2(upgradeV1(value)))),
+  2: (value) => upgradeV4(upgradeV3(upgradeV2(value))),
+  3: (value) => upgradeV4(upgradeV3(value)),
+  4: upgradeV4,
   [RUNS_FILE_VERSION]: (value) => value,
 };
 

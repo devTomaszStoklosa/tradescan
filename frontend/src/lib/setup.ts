@@ -15,9 +15,17 @@ export function setupChanges(setup: BacktestRules, config: ConfigOut): number {
   );
 }
 
-/** True while the signal or, in a setup that has one, the ticker is missing, or any value is invalid. */
-export function hasSetupProblems(setup: BacktestRules & { ticker?: string }, config: ConfigOut, signals: SignalOut[]): boolean {
-  const sections = pickSections(config.sections, BACKTEST_SECTIONS);
+/**
+ * True while the signal or, in a setup that has one, the ticker is missing, or any value is invalid.
+ * A setting outside `sectionNames`, the sections the page offers, counts as invalid.
+ */
+export function hasSetupProblems(
+  setup: BacktestRules & { ticker?: string },
+  config: ConfigOut,
+  signals: SignalOut[],
+  sectionNames: readonly string[] = BACKTEST_SECTIONS,
+): boolean {
+  const sections = pickSections(config.sections, sectionNames);
   const selected = signals.find((signal) => signal.name === setup.signal);
   return (
     setup.ticker?.trim() === "" ||

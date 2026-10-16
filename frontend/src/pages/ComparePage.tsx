@@ -4,12 +4,14 @@ import { Link } from "react-router";
 import { useConfig, useSignals } from "../api/hooks";
 import { MetricsTable } from "../components/BacktestResults";
 import { EquityChart, type EquitySeries } from "../components/charts/EquityChart";
+import { MonteCarloTable } from "../components/MonteCarlo";
 import { OutOfSampleTable } from "../components/OutOfSample";
 import { ParameterDiffTable } from "../components/ParameterDiffTable";
 import { RunCard, RunLabel } from "../components/RunCard";
 import { Button, EmptyState, ErrorBox, PageHeader, Panel, Segmented } from "../components/ui";
 import { parameterRows, returnCurve } from "../lib/compare";
 import { downloadFile } from "../lib/csv";
+import { methodsOf, PREFERRED_METHOD } from "../lib/monteCarlo";
 import { MAX_RUNS, runColorVar, type MergeResult, type PinnedRun } from "../lib/runs";
 import { usePinnedRuns } from "../state/pinnedRuns";
 
@@ -40,6 +42,7 @@ export function ComparePage() {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const [period, setPeriod] = useState<Period>("full");
+  const [chosenMethod, setMethod] = useState(PREFERRED_METHOD);
 
   const visible = useMemo(() => runs.filter((run) => !run.hidden), [runs]);
   const rows = useMemo(() => parameterRows(visible, config.data?.sections, signals.data, config.data), [visible, config.data, signals.data]);
@@ -47,6 +50,8 @@ export function ComparePage() {
     () => visible.map((run) => ({ key: run.id, header: <RunLabel run={run} />, metrics: periodMetrics(run, period) })),
     [visible, period],
   );
+  const methods = useMemo(() => methodsOf(visible.map((run) => run.monteCarlo)), [visible]);
+  const method = methods.some((item) => item.name === chosenMethod) ? chosenMethod : (methods[0]?.name ?? chosenMethod);
   const series = useMemo<EquitySeries[]>(
     () => visible.map((run) => ({ label: `#${run.slot} ${run.name}`, points: returnCurve(run.equity), colorVar: runColorVar(run) })),
     [visible],
@@ -119,6 +124,15 @@ export function ComparePage() {
               <section className="space-y-2">
                 <h2 className="text-sm font-semibold">Out-of-sample check</h2>
                 <OutOfSampleTable runs={visible} />
+              </section>
+              <section className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold">Monte Carlo of the trades</h2>
+                  {methods.length > 1 && (
+                    <Segmented label="Method" value={method} onChange={setMethod} options={methods.map(({ name, label }) => ({ value: name, label }))} />
+                  )}
+                </div>
+                <MonteCarloTable runs={visible} method={method} />
               </section>
               <section className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">

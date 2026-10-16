@@ -8,7 +8,7 @@ import { downloadFile } from "../lib/csv";
 import type { PinnedRun } from "../lib/runs";
 import { encodeRuns } from "../lib/runsFile";
 import { PinnedRunsProvider } from "../state/pinnedRuns";
-import { config, makeMetrics, makeRun, signals } from "../test/fixtures";
+import { config, makeMetrics, makeMonteCarlo, makeRun, signals } from "../test/fixtures";
 import { ComparePage } from "./ComparePage";
 
 vi.mock("../components/charts/EquityChart", () => ({
@@ -107,6 +107,26 @@ describe("ComparePage", () => {
     expect(within(sharpe).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["0.20", "0.20", "–"]);
     // Runs pinned before out-of-sample results have no share, so the parameter differs.
     expect(within(table("Parameters of the pinned runs")).getByText("Out-of-sample share")).toBeInTheDocument();
+  });
+
+  it("compares the Monte Carlo of every run, one method at a time", async () => {
+    const few = makeRun(2, { monteCarlo: makeMonteCarlo({ trades: 12, ruin_drawdown_pct: 30 }) }, { name: "few trades" });
+    const old = makeRun(3, { monteCarlo: null }, { name: "old pin" });
+    pin([base, few, old]);
+    renderPage();
+
+    const simulations = () => table("Monte Carlo of the pinned runs' trades");
+    const cells = (name: RegExp) => within(within(simulations()).getByRole("row", { name })).getAllByRole("cell").map((cell) => cell.textContent);
+    expect(screen.getByRole("radio", { name: "Bootstrapped" })).toBeChecked();
+    expect(cells(/baseline/)).toEqual(["42", "-7.3%", "+8.8%", "-21.5%", "-9.7%", "10", "6.5", "0.4% at 50%"]);
+    expect(cells(/few trades/)[0]).toBe("12* (fewer than 20 trades)");
+    expect(cells(/few trades/).at(-1)).toBe("0.4% at 30%");
+    expect(within(simulations()).getByRole("row", { name: /old pin/ })).toHaveTextContent("No Monte Carlo: pinned before Monte Carlo results");
+
+    await userEvent.click(screen.getByRole("radio", { name: "Shuffled" }));
+    expect(cells(/baseline/)).toEqual(["42", "+9.1%", "+9.1%", "-14.8%", "-8.4%", "9", "6", "0.0% at 50%"]);
+    // The ruin level differs between the runs, so it is a parameter that differs.
+    expect(within(table("Parameters of the pinned runs")).getByText("Monte Carlo · Ruin level")).toBeInTheDocument();
   });
 
   it("hides, renames and removes runs and keeps the change in storage", async () => {

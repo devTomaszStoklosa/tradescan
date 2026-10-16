@@ -26,7 +26,8 @@ def test_meta_endpoints(client):
     assert client.get("/api/health").json()["status"] == "ok"
     config = client.get("/api/config").json()
     sections = {section["name"]: {param["name"]: param for param in section["params"]} for section in config["sections"]}
-    assert set(sections) == {"account", "risk", "scan", "scoring", "trend", "regime", "backtest"}
+    assert set(sections) == {"account", "risk", "scan", "scoring", "trend", "regime", "backtest", "monte_carlo"}
+    assert [name for name in sections["monte_carlo"]] == ["simulations", "ruin_drawdown_pct", "seed"]
     assert sections["account"]["equity"]["default"] == 100_000
     assert sections["risk"]["targets_r"] | {"kind": "float_list", "default": [2.0, 3.0]} == sections["risk"]["targets_r"]
     assert sections["scoring"]["family_weights"]["keys"] == ["trend", "momentum", "breakout", "mean_reversion", "volume", "pattern"]
@@ -126,6 +127,8 @@ def test_signal_parameters_change_results(client):
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "params": {"fast": 300}}),
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "settings": {"backtest": {"period": 5}}}),
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "settings": {"backtest": {"target_r": 3}}}),
+        ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "settings": {"monte_carlo": {"simulations": 50}}}),
+        ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "settings": {"monte_carlo": {"seed": 1.5}}}),
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "entry": {"name": "nope"}}),
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "entry": {"name": "limit", "params": {"valid_bars": 0}}}),
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "exits": [{"name": "nope"}]}),
@@ -276,6 +279,21 @@ def test_backtest_reports_the_split(client):
     assert client.post("/api/backtest", json={**body, "settings": {"backtest": {"oos_pct": 60}}}).status_code == 400
 
 
+def test_backtest_reports_the_monte_carlo(client):
+    settings = {"monte_carlo": {"simulations": 200, "ruin_drawdown_pct": 20, "seed": 5}, "account": {"risk_pct": 2}}
+    data = client.post("/api/backtest", json={"ticker": "AAA", "signal": "connors_rsi2_long", "settings": settings}).json()
+    run = data["runs"][0]
+    result = run["monte_carlo"]
+    assert (result["simulations"], result["ruin_drawdown_pct"], result["seed"], result["risk_pct"]) == (200, 20, 5, 2)
+    assert result["trades"] == run["metrics"]["trades"] > 1
+    assert {"final_return_pct", "max_drawdown_pct", "longest_losing_streak"} == set(result["actual"])
+    shuffled, bootstrapped = result["methods"]
+    assert (shuffled["name"], bootstrapped["name"]) == ("shuffled", "bootstrapped")
+    assert set(bootstrapped["final_return_pct"]) == {"p5", "p25", "p50", "p75", "p95"}
+    assert bootstrapped["final_return_pct"]["p5"] <= bootstrapped["final_return_pct"]["p95"]
+    assert 0 <= bootstrapped["ruin_pct"] <= 100
+
+
 def test_sweep(client):
     axes = [
         {"target": "signal", "name": "oversold", "values": [10, 20]},
@@ -354,6 +372,7 @@ def test_sweep_limits_and_errors(client):
     assert sweep({**fast, "values": [1, 2]}).status_code == 400
     assert sweep({**fast, "values": [50]}).status_code == 422
     assert sweep({"target": "settings", "owner": "backtest", "name": "oos_pct", "values": [20, 30]}).status_code == 400
+    assert sweep({"target": "settings", "owner": "monte_carlo", "name": "seed", "values": [1, 2]}).status_code == 400
     assert sweep({"target": "nope", "name": "fast", "values": [5, 6]}).status_code == 422
     assert sweep(fast, engines=["cerebro"]).status_code == 422  # engines belong to backtests
     assert client.post("/api/sweep", json={"ticker": "AAA", "signal": "nope", "axes": [fast]}).status_code == 400

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { appliedRule, config, entryRules, exitRules, filterRules, makeMetrics, makeRun, signals } from "../test/fixtures";
+import { appliedRule, config, entryRules, exitRules, filterRules, makeMetrics, makeMonteCarlo, makeRun, signals } from "../test/fixtures";
 import { bestIndexes, metricValue, parameterRows, returnCurve } from "./compare";
 
 const differing = (rows: ReturnType<typeof parameterRows>) => rows.filter((row) => row.differs);
@@ -16,6 +16,16 @@ describe("parameterRows", () => {
       { key: "params.connors_rsi2_long.oversold", label: "connors_rsi2_long · Oversold level", unit: "", values: ["10", "15"], differs: true },
     ]);
     expect(rows.find((row) => row.key === "ticker")).toMatchObject({ values: ["SPY", "SPY"], differs: false });
+  });
+
+  it("shows the Monte Carlo settings of runs that have one", () => {
+    const base = makeRun(1);
+    const rows = parameterRows([base, makeRun(2, { monteCarlo: makeMonteCarlo({ seed: 7 }) })], config.sections, signals);
+    expect(differing(rows)).toEqual([{ key: "monte_carlo.seed", label: "Monte Carlo · Random seed", unit: "", values: ["0", "7"], differs: true }]);
+    expect(rows.find((row) => row.key === "monte_carlo.ruin_drawdown_pct")).toMatchObject({ label: "Monte Carlo · Ruin level", unit: "% drawdown" });
+    const older = parameterRows([makeRun(1, { monteCarlo: null }), base], config.sections, signals);
+    expect(older.find((row) => row.key === "monte_carlo.simulations")).toMatchObject({ values: ["–", "1,000"], differs: true });
+    expect(parameterRows([makeRun(1, { monteCarlo: null })]).some((row) => row.key.startsWith("monte_carlo."))).toBe(false);
   });
 
   it("falls back to readable names without specs", () => {

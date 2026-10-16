@@ -121,6 +121,11 @@ describe("sweep form", () => {
     ],
   };
 
+  it("leaves a backtest's Monte Carlo settings behind, since a sweep runs none", () => {
+    const settings = { risk: { atr_mult: 3 }, monte_carlo: { seed: 7 } };
+    expect(newSweepForm({ ...backtestForm, settings }).settings).toEqual({ risk: { atr_mult: 3 } });
+  });
+
   it("round-trips through the URL with the backtest setup's keys", () => {
     const url = writeSweepForm(form, config);
     expect(url.toString()).toBe(
