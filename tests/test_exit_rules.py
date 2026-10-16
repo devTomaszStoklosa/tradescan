@@ -1,12 +1,25 @@
-"""Levels of the trailing, channel and breakeven stops, close by close, on hand-made bars."""
+"""Levels of the trailing, channel and breakeven stops and the indicator exits, close by close, on hand-made bars."""
 
 import math
 
 import numpy as np
 import pytest
+from synthetic import random_walk
 
-from tradescan.backtest.exits import BreakevenStop, ChannelStop, ExitRule, OpenTrade, TrailingStop, exit_rules
+from tradescan.backtest.exits import (
+    BreakevenStop,
+    ChannelStop,
+    ExitRule,
+    OpenTrade,
+    RsiExit,
+    SmaRevertExit,
+    SmaTrendExit,
+    SupertrendExit,
+    TrailingStop,
+    exit_rules,
+)
 from tradescan.backtest.rules import Bars
+from tradescan.indicators import supertrend
 from tradescan.signals import Direction
 
 
@@ -14,12 +27,15 @@ def _array(values, length: int, fill: float) -> np.ndarray:
     return np.full(length, fill) if values is None else np.asarray(values, dtype=float)
 
 
-def _bars(high=None, low=None, atr=None) -> Bars:
+def _bars(high=None, low=None, atr=None, close=None) -> Bars:
     """Only the arrays a rule reads matter; the others are filled with zeros, the ATR with ones."""
-    length = len(high if high is not None else low)
-    zeros = np.zeros(length)
+    length = len(next(values for values in (high, low, close) if values is not None))
     return Bars(
-        open=zeros, high=_array(high, length, 0.0), low=_array(low, length, 0.0), close=zeros, atr=_array(atr, length, 1.0)
+        open=np.zeros(length),
+        high=_array(high, length, 0.0),
+        low=_array(low, length, 0.0),
+        close=_array(close, length, 0.0),
+        atr=_array(atr, length, 1.0),
     )
 
 
@@ -67,3 +83,43 @@ def test_breakeven_lock_must_be_below_the_trigger():
     with pytest.raises(ValueError, match="must be below the trigger"):
         exit_rules.create("breakeven", {"lock_r": 1})
     assert exit_rules.create("breakeven", {"trigger_r": 2, "lock_r": 1.5}).lock_r == 1.5
+
+
+def _exits(rule: ExitRule, bars: Bars, direction=Direction.LONG, entry_index=0) -> list[bool]:
+    """Whether the rule asks to exit at the next open, at every close from the entry bar on."""
+    trade = OpenTrade(direction, entry_index, 100.0, 100.0, 100.0 - direction.sign * 4.0, 4.0)
+    tracker = rule.prepare(bars, direction)(trade)
+    orders = [tracker.orders(index) for index in range(entry_index, len(bars))]
+    assert all(order.stop is None and order.target is None for order in orders)
+    assert all(order.at_open in (None, rule.name) for order in orders)
+    return [order.at_open is not None for order in orders]
+
+
+def test_rsi_exit_mirrors_its_level_for_shorts():
+    # RSI(2) of these closes: NaN, NaN, 0, 50, 87.5, 58.3.
+    bars = _bars(close=[10, 9, 8, 9, 12, 11])
+    assert _exits(RsiExit(period=2, level=70), bars) == [False, False, False, False, True, False]
+    assert _exits(RsiExit(period=2, level=70), bars, Direction.SHORT) == [False, False, True, False, False, False]
+    # The level itself exits, on both sides.
+    assert _exits(RsiExit(period=2, level=50), bars) == [False, False, False, True, True, True]
+    assert _exits(RsiExit(period=2, level=50), bars, Direction.SHORT) == [False, False, True, True, False, False]
+
+
+def test_sma_exits_need_the_close_strictly_beyond_the_average():
+    # SMA(3) of these closes: NaN, NaN, 11, 10.67, 11. Bar 2 closes on the average, so nothing exits there.
+    bars = _bars(close=[10, 12, 11, 9, 13])
+    assert _exits(SmaRevertExit(period=3), bars) == [False, False, False, False, True]
+    assert _exits(SmaRevertExit(period=3), bars, Direction.SHORT) == [False, False, False, True, False]
+    assert _exits(SmaTrendExit(period=3), bars) == [False, False, False, True, False]
+    assert _exits(SmaTrendExit(period=3), bars, Direction.SHORT) == [False, False, False, False, True]
+    assert _exits(SmaTrendExit(period=3), bars, entry_index=3) == [True, False]
+
+
+def test_supertrend_exit_follows_the_direction_against_the_trade():
+    df = random_walk(400, seed=5)
+    bars = Bars.from_frame(df, 14)
+    direction = supertrend(df, 10, 3.0)["direction"].to_numpy()
+    long, short = (np.array(_exits(SupertrendExit(), bars, side)) for side in (Direction.LONG, Direction.SHORT))
+    np.testing.assert_array_equal(long, direction == -1)
+    np.testing.assert_array_equal(short, direction == 1)
+    assert long.any() and short.any() and not (long | short)[np.isnan(direction)].any()
