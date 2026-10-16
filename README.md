@@ -65,13 +65,15 @@ the built UI. The screens:
   positions, the max exposure and the priority rule with its parameters are editable; key metrics against
   the benchmark's buy & hold, skipped signals, equity and open positions over time, metrics and portfolio
   stats in-sample and out-of-sample, each ticker's contribution (a ticker opens its own backtest) and every
-  trade with its ticker.
+  trade with its ticker. **Pin run** keeps the shown engine's run for Compare.
 - **Edge**: signal statistics across a watchlist at several horizons, coloured by edge.
-- **Compare**: backtest runs pinned with **Pin run** on the Backtest page, side by side: the parameters
-  that differ, an out-of-sample check (key metrics in-sample next to out-of-sample), a Monte Carlo check
-  (unlucky and median return, drawdown and losing streak, and the chance of ruin, per method), every
-  metric of the full history or of one period with the best value highlighted, and the return curves on
-  one chart.
+- **Compare**: backtest and portfolio runs pinned with **Pin run** on the Backtest and Portfolio pages,
+  side by side: the parameters that differ (for a portfolio also its universe, max positions, max exposure
+  and priority rule with its parameters), an out-of-sample check (key metrics in-sample next to
+  out-of-sample), a Monte Carlo check (unlucky and median return, drawdown and losing streak, and the
+  chance of ruin, per method), every metric of the full history or of one period with the best value
+  highlighted, the portfolio stats (open positions, exposure, skipped signals) of the same period, and the
+  return curves on one chart.
 - **Signals**: the signal library with families, weights, rules and each parameter's default and range.
 
 Scanner and Edge have an **Advanced settings** panel with every other parameter (see
@@ -80,11 +82,11 @@ header and stored in the browser. Forms, including changed parameters, live in t
 backtest can be bookmarked, shared or opened in two tabs to compare.
 
 Up to 8 runs can be pinned. A pinned run is a snapshot: it keeps the result you saw even after new bars
-arrive, and **Open in Backtest** runs it again with today's data and the account currently set in the
-header. Pinned runs live in this browser only (clearing site data deletes them), so use **Export JSON**
+arrive, and **Open in Backtest** (or **Open in Portfolio**) runs it again with today's data and the
+account currently set in the header. Pinned runs live in this browser only (clearing site data deletes them), so use **Export JSON**
 as a backup or to move them to another browser, and **Import JSON** to bring them back. Runs with fewer
 than 20 trades are flagged, because their metrics are mostly noise. Runs pinned before out-of-sample or
-Monte Carlo results existed have none, since a pin is never re-run.
+Monte Carlo results existed have none, since a pin is never re-run; portfolio runs have no Monte Carlo.
 
 > The API has no authentication. `serve` binds to 127.0.0.1; do not expose it to a network.
 
