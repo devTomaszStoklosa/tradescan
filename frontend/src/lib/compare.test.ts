@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { appliedRule, config, entryRules, exitRules, filterRules, makeMetrics, makeMonteCarlo, makeRun, signals } from "../test/fixtures";
+import {
+  appliedRule,
+  config,
+  entryRules,
+  exitRules,
+  filterRules,
+  makeMetrics,
+  makeMonteCarlo,
+  makePortfolioPin,
+  makeRun,
+  priorityRules,
+  signals,
+} from "../test/fixtures";
 import { bestIndexes, metricValue, parameterRows, returnCurve } from "./compare";
 
 const differing = (rows: ReturnType<typeof parameterRows>) => rows.filter((row) => row.differs);
@@ -69,6 +81,43 @@ describe("parameterRows", () => {
       { key: "filter.market.period", label: "Market filter · Benchmark SMA", unit: "bars", values: ["–", "100"], differs: true },
     ]);
     expect(parameterRows([makeRun(1)]).some((row) => row.key === "benchmark")).toBe(false);
+  });
+
+  it("shows what a portfolio tested, its limits and its priority rule next to a backtest", () => {
+    const portfolio = makePortfolioPin(2, { portfolio: { max_positions: 5, max_exposure_pct: 150 } });
+    const rows = parameterRows([makeRun(1), portfolio], config.sections, signals, config);
+    const byKey = (key: string) => rows.find((row) => row.key === key);
+
+    expect(rows.slice(0, 4).map((row) => row.key)).toEqual(["kind", "universe", "tickers", "ticker"]);
+    expect(byKey("kind")).toMatchObject({ label: "Run", values: ["Backtest", "Portfolio"], differs: true });
+    expect(byKey("ticker")).toMatchObject({ values: ["SPY", "–"], differs: true });
+    expect(byKey("universe")).toMatchObject({ label: "Universe", values: ["–", "us_large"] });
+    expect(byKey("tickers")).toMatchObject({ label: "Tickers", values: ["–", "2"] });
+    expect(byKey("portfolio.max_positions")).toMatchObject({ label: "Portfolio · Max positions", unit: "", values: ["–", "5"] });
+    expect(byKey("portfolio.max_exposure_pct")).toMatchObject({ label: "Portfolio · Max exposure", unit: "% of equity", values: ["–", "150"] });
+    expect(byKey("priority")).toMatchObject({ label: "Priority", values: ["–", "Momentum"] });
+    expect(byKey("priority.momentum.lookback")).toMatchObject({ label: "Momentum · Lookback", unit: "bars", values: ["–", "252"] });
+  });
+
+  it("tells portfolio runs apart by their priority rules and limits", () => {
+    const momentum = makePortfolioPin(1);
+    const strength = makePortfolioPin(2, { priority: appliedRule(priorityRules[0]!), portfolio: { max_positions: 10, max_exposure_pct: 100 } });
+    const rows = parameterRows([momentum, strength], config.sections, signals, config);
+
+    expect(differing(rows)).toEqual([
+      { key: "portfolio.max_positions", label: "Portfolio · Max positions", unit: "", values: ["5", "10"], differs: true },
+      { key: "priority", label: "Priority", unit: "", values: ["Momentum", "Relative strength"], differs: true },
+      { key: "priority.momentum.lookback", label: "Momentum · Lookback", unit: "bars", values: ["252", "–"], differs: true },
+      { key: "priority.momentum.skip", label: "Momentum · Skip", unit: "bars", values: ["21", "–"], differs: true },
+      { key: "priority.relative_strength.periods", label: "Relative strength · Lookbacks", unit: "bars", values: ["–", "63, 126, 189, 252"], differs: true },
+      { key: "priority.relative_strength.weights", label: "Relative strength · Weights", unit: "", values: ["–", "0.4, 0.2, 0.2, 0.2"], differs: true },
+    ]);
+    expect(rows.find((row) => row.key === "kind")).toMatchObject({ values: ["Portfolio", "Portfolio"], differs: false });
+  });
+
+  it("adds no portfolio rows when only backtest runs are compared", () => {
+    const keys = parameterRows([makeRun(1), makeRun(2)], config.sections, signals, config).map((row) => row.key);
+    expect(keys.filter((key) => ["kind", "universe", "tickers", "priority"].includes(key) || /^(portfolio|priority)\./.test(key))).toEqual([]);
   });
 
   it("shows the data range so runs on different days are told apart", () => {

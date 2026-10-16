@@ -5,6 +5,7 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
 import { AccountProvider } from "../state/account";
+import { PinnedRunsProvider } from "../state/pinnedRuns";
 import { config, makePortfolioRun, portfolioResult, signals, watchlists } from "../test/fixtures";
 import { PortfolioPage } from "./PortfolioPage";
 
@@ -29,9 +30,11 @@ function renderPage(path: string) {
   );
   render(
     <AccountProvider>
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
+      <PinnedRunsProvider>
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </PinnedRunsProvider>
     </AccountProvider>,
   );
   return router;
@@ -117,6 +120,43 @@ describe("PortfolioPage", () => {
     expect(await screen.findByText("✓ Both engines produced identical results.")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("radio", { name: "cerebro" }));
     expect(screen.getByText("Each ticker's contribution (cerebro)")).toBeInTheDocument();
+    result = portfolioResult;
+  });
+});
+
+const storedRuns = () => (JSON.parse(localStorage.getItem("tradescan.runs") ?? '{"runs":[]}') as { runs: Record<string, unknown>[] }).runs;
+
+describe("PortfolioPage pinning", () => {
+  it("pins the shown run with its universe, portfolio settings and priority, and unpins it", async () => {
+    renderPage(RESULT_URL);
+    await userEvent.click(await screen.findByRole("button", { name: "Pin run" }));
+    expect(storedRuns()).toHaveLength(1);
+    expect(storedRuns()[0]).toMatchObject({
+      kind: "portfolio",
+      name: "us_large connors_rsi2_long",
+      universe: "us_large",
+      tickers: ["AAPL", "MSFT"],
+      missing: ["TSLA"],
+      engine: "vectorized",
+      portfolio: { max_positions: 5, max_exposure_pct: 100 },
+      priority: { name: "momentum", params: { lookback: 252, skip: 21 } },
+      stats: { full: { skipped_no_slot: 30 }, in_sample: { orders: 82 }, out_of_sample: { orders: 38 } },
+      monteCarlo: null,
+      form: { universe: { watchlist: "us_large", tickers: "" }, engines: ["vectorized"], priority: "momentum", settings: { portfolio: { max_positions: 5 } } },
+    });
+    expect(storedRuns()[0]).not.toHaveProperty("trades");
+    expect(screen.getByRole("link", { name: "Compare 1 pinned →" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Unpin run" }));
+    expect(storedRuns()).toHaveLength(0);
+  });
+
+  it("pins the engine that is shown", async () => {
+    result = { ...portfolioResult, runs: [makePortfolioRun("vectorized"), makePortfolioRun("cerebro")] };
+    renderPage(RESULT_URL.replace("eng=vectorized", "eng=vectorized,cerebro"));
+    await userEvent.click(await screen.findByRole("radio", { name: "cerebro" }));
+    await userEvent.click(screen.getByRole("button", { name: "Pin cerebro run" }));
+    expect(storedRuns()[0]).toMatchObject({ engine: "cerebro", form: { engines: ["cerebro"] } });
     result = portfolioResult;
   });
 });

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
-import type { ConfigOut, PortfolioOut, PortfolioPeriodOut, PortfolioRunOut, PortfolioStatsOut, SignalOut, TickerContributionOut, WatchlistOut } from "../api/client";
+import type { ConfigOut, PortfolioOut, PortfolioPeriodOut, PortfolioRunOut, SignalOut, TickerContributionOut, WatchlistOut } from "../api/client";
 import { useConfig, usePortfolioBacktest, useSignals, useWatchlists } from "../api/hooks";
 import { enginesAgree, MetricsTable, TradesTable } from "../components/BacktestResults";
 import { BacktestSetupFields } from "../components/BacktestSetupFields";
@@ -9,6 +9,8 @@ import { EquityChart, type EquityEvent, type EquitySeries } from "../components/
 import { DataTable, type Column } from "../components/DataTable";
 import { PERIOD_NOTE } from "../components/OutOfSample";
 import { SectionFields } from "../components/ParamFields";
+import { PinPortfolioRunButton } from "../components/PinRunButton";
+import { PortfolioStatsTable } from "../components/PortfolioStats";
 import { GroupHeading, RuleChoiceFields } from "../components/TradeRuleFields";
 import { UniversePicker } from "../components/UniverseFilters";
 import { Button, DirectionBadge, EmptyState, ErrorBox, Field, Loading, Notice, PageHeader, Panel, Segmented, StatTile, ToggleChip } from "../components/ui";
@@ -159,39 +161,16 @@ const PERIOD_KEYS = [
   { key: "out_of_sample", label: "Out-of-sample" },
 ] as const;
 
-type StatKey = keyof PortfolioStatsOut;
-
-const STATS: { key: StatKey; label: string; format: (stats: PortfolioStatsOut) => string }[] = [
-  { key: "average_positions", label: "Average open positions", format: (s) => fmtNumber(s.average_positions, 2) },
-  { key: "max_positions", label: "Most open positions", format: (s) => String(s.max_positions) },
-  { key: "average_exposure_pct", label: "Average gross exposure", format: (s) => fmtPct(s.average_exposure_pct) },
-  { key: "max_exposure_pct", label: "Highest gross exposure", format: (s) => fmtPct(s.max_exposure_pct) },
-  { key: "orders", label: "Entry orders", format: (s) => String(s.orders) },
-  { key: "skipped_no_slot", label: "Signals skipped: no free slot", format: (s) => String(s.skipped_no_slot) },
-  { key: "skipped_no_room", label: "Signals skipped: no exposure room", format: (s) => String(s.skipped_no_room) },
-];
-
 function PeriodsTables({ run }: { run: PortfolioRunOut }) {
   const periods = PERIOD_KEYS.map(({ key, label }) => ({ key, label, period: key === "full" ? run.full : run[key] }));
-  const statColumns = useMemo<Column<(typeof STATS)[number]>[]>(
-    () => [
-      { key: "stat", header: "Portfolio", render: (row) => <span className="text-muted">{row.label}</span> },
-      ...periods.map(({ key, label, period }) => ({
-        key,
-        header: label,
-        align: "right" as const,
-        render: (row: (typeof STATS)[number]) => (period ? row.format(period.stats) : DASH),
-      })),
-    ],
-    [run],
-  );
+  const statColumns = useMemo(() => periods.map(({ key, label, period }) => ({ key, header: label, stats: period?.stats ?? null })), [run]);
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <MetricsTable
         columns={periods.map(({ key, label, period }) => ({ key, header: label, metrics: period?.metrics ?? null }))}
         caption="Portfolio metrics by period"
       />
-      <DataTable rows={STATS} columns={statColumns} rowKey={(row) => row.key} caption="Portfolio stats by period" dense />
+      <PortfolioStatsTable columns={statColumns} caption="Portfolio stats by period" />
     </div>
   );
 }
@@ -291,6 +270,9 @@ function PortfolioView({ result, form, config }: { result: PortfolioOut; form: P
           <span className="font-medium">{result.signal}</span>
           <DirectionBadge direction={result.direction} />
           <span className="text-muted">{result.description}</span>
+          <div className="ml-auto">
+            <PinPortfolioRunButton result={result} engine={run.engine} form={form} />
+          </div>
         </div>
         <p className="text-muted">
           {result.start} → {result.end} · {run.tickers.length} tickers, one equity · at most {result.portfolio.max_positions} positions and{" "}

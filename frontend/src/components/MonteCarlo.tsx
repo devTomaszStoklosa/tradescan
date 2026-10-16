@@ -3,7 +3,7 @@ import type { EngineRunOut, MonteCarloMethodOut, MonteCarloOut } from "../api/cl
 import { MIN_TRADES } from "../lib/compare";
 import { DASH, fmtNumber, fmtPct } from "../lib/format";
 import { actualRuin, LUCK_LABELS, percentileFor, type Luck, type MonteCarloValue } from "../lib/monteCarlo";
-import type { PinnedRun } from "../lib/runs";
+import type { PinnedRun, RunKind } from "../lib/runs";
 import { RunLabel } from "./RunCard";
 import { Notice } from "./ui";
 
@@ -150,6 +150,12 @@ function MethodValues({ monteCarlo, method }: { monteCarlo: MonteCarloOut; metho
   );
 }
 
+/** Why a pinned run has no Monte Carlo. */
+const NO_MONTE_CARLO: Record<RunKind, string> = {
+  backtest: "No Monte Carlo: pinned before Monte Carlo results or with fewer than two closed trades.",
+  portfolio: "No Monte Carlo: the portfolio backtest does not simulate its trades.",
+};
+
 /** One row per pinned run: one method's unlucky and median values and the chance of ruin. */
 export function MonteCarloTable({ runs, method }: { runs: PinnedRun[]; method: string }) {
   const columns = 2 + COMPARED.reduce((total, value) => total + value.luck.length, 0);
@@ -197,9 +203,7 @@ export function MonteCarloTable({ runs, method }: { runs: PinnedRun[]; method: s
                     <MethodValues monteCarlo={run.monteCarlo} method={result} />
                   ) : (
                     <td colSpan={columns} className="px-3 py-1.5 text-muted">
-                      {run.monteCarlo
-                        ? "No simulations with this method."
-                        : "No Monte Carlo: pinned before Monte Carlo results or with fewer than two closed trades."}
+                      {run.monteCarlo ? "No simulations with this method." : NO_MONTE_CARLO[run.kind]}
                     </td>
                   )}
                 </tr>

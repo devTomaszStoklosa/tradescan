@@ -20,7 +20,16 @@ import type {
 } from "../api/client";
 import { formatTemplate } from "../lib/overrides";
 import type { BacktestForm } from "../lib/params";
-import { toPinnedRun, type PinnedRun, type RunSnapshot } from "../lib/runs";
+import type { PortfolioForm } from "../lib/portfolio";
+import {
+  snapshotPortfolioRun,
+  toPinnedRun,
+  type BacktestSnapshot,
+  type PinnedBacktestRun,
+  type PinnedPortfolioRun,
+  type PinnedRun,
+  type PortfolioSnapshot,
+} from "../lib/runs";
 
 export function spec(
   name: string,
@@ -421,9 +430,12 @@ export const backtestForm: BacktestForm = {
   benchmark: "",
 };
 
+type PinFields = Pick<PinnedRun, "id" | "slot" | "name" | "pinnedAt" | "hidden">;
+
 /** A pinned run of `backtestResult`, changed by `overrides`, with a fixed slot. */
-export function makeRun(slot: number, overrides: Partial<RunSnapshot> = {}, extra: Partial<PinnedRun> = {}): PinnedRun {
-  const snapshot: RunSnapshot = {
+export function makeRun(slot: number, overrides: Partial<BacktestSnapshot> = {}, extra: Partial<PinFields> = {}): PinnedBacktestRun {
+  const snapshot: BacktestSnapshot = {
+    kind: "backtest",
     ticker: backtestResult.ticker,
     signal: backtestResult.signal,
     direction: backtestResult.direction,
@@ -620,3 +632,19 @@ export const portfolioResult: PortfolioOut = {
   runs: [makePortfolioRun("vectorized")],
   missing: ["TSLA"],
 };
+
+const { ticker: _ticker, ...portfolioSetup } = backtestForm;
+
+export const portfolioForm: PortfolioForm = {
+  ...portfolioSetup,
+  universe: { watchlist: "us_large", tickers: "" },
+  filters: ["market"],
+  priority: "momentum",
+  priorityParams: {},
+};
+
+/** A pinned run of `portfolioResult`, changed by `overrides`, with a fixed slot. */
+export function makePortfolioPin(slot: number, overrides: Partial<PortfolioSnapshot> = {}, extra: Partial<PinFields> = {}): PinnedPortfolioRun {
+  const snapshot = snapshotPortfolioRun(portfolioResult, "vectorized", portfolioForm)!;
+  return { ...toPinnedRun({ ...snapshot, ...overrides }, new Date("2026-10-14T09:00:00Z")), id: `portfolio-${slot}`, slot, ...extra };
+}

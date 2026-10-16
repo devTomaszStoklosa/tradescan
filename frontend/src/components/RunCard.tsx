@@ -4,8 +4,30 @@ import { Link } from "react-router";
 import { MIN_TRADES } from "../lib/compare";
 import { fmtPct } from "../lib/format";
 import { writeBacktestForm } from "../lib/params";
-import { runColorVar, type PinnedRun } from "../lib/runs";
+import { writePortfolioForm } from "../lib/portfolio";
+import { runColorVar, runSubject, type PinnedRun, type RunKind } from "../lib/runs";
 import { Button, DirectionBadge, Input } from "./ui";
+
+/** What a card shows only for one kind of run; a new kind of run adds its entry here. */
+interface CardSpec<R extends PinnedRun> {
+  /** What the run covered, shown before its engine; null when the subject says it all. */
+  scope: (run: R) => string | null;
+  /** The page that runs the same setup again. */
+  open: (run: R) => { label: string; to: string };
+}
+
+const CARDS: { [K in RunKind]: CardSpec<Extract<PinnedRun, { kind: K }>> } = {
+  backtest: {
+    scope: () => null,
+    open: (run) => ({ label: "Open in Backtest", to: `/backtest?${writeBacktestForm(run.form).toString()}` }),
+  },
+  portfolio: {
+    scope: (run) => `portfolio of ${run.tickers.length} tickers`,
+    open: (run) => ({ label: "Open in Portfolio", to: `/portfolio?${writePortfolioForm(run.form).toString()}` }),
+  },
+};
+
+const cardOf = <R extends PinnedRun>(run: R) => CARDS[run.kind] as unknown as CardSpec<R>;
 
 /** A run's colour, number and name, as used in table headers. */
 export function RunLabel({ run }: { run: PinnedRun }) {
@@ -38,6 +60,9 @@ export function RunCard({
     else setName(run.name);
   };
   const fewTrades = run.metrics.trades < MIN_TRADES;
+  const card = cardOf(run);
+  const scope = card.scope(run);
+  const open = card.open(run);
 
   return (
     <article
@@ -60,21 +85,19 @@ export function RunCard({
         />
       </div>
       <div className="flex flex-wrap items-center gap-1.5 text-sm">
-        <span className="font-mono font-semibold">{run.ticker}</span>
+        <span className="font-mono font-semibold">{runSubject(run)}</span>
         <span className="break-all">{run.signal}</span>
         <DirectionBadge direction={run.direction} />
       </div>
       <p className="text-xs text-muted">{run.description}</p>
       <p className="num text-xs text-muted">
+        {scope && `${scope} · `}
         {run.engine} · {run.start} → {run.end} · return {fmtPct(run.metrics.total_return_pct, 1, true)}
       </p>
       {fewTrades && <p className="text-xs text-warn">Only {run.metrics.trades} trades: too few to trust the metrics.</p>}
       <div className="flex flex-wrap gap-1.5">
-        <Link
-          to={`/backtest?${writeBacktestForm(run.form).toString()}`}
-          className="inline-flex items-center rounded-lg border border-line px-3 py-1.5 text-sm font-medium hover:bg-panel-2"
-        >
-          Open in Backtest
+        <Link to={open.to} className="inline-flex items-center rounded-lg border border-line px-3 py-1.5 text-sm font-medium hover:bg-panel-2">
+          {open.label}
         </Link>
         <Button onClick={onToggle}>{run.hidden ? "Show" : "Hide"}</Button>
         <Button variant="ghost" onClick={onRemove}>
