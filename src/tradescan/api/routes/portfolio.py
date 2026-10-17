@@ -21,6 +21,7 @@ def build_router(context: ApiContext) -> APIRouter:
             universe=context.universe(body),
             setup=backtest_request(body, "", tuple(body.engines)),
             priority=rule_choice(body.priority) if body.priority else None,
+            score_signal_params=body.score_signal_params,
         )
         return portfolio_out(context.use_cases.portfolio.run(request))
 

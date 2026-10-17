@@ -289,6 +289,48 @@ def test_the_portfolio_use_case_scores_with_the_runs_settings_and_every_signal_o
     assert report.runs[0].result.trades
 
 
+def test_the_portfolio_use_case_scores_the_other_signals_with_the_runs_score_signal_params():
+    frames = {name: random_walk(800, seed=seed) for seed, name in enumerate(["AAA", "BBB", "CCC", "SPY"], start=1)}
+    setup = BacktestRequest(ticker="", signal="connors_rsi2_long", params={"oversold": 5.0})
+    portfolio = build_use_cases(Settings(), FakeProvider(frames)).portfolio
+
+    def scan(score_signal_params):
+        request = PortfolioRequest(Watchlist("demo", ("AAA", "BBB", "CCC"), "SPY"), setup, RuleChoice("score"), score_signal_params)
+        return portfolio.run(request).priority.scan
+
+    # The traded signal's parameters come from the setup, so its entry changes nothing.
+    params = {"donchian_breakout": {"period": 5}, "connors_rsi2_long": {"oversold": 30.0}}
+    overridden, defaults = scan(params), scan({})
+    traded = default_registry.create("connors_rsi2_long", {"oversold": 5.0})
+    signals = [
+        traded if signal.name == traded.name else signal
+        for signal in default_registry.select(directions={Direction.LONG}, params=params)
+    ]
+    tickers = {ticker: frames[ticker] for ticker in ("AAA", "BBB", "CCC")}
+    expected = ScanScore.build(tickers, signals, Direction.LONG, overridden.scorer, overridden.context, Settings().scan.fresh_bars)
+    for ticker in tickers:
+        pd.testing.assert_series_equal(overridden.signal_points[ticker], expected.signal_points[ticker])
+    assert any(not overridden.signal_points[ticker].equals(defaults.signal_points[ticker]) for ticker in tickers)
+
+
+@pytest.mark.parametrize(
+    ("priority", "params"),
+    [
+        (RuleChoice("score"), {"nope": {"period": 5}}),
+        (RuleChoice("score"), {"donchian_breakout": {"period": 1}}),
+        (None, {"donchian_breakdown": {"period": 1}}),  # checked even when nothing reads it
+    ],
+)
+def test_the_portfolio_use_case_refuses_bad_score_signal_params_before_loading_data(priority, params):
+    provider = FakeProvider({"AAA": random_walk(300, seed=1), "SPY": random_walk(300, seed=2)})
+    setup = BacktestRequest(ticker="", signal="connors_rsi2_long")
+    with pytest.raises(ValueError):
+        build_use_cases(Settings(), provider).portfolio.run(
+            PortfolioRequest(Watchlist("demo", ("AAA",), "SPY"), setup, priority, params)
+        )
+    assert provider.calls == []
+
+
 # --- Known bars on both portfolio engines ------------------------------------------------------------
 
 

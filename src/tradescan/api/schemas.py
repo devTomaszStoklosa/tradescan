@@ -138,6 +138,11 @@ class PortfolioIn(UniverseIn, BacktestRulesIn):
     priority: RuleIn | None = Field(
         None, description="Which signals go first when more fire than there is room for; omit for the default priority"
     )
+    score_signal_params: dict[str, SignalParamsIn] = Field(
+        default_factory=dict,
+        description="Parameters of the signals the score priority counts besides the traded one, by signal name, "
+        'e.g. {"donchian_breakout": {"period": 55}}; the traded signal\'s come from params',
+    )
     benchmark: str | None = Field(
         None,
         description="Benchmark for buy & hold and for the market filter; omit for the watchlist's, else the configured benchmark",

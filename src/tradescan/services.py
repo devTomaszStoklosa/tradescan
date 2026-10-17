@@ -809,11 +809,16 @@ def _summary(runs: Sequence[PeriodRun | None]) -> PeriodSummary:
 @dataclass(frozen=True)
 class PortfolioRequest:
     """`setup` runs on every ticker of `universe` with one shared equity, on each of its `engines`; its `ticker` is
-    ignored. Without a benchmark of its own, the setup takes the watchlist's, and buy & hold compares that one."""
+    ignored. Without a benchmark of its own, the setup takes the watchlist's, and buy & hold compares that one.
+
+    `score_signal_params` sets the parameters of the signals a priority that scores like the scanner counts besides
+    the traded one, whose parameters come from the setup; entries for the traded signal or the other direction are
+    validated and change nothing."""
 
     universe: Watchlist
     setup: BacktestRequest
     priority: RuleChoice | None = None  # None: the default priority rule
+    score_signal_params: GroupOverrides = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -871,6 +876,7 @@ class PortfolioUseCase:
         base = resolve_backtest(setup, self._settings, self._registry, self._rules)
         choice = request.priority or RuleChoice(DEFAULT_PRIORITY)
         priority = self._priorities.create(choice.name, choice.params)
+        self._registry.check_params(request.score_signal_params)
         portfolio = build_portfolio_config(base.settings)
 
         tickers = list(universe.tickers)
@@ -882,7 +888,7 @@ class PortfolioUseCase:
         if benchmark not in loaded.frames:
             raise ValueError(f"No data for the benchmark {benchmark}, which buy & hold compares")
         if priority.needs_scan:
-            priority = priority.with_scan(_scan_score(frames, base, self._registry))
+            priority = priority.with_scan(_scan_score(frames, base, self._registry, request.score_signal_params))
         calendar = shared_calendar(frames.values())
         benchmark_close = loaded.frames[benchmark]["close"].astype(float).reindex(calendar, method="ffill")
         split = split_history(calendar, base.config.oos_pct)
@@ -905,11 +911,15 @@ class PortfolioUseCase:
         )
 
 
-def _scan_score(frames: Mapping[str, pd.DataFrame], base: ResolvedBacktest, registry: SignalRegistry) -> ScanScore:
+def _scan_score(
+    frames: Mapping[str, pd.DataFrame], base: ResolvedBacktest, registry: SignalRegistry, params: GroupOverrides
+) -> ScanScore:
     """What the score priority reads: the run's scoring, trend and fresh-bars settings and every signal of the
-    traded direction, the traded one with the run's parameters. Built once, for every engine and both periods."""
+    traded direction, the traded one with the run's parameters and the others with `params`. Built once, for every
+    engine and both periods."""
     settings, traded = base.settings, base.signal
-    signals = [traded if signal.name == traded.name else signal for signal in registry.select(directions={traded.direction})]
+    counted = registry.select(directions={traded.direction}, params=params)
+    signals = [traded if signal.name == traded.name else signal for signal in counted]
     return ScanScore.build(
         frames, signals, traded.direction, build_scorer(settings), build_context_builder(settings), settings.scan.fresh_bars
     )

@@ -440,6 +440,18 @@ def test_portfolio_backtest_with_the_score_priority(client):
     assert run({"scoring": {"signal_weights": {"nope": 1}}}).status_code == 400
 
 
+def test_portfolio_backtest_with_the_score_signal_params(client):
+    def run(score_signal_params):
+        body = {"watchlist": "demo", "signal": "connors_rsi2_long", "priority": {"name": "score"}}
+        return client.post("/api/portfolio-backtest", json={**body, "score_signal_params": score_signal_params})
+
+    assert run({"donchian_breakout": {"period": 5}, "connors_rsi2_long": {"oversold": 30}}).status_code == 200
+    unknown = run({"nope": {"period": 5}})
+    assert unknown.status_code == 400 and "nope" in unknown.json()["detail"]
+    assert run({"donchian_breakout": {"period": 1}}).status_code == 400
+    assert run({"donchian_breakout": {"nope": 5}}).status_code == 400
+
+
 def test_sweep_limits_and_errors(client):
     limits = client.get("/api/config").json()["sweep"]
     assert limits == {
