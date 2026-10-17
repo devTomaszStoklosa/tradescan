@@ -63,8 +63,8 @@ the built UI. The screens:
   each ticker's metrics, where a ticker opens its own backtest.
 - **Portfolio**: the same setup as Watchlist with one shared equity, on either or both engines: the max
   positions, the max exposure and the priority rule with its parameters are editable (the scan score
-  priority also offers the scanner's scoring, trend and fresh-signal settings and each signal's score
-  weight); key metrics against
+  priority also offers the scanner's scoring, trend and fresh-signal settings and each signal's
+  parameters and score weight, the traded signal's parameters coming from the setup); key metrics against
   the benchmark's buy & hold, skipped signals, equity and open positions over time, metrics and portfolio
   stats in-sample and out-of-sample, each ticker's contribution (a ticker opens its own backtest) and every
   trade with its ticker. **Pin run** keeps the shown engine's run for Compare.
@@ -328,9 +328,11 @@ a bar):
 The `score` priority has no parameters of its own: it reads the run's `[scoring]`, `[trend]` and
 `scan.fresh_bars` settings, so it scores like a scan with the same settings, and a run can override them
 like any setting. Every registered signal of the direction counts, the traded one with the run's
-parameters and the others with their defaults. Its scores move in steps of the weights and bonuses, so
-ties are common; tied signals keep the watchlist order. It reads every signal on every ticker once per
-run, about 0.1 s per ticker of 10 years.
+parameters and the others with the run's `score_signal_params` (on the Portfolio page, each signal's
+parameters under Scan score settings, `ss.<signal>.<name>` in the URL), else their defaults; an entry for
+the traded signal or the other direction is checked and changes nothing. Its scores move in steps of the
+weights and bonuses, so ties are common; tied signals keep the watchlist order. It reads every signal on
+every ticker once per run, about 0.1 s per ticker of 10 years.
 
 The metrics are a backtest's on the shared equity, except that buy & hold is the benchmark's (the setup's,
 else the watchlist's, else `scan.benchmark`) and exposure is the share of days with an open position. The
@@ -371,7 +373,8 @@ signals and rules; a single run can override any of them without touching the fi
   and a watchlist backtest (`/api/watchlist-backtest`) the same setup with `"watchlist": "etf"` or
   `"tickers": [...]` instead of the ticker, as does a portfolio backtest (`/api/portfolio-backtest`) with
   `"priority": {"name": "momentum", "params": {"skip": 0}}` and `"engines"`; the `score` priority takes
-  `"settings": {"scoring": {...}, "trend": {...}, "scan": {"fresh_bars": 5}}`);
+  `"settings": {"scoring": {...}, "trend": {...}, "scan": {"fresh_bars": 5}}` and the other signals'
+  parameters as `"score_signal_params": {"donchian_breakout": {"period": 55}}`);
   `/api/config` lists the settings, the rules and the sweep limits, `/api/signals` the signals, each
   parameter with its range;
 - on the CLI, through the existing flags (`--atr-mult`, `--fresh`, `--equity`, `--target-r`, `--oos`, ...).
