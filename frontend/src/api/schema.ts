@@ -191,6 +191,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rotation-backtest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rotation Backtest */
+        post: operations["rotation_backtest_api_rotation_backtest_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chart": {
         parameters: {
             query?: never;
@@ -446,6 +463,25 @@ export interface components {
             priority_rules: components["schemas"]["PriorityRuleOut"][];
             /** Default Priority */
             default_priority: string;
+            /**
+             * Ranking Rules
+             * @description How a rotation ranks the tickers: the priority rules that read bars only
+             */
+            ranking_rules: components["schemas"]["RuleOut"][];
+            /** Default Ranking */
+            default_ranking: string;
+            /**
+             * Weight Rules
+             * @description How a rotation's picks share the equity
+             */
+            weight_rules: components["schemas"]["RuleOut"][];
+            /** Default Weighting */
+            default_weighting: string;
+            /**
+             * Rebalances
+             * @description How often a rotation rebalances
+             */
+            rebalances: components["schemas"]["Rebalance"][];
             sweep: components["schemas"]["SweepLimitsOut"];
         };
         /**
@@ -852,6 +888,31 @@ export interface components {
              */
             spread: components["schemas"]["MetricSpreadOut"][];
         };
+        /** PickOut */
+        PickOut: {
+            /** Ticker */
+            ticker: string;
+            /**
+             * Score
+             * @description The ranking's score
+             */
+            score: number | null;
+            /**
+             * Momentum Pct
+             * @description Return over the absolute momentum lookback, %; null when it is off
+             */
+            momentum_pct: number | null;
+            /**
+             * Weight Pct
+             * @description The pick's share of equity
+             */
+            weight_pct: number;
+            /**
+             * Held
+             * @description False when its absolute momentum hands its slot to the safe asset or cash
+             */
+            held: boolean;
+        };
         /** Point */
         Point: {
             /** Time */
@@ -1133,6 +1194,11 @@ export interface components {
              */
             needs_scan: boolean;
         };
+        /**
+         * Rebalance
+         * @enum {string}
+         */
+        Rebalance: "weekly" | "monthly";
         /** RegimeOut */
         RegimeOut: {
             /** Benchmark */
@@ -1172,6 +1238,179 @@ export interface components {
             position_value: number | null;
             /** Risk Amount */
             risk_amount: number | null;
+        };
+        /** RotationConfigOut */
+        RotationConfigOut: {
+            /**
+             * Holdings
+             * @description Tickers picked at each rebalance
+             */
+            holdings: number;
+            /**
+             * Absolute Lookback
+             * @description Bars of the absolute momentum check; 0 when it is off
+             */
+            absolute_lookback: number;
+            rebalance: components["schemas"]["Rebalance"];
+            /**
+             * Safe Asset
+             * @description Takes the slots of picks that fail the check; null for cash
+             */
+            safe_asset: string | null;
+        };
+        /**
+         * RotationIn
+         * @description `settings.rotation` sets the holdings and the absolute momentum lookback.
+         */
+        RotationIn: {
+            /**
+             * Watchlist
+             * @description Watchlist name, e.g. us_large
+             */
+            watchlist?: string | null;
+            /**
+             * Tickers
+             * @description Ad-hoc tickers instead of a watchlist
+             */
+            tickers?: string[] | null;
+            /** @description How the tickers are ranked; omit for the default ranking */
+            ranking?: components["schemas"]["RuleIn"] | null;
+            /** @description How the picks share the equity; omit for the default weighting */
+            weighting?: components["schemas"]["RuleIn"] | null;
+            /**
+             * @description Rebalance at the last close of every week or month
+             * @default monthly
+             */
+            rebalance: components["schemas"]["Rebalance"];
+            /**
+             * Safe Asset
+             * @description Takes the slots of picks whose absolute momentum is at or below 0; omit for cash
+             */
+            safe_asset?: string | null;
+            /**
+             * Settings
+             * @description Per-run overrides by settings section, e.g. {"rotation": {"holdings": 3}}; backtest.oos_pct sets the out-of-sample share
+             */
+            settings?: {
+                [key: string]: {
+                    [key: string]: number | number[] | {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /**
+             * Benchmark
+             * @description Benchmark for buy & hold; omit for the watchlist's, else the configured benchmark
+             */
+            benchmark?: string | null;
+            /** Period */
+            period?: string | null;
+        };
+        /** RotationOut */
+        RotationOut: {
+            /** Universe */
+            universe: string;
+            /** Engine */
+            engine: string;
+            /**
+             * Start
+             * @description The first rebalance with a pick: the lookbacks' warm-up is left out
+             */
+            start: string;
+            /** End */
+            end: string;
+            config: components["schemas"]["BacktestConfigOut"];
+            rotation: components["schemas"]["RotationConfigOut"];
+            ranking: components["schemas"]["AppliedRuleOut"];
+            weighting: components["schemas"]["AppliedRuleOut"];
+            /**
+             * Buy Hold Benchmark
+             * @description The benchmark buy & hold compares
+             */
+            buy_hold_benchmark: string;
+            /**
+             * Buy Hold
+             * @description The benchmark scaled to the initial equity, on the run's dates
+             */
+            buy_hold: components["schemas"]["Point"][];
+            /** @description The split of the run's dates; null when it is too short */
+            split: components["schemas"]["SplitOut"] | null;
+            full: components["schemas"]["RotationPeriodOut"];
+            /** @description The run on the bars before the split; null without a split */
+            in_sample: components["schemas"]["RotationPeriodOut"] | null;
+            /** @description The run from the split on, with fresh equity; null without a split */
+            out_of_sample: components["schemas"]["RotationPeriodOut"] | null;
+            /** Equity */
+            equity: components["schemas"]["Point"][];
+            /**
+             * Holdings
+             * @description Tickers held at each close, the safe asset included
+             */
+            holdings: components["schemas"]["Point"][];
+            /** @description What a rebalance at the last close would hold */
+            targets: components["schemas"]["TargetsOut"];
+            /**
+             * Trades
+             * @description Holdings: from the buy that opens a position to the sale that empties it, by entry date
+             */
+            trades: components["schemas"]["PortfolioTradeOut"][];
+            /**
+             * Tickers
+             * @description Every ticker with data in watchlist order, the safe asset last
+             */
+            tickers: components["schemas"]["TickerContributionOut"][];
+            /**
+             * Missing
+             * @description Tickers without data
+             */
+            missing: string[];
+        };
+        /** RotationPeriodOut */
+        RotationPeriodOut: {
+            /** @description buy_hold_pct is the benchmark's; exposure_pct is the share of closes with a holding; without a stop, expectancy_r and sqn are null */
+            metrics: components["schemas"]["MetricsOut"];
+            stats: components["schemas"]["RotationStatsOut"];
+        };
+        /** RotationStatsOut */
+        RotationStatsOut: {
+            /** Rebalances */
+            rebalances: number;
+            /**
+             * Orders
+             * @description Orders filled
+             */
+            orders: number;
+            /**
+             * Unfilled Orders
+             * @description Dropped because their ticker had no bar before the next rebalance
+             */
+            unfilled_orders: number;
+            /**
+             * Average Holdings
+             * @description Tickers held, the safe asset included, averaged over the closes
+             */
+            average_holdings: number | null;
+            /** Max Holdings */
+            max_holdings: number;
+            /**
+             * Average Exposure Pct
+             * @description Gross value of the holdings, % of equity, averaged
+             */
+            average_exposure_pct: number | null;
+            /**
+             * Average Safe Pct
+             * @description Value of the safe asset, % of equity, averaged
+             */
+            average_safe_pct: number | null;
+            /** Average Cash Pct */
+            average_cash_pct: number | null;
+            /**
+             * Turnover Pct
+             * @description Half the value traded per year, % of the average equity
+             */
+            turnover_pct: number | null;
+            /** Commissions */
+            commissions: number;
         };
         /** RuleIn */
         RuleIn: {
@@ -1521,6 +1760,23 @@ export interface components {
          * @enum {string}
          */
         SweepTarget: "signal" | "entry" | "exit" | "filter" | "settings";
+        /** TargetsOut */
+        TargetsOut: {
+            /** Date */
+            date: string;
+            /**
+             * Picks
+             * @description By rank
+             */
+            picks: components["schemas"]["PickOut"][];
+            /**
+             * Safe Pct
+             * @description Share of equity in the safe asset for the picks that failed the check
+             */
+            safe_pct: number;
+            /** Cash Pct */
+            cash_pct: number;
+        };
         /** TickerContributionOut */
         TickerContributionOut: {
             /** Ticker */
@@ -2022,6 +2278,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortfolioOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rotation_backtest_api_rotation_backtest_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RotationIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RotationOut"];
                 };
             };
             /** @description Validation Error */

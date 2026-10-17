@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { api, type BacktestIn, type ChartIn, type EdgeIn, type PortfolioIn, type ScanIn, type SweepIn, type WatchlistBacktestIn } from "./client";
+import { api, type BacktestIn, type ChartIn, type EdgeIn, type PortfolioIn, type RotationIn, type ScanIn, type SweepIn, type WatchlistBacktestIn } from "./client";
 
 const FIVE_MINUTES = 5 * 60_000;
 
@@ -59,6 +59,15 @@ export const usePortfolioBacktest = (body: PortfolioIn | null) =>
   useQuery({
     queryKey: ["portfolio-backtest", body],
     queryFn: () => api.portfolioBacktest(body as PortfolioIn),
+    enabled: body !== null,
+    staleTime: FIVE_MINUTES,
+    retry: false,
+  });
+
+export const useRotationBacktest = (body: RotationIn | null) =>
+  useQuery({
+    queryKey: ["rotation-backtest", body],
+    queryFn: () => api.rotationBacktest(body as RotationIn),
     enabled: body !== null,
     staleTime: FIVE_MINUTES,
     retry: false,

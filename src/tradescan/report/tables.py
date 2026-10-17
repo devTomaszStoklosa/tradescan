@@ -12,10 +12,19 @@ from tradescan.backtest.base import Trade
 from tradescan.backtest.oos import PeriodMetrics
 from tradescan.backtest.portfolio import PortfolioTrade
 from tradescan.backtest.portfolio_metrics import TickerContribution
+from tradescan.backtest.rotation import Targets
 from tradescan.backtest.tickers import Period
 from tradescan.scanner import ScanHit
 from tradescan.scoring import Scorer
-from tradescan.services import METRIC_NAMES, EdgeRow, EngineRun, PortfolioReport, SweepReport, WatchlistBacktestReport
+from tradescan.services import (
+    METRIC_NAMES,
+    EdgeRow,
+    EngineRun,
+    PortfolioReport,
+    RotationReport,
+    SweepReport,
+    WatchlistBacktestReport,
+)
 from tradescan.signals.base import Signal
 
 SCAN_COLUMNS: tuple[str, ...] = (
@@ -257,6 +266,34 @@ def portfolio_metrics_frame(report: PortfolioReport) -> pd.DataFrame:
             values.update({item.name: getattr(period.stats, item.name) for item in fields(period.stats)})
             columns[f"{run.result.engine} {label}"] = values
     return pd.DataFrame(columns)
+
+
+def rotation_metrics_frame(report: RotationReport) -> pd.DataFrame:
+    """The metrics and rotation stats of the full run and of each period, one column each."""
+    columns = {}
+    for label, period in (("full", report.full), ("in-sample", report.in_sample), ("out-of-sample", report.out_of_sample)):
+        if period is None:
+            continue
+        values = {item.name: getattr(period.metrics, item.name) for item in fields(period.metrics)}
+        values.update({item.name: getattr(period.stats, item.name) for item in fields(period.stats)})
+        columns[label] = values
+    return pd.DataFrame(columns)
+
+
+def targets_frame(targets: Targets) -> pd.DataFrame:
+    """A rebalance's picks by rank; a pick that is not held handed its slot to the safe asset or cash."""
+    return pd.DataFrame(
+        [
+            {
+                "ticker": pick.ticker,
+                "score": pick.score,
+                "momentum%": pick.momentum * 100.0,
+                "weight%": pick.weight_pct,
+                "held": "yes" if pick.held else "no",
+            }
+            for pick in targets.picks
+        ]
+    )
 
 
 def contributions_frame(rows: Sequence[TickerContribution]) -> pd.DataFrame:

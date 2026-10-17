@@ -142,6 +142,27 @@ def test_portfolio_backtest_ranks_by_the_scan_score(provider, capsys):
     assert "priority: The scanner's confluence score: fresh signals, daily and weekly trend, relative-strength rank" in output
 
 
+def test_rotation_backtest_holds_the_strongest_tickers_and_exports_the_trades(provider, tmp_path, capsys):
+    target = tmp_path / "trades.csv"
+    code = cli.main([
+        "rotation-backtest", "-t", "AAA,BBB,CCC,ZZZ", "--rank", "relative_strength", "--holdings", "2",
+        "--rebalance", "weekly", "--weighting", "inverse_volatility", "--absolute-lookback", "63", "--safe-asset", "spy",
+        "--commission-pct", "0.05", "--top", "2", "--export", str(target),
+    ])  # fmt: skip
+    assert code == 0
+    output = " ".join(capsys.readouterr().out.split())
+    assert "No data for: ZZZ" in output and "Top 2 of 3 tickers of custom, rebalanced weekly" in output
+    assert "a pick at or below 0 over 63 bars goes to SPY" in output and "Costs 0.05% + 0.05% slippage" in output
+    assert "buy & hold is SPY's" in output and "would pick" in output and "% in SPY, " in output
+    assert "2 of 4 tickers by P&L" in output
+    assert provider.calls[-1][0] == ("AAA", "BBB", "CCC", "ZZZ", "SPY")
+    trades = pd.read_csv(target)
+    assert set(trades["engine"]) == {"vectorized"} and set(trades["ticker"]) <= {"AAA", "BBB", "CCC", "SPY"}
+    assert set(trades["exit_reason"]) <= {"rebalance", "open"}
+    with pytest.raises(SystemExit):
+        cli.main(["rotation-backtest", "-t", "AAA", "--rank", "score"])
+
+
 def test_backtest_and_sweep_still_take_a_ticker(provider):
     assert cli.build_parser().parse_args(["backtest", "AAA", "connors_rsi2_long"]).ticker == "AAA"
     assert cli.build_parser().parse_args(["sweep", "AAA", "connors_rsi2_long", "--axis", "signal.oversold=5,10"]).signal == "connors_rsi2_long"

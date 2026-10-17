@@ -11,6 +11,8 @@ from tradescan.api.mappers import filter_rule_out, priority_rule_out, rule_out, 
 from tradescan.backtest import sweep
 from tradescan.backtest.oos import MIN_PERIOD_BARS
 from tradescan.backtest.priority import DEFAULT_PRIORITY
+from tradescan.backtest.rotation import DEFAULT_RANKING, Rebalance
+from tradescan.backtest.weighting import DEFAULT_WEIGHTING
 from tradescan.config import adjustable_sections
 from tradescan.services import NOT_SWEEPABLE, SWEEP_SECTIONS
 from tradescan.signals.base import Family
@@ -42,6 +44,11 @@ def build_router(context: ApiContext) -> APIRouter:
             default_exits=list(rules.default_exits),
             priority_rules=[priority_rule_out(rule) for rule in context.use_cases.portfolio.priorities.classes()],
             default_priority=DEFAULT_PRIORITY,
+            ranking_rules=[rule_out(rule) for rule in context.use_cases.rotation.rankings],
+            default_ranking=DEFAULT_RANKING,
+            weight_rules=[rule_out(rule) for rule in context.use_cases.rotation.weightings.classes()],
+            default_weighting=DEFAULT_WEIGHTING,
+            rebalances=list(Rebalance),
             sweep=schemas.SweepLimitsOut(
                 max_axes=sweep.MAX_AXES,
                 min_values=sweep.MIN_VALUES,

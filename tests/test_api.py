@@ -26,7 +26,10 @@ def test_meta_endpoints(client):
     assert client.get("/api/health").json()["status"] == "ok"
     config = client.get("/api/config").json()
     sections = {section["name"]: {param["name"]: param for param in section["params"]} for section in config["sections"]}
-    assert set(sections) == {"account", "risk", "scan", "scoring", "trend", "regime", "backtest", "monte_carlo", "portfolio"}
+    assert set(sections) == {
+        "account", "risk", "scan", "scoring", "trend", "regime", "backtest", "monte_carlo", "portfolio", "rotation",
+    }  # fmt: skip
+    assert [name for name in sections["rotation"]] == ["holdings", "absolute_lookback"]
     assert [name for name in sections["monte_carlo"]] == ["simulations", "ruin_drawdown_pct", "seed"]
     assert [name for name in sections["portfolio"]] == ["max_positions", "max_exposure_pct"]
     assert sections["account"]["equity"]["default"] == 100_000
@@ -56,6 +59,10 @@ def test_meta_endpoints(client):
     momentum = config["priority_rules"][1]
     assert [param["name"] for param in momentum["params"]] == ["lookback", "skip"]
     assert momentum["description"] == "Return from 252 bars ago to 21 bars ago"
+    assert [rule["name"] for rule in config["ranking_rules"]] == ["relative_strength", "momentum"]
+    assert [rule["name"] for rule in config["weight_rules"]] == ["equal", "inverse_volatility"]
+    assert (config["default_ranking"], config["default_weighting"]) == ("momentum", "equal")
+    assert config["rebalances"] == ["weekly", "monthly"]
 
     signals = client.get("/api/signals").json()
     assert len(signals) == 38 and {"name", "family", "direction", "weight", "description", "template", "params"} <= set(signals[0])
@@ -411,6 +418,48 @@ def test_portfolio_backtest(client):
     assert status(watchlist="demo", priority={"name": "nope"}) == 400
     assert status(watchlist="demo", priority={"name": "momentum", "params": {"skip": 300}}) == 400
     assert status(watchlist="demo", settings={"portfolio": {"max_positions": 0}}) == 400
+
+
+def test_rotation_backtest(client):
+    body = {
+        "watchlist": "demo",
+        "ranking": {"name": "momentum", "params": {"lookback": 126, "skip": 0}},
+        "weighting": {"name": "inverse_volatility", "params": {"lookback": 20}},
+        "rebalance": "weekly",
+        "safe_asset": "spy",
+        "settings": {"rotation": {"holdings": 2, "absolute_lookback": 63}, "backtest": {"commission_pct": 0.05}},
+    }
+    response = client.post("/api/rotation-backtest", json=body)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert (data["universe"], data["engine"]) == ("demo", "vectorized")
+    assert data["rotation"] == {"holdings": 2, "absolute_lookback": 63, "rebalance": "weekly", "safe_asset": "SPY"}
+    assert data["ranking"]["params"] == {"lookback": 126, "skip": 0} and data["weighting"]["name"] == "inverse_volatility"
+    assert data["config"]["commission_pct"] == 0.05
+    assert data["buy_hold_benchmark"] == "SPY" and data["buy_hold"][0]["value"] == pytest.approx(100_000)
+    assert data["start"] == data["equity"][0]["time"] == data["buy_hold"][0]["time"]
+    assert data["split"] and data["in_sample"] and data["out_of_sample"]
+    full = data["full"]
+    assert full["metrics"]["expectancy_r"] is None and full["stats"]["rebalances"] > 50 and full["stats"]["max_holdings"] <= 3
+    assert [row["ticker"] for row in data["tickers"]] == ["AAA", "BBB", "CCC", "SPY"]
+    assert data["trades"] and all(trade["r_multiple"] is None for trade in data["trades"])
+    targets = data["targets"]
+    assert targets["date"] == data["end"] and len(targets["picks"]) == 2
+    assert sum(pick["weight_pct"] for pick in targets["picks"]) == pytest.approx(100.0)
+
+
+def test_rotation_backtest_rejects_what_it_cannot_run(client):
+    def status(**extra):
+        return client.post("/api/rotation-backtest", json={"watchlist": "demo", **extra}).status_code
+
+    assert status() == 200
+    assert status(ranking={"name": "score"}) == 400
+    assert status(weighting={"name": "nope"}) == 400
+    assert status(weighting={"name": "inverse_volatility", "params": {"lookback": 1}}) == 400
+    assert status(rebalance="daily") == 422
+    assert status(safe_asset="NOPE") == 400
+    assert status(settings={"rotation": {"holdings": 0}}) == 400
+    assert status(watchlist="nope") == 404
 
 
 def test_portfolio_backtest_with_the_score_priority(client):

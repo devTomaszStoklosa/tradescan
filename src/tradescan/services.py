@@ -8,7 +8,7 @@ Requests carry per-run overrides: `settings` ({section: {parameter: value}}) and
 with their parameters. All are validated against the declared ranges, and the configured settings are never modified.
 A sweep reruns one backtest setup over a grid of one or two of those parameters, a watchlist backtest
 runs it on every ticker of a watchlist, and a portfolio backtest on every ticker of a watchlist with one
-shared equity.
+shared equity. A rotation holds the strongest tickers of a watchlist, rebalanced on a calendar.
 """
 
 from __future__ import annotations
@@ -36,11 +36,23 @@ from tradescan.backtest.portfolio import (
 )
 from tradescan.backtest.portfolio_metrics import PortfolioMetrics, TickerContribution, contributions, portfolio_metrics
 from tradescan.backtest.priority import DEFAULT_PRIORITY, PriorityRule, ScanScore, priority_rules
+from tradescan.backtest.rotation import (
+    DEFAULT_RANKING,
+    Rebalance,
+    RotationConfig,
+    RotationEngine,
+    RotationResult,
+    VectorizedRotationEngine,
+    ranking_rules,
+    run_rotation_periods,
+)
+from tradescan.backtest.rotation_metrics import RotationMetrics, rotation_metrics
 from tradescan.backtest.rules import Rule, RuleRegistry
 from tradescan.backtest.sweep import SweepAxis, SweepCase, SweepJob, SweepTarget, check_axes, grid
 from tradescan.backtest.tickers import Period, PeriodRun, TickerJob, TickerRun
 from tradescan.backtest.trade_rules import RuleCatalog, RuleChoice, TradeRules, default_catalog
 from tradescan.backtest.vectorized import VectorizedEngine
+from tradescan.backtest.weighting import DEFAULT_WEIGHTING, WeightRule, weight_rules
 from tradescan.config import Settings
 from tradescan.context import ContextBuilder
 from tradescan.data.cache import CachedProvider
@@ -165,6 +177,16 @@ def build_monte_carlo_config(settings: Settings) -> MonteCarloConfig:
 def build_portfolio_config(settings: Settings) -> PortfolioConfig:
     portfolio = settings.portfolio
     return PortfolioConfig(max_positions=portfolio.max_positions, max_exposure_pct=portfolio.max_exposure_pct)
+
+
+def build_rotation_config(settings: Settings, rebalance: Rebalance, safe_asset: str | None) -> RotationConfig:
+    rotation = settings.rotation
+    return RotationConfig(
+        holdings=rotation.holdings,
+        absolute_lookback=rotation.absolute_lookback,
+        rebalance=rebalance,
+        safe_asset=safe_asset,
+    )
 
 
 def resolve_settings(settings: Settings, overrides: GroupOverrides, registry: SignalRegistry) -> Settings:
@@ -954,6 +976,132 @@ def _portfolio_run(
 
 
 # ---------------------------------------------------------------------------
+# Momentum rotation
+
+
+@dataclass(frozen=True)
+class RotationRequest:
+    """Hold the strongest tickers of `universe`. `settings` sets the `[rotation]` holdings and absolute momentum,
+    the account, the costs and the out-of-sample share. Without a benchmark of its own, buy & hold compares the
+    watchlist's."""
+
+    universe: Watchlist
+    ranking: RuleChoice | None = None  # None: the default ranking
+    weighting: RuleChoice | None = None  # None: the default weighting
+    rebalance: Rebalance = Rebalance.MONTHLY
+    safe_asset: str | None = None  # None: cash
+    settings: GroupOverrides = field(default_factory=dict)
+    benchmark: str | None = None
+    period: str | None = None
+    interval: str | None = None
+
+
+@dataclass(frozen=True)
+class RotationReport:
+    universe: Watchlist
+    settings: Settings
+    config: BacktestConfig
+    rotation: RotationConfig
+    ranking: PriorityRule
+    weighting: WeightRule
+    benchmark: str  # compared by buy & hold
+    benchmark_close: pd.Series  # on the run's dates, each with the benchmark's last close at or before it
+    result: RotationResult
+    full: RotationMetrics
+    in_sample: RotationMetrics | None  # None when the run is too short to split
+    out_of_sample: RotationMetrics | None
+    split: Split | None  # of the run's dates
+    contributions: list[TickerContribution]  # of the full run, the safe asset last
+    missing: list[str]
+
+
+class RotationUseCase:
+    def __init__(
+        self,
+        market_data: MarketData,
+        settings: Settings,
+        engine: RotationEngine | None = None,
+        priorities: RuleRegistry[PriorityRule] = priority_rules,
+        weightings: RuleRegistry[WeightRule] = weight_rules,
+    ) -> None:
+        self._market_data = market_data
+        self._settings = settings
+        self._engine = engine or VectorizedRotationEngine()
+        self._priorities = priorities
+        self._weightings = weightings
+
+    @property
+    def rankings(self) -> list[type[PriorityRule]]:
+        return ranking_rules(self._priorities)
+
+    @property
+    def weightings(self) -> RuleRegistry[WeightRule]:
+        return self._weightings
+
+    def _ranking(self, choice: RuleChoice | None) -> PriorityRule:
+        choice = choice or RuleChoice(DEFAULT_RANKING)
+        names = [rule.name for rule in self.rankings]
+        if choice.name not in names:
+            raise ValueError(f"Unknown ranking rule '{choice.name}'. Use: {', '.join(names)}")
+        return self._priorities.create(choice.name, choice.params)
+
+    def run(self, request: RotationRequest) -> RotationReport:
+        settings = self._settings.with_overrides(request.settings)
+        ranking = self._ranking(request.ranking)
+        weighting_choice = request.weighting or RuleChoice(DEFAULT_WEIGHTING)
+        weighting = self._weightings.create(weighting_choice.name, weighting_choice.params)
+        safe = request.safe_asset.strip().upper() if request.safe_asset and request.safe_asset.strip() else None
+        rotation = build_rotation_config(settings, request.rebalance, safe)
+        config = build_backtest_config(settings)
+        universe = request.universe
+        benchmark = _benchmark(request.benchmark, universe, settings)
+
+        tickers = list(universe.tickers)
+        extra = [benchmark, safe] if safe else [benchmark]
+        loaded = self._market_data.load([*tickers, *extra], request.period or settings.backtest.period, request.interval)
+        frames = {ticker: loaded.frames[ticker] for ticker in tickers if ticker in loaded.frames}
+        if not frames:
+            raise ValueError(f"No data for any ticker of {universe.name}")
+        if benchmark not in loaded.frames:
+            raise ValueError(f"No data for the benchmark {benchmark}, which buy & hold compares")
+        if safe and safe not in loaded.frames:
+            raise ValueError(f"No data for the safe asset {safe}")
+        safe_frame = loaded.frames[safe] if safe and safe not in frames else None
+
+        result = self._engine.run(frames, config, rotation, ranking, weighting, safe_frame)
+        if not result.rebalances:
+            raise ValueError(
+                "No rebalance had a ticker to pick: the history is shorter than the ranking, weighting or absolute "
+                "momentum lookback"
+            )
+        close = loaded.frames[benchmark]["close"]
+        bars_per_year = config.bars_per_year
+        split = split_history(result.equity.index, config.oos_pct)
+        periods = (
+            run_rotation_periods(self._engine, frames, config, rotation, ranking, weighting, safe_frame, split.out_of_sample[0])
+            if split
+            else None
+        )
+        return RotationReport(
+            universe=universe,
+            settings=settings,
+            config=config,
+            rotation=rotation,
+            ranking=ranking,
+            weighting=weighting,
+            benchmark=benchmark,
+            benchmark_close=close.astype(float).reindex(result.equity.index, method="ffill"),
+            result=result,
+            full=rotation_metrics(result, close, bars_per_year),
+            in_sample=rotation_metrics(periods.in_sample, close, bars_per_year) if periods else None,
+            out_of_sample=rotation_metrics(periods.out_of_sample, close, bars_per_year) if periods else None,
+            split=split,
+            contributions=contributions(result, config.initial_equity),
+            missing=[ticker for ticker in loaded.missing if ticker in tickers],
+        )
+
+
+# ---------------------------------------------------------------------------
 # Chart
 
 
@@ -1031,6 +1179,7 @@ class UseCases:
     sweep: SweepUseCase
     watchlist_backtest: WatchlistBacktestUseCase
     portfolio: PortfolioUseCase
+    rotation: RotationUseCase
     chart: ChartUseCase
 
 
@@ -1042,6 +1191,7 @@ def build_use_cases(
     runner: TaskRunner | None = None,
     rules: RuleCatalog = default_catalog,
     portfolio_engines: Mapping[str, PortfolioEngineFactory] | None = None,
+    rotation_engine: RotationEngine | None = None,
 ) -> UseCases:
     """`runner` runs per-ticker work and sweeps; pass a `ProcessRunner` to use every core."""
     market_data = MarketData(provider, settings)
@@ -1054,5 +1204,6 @@ def build_use_cases(
         sweep=SweepUseCase(market_data, settings, registry, task_runner, rules),
         watchlist_backtest=WatchlistBacktestUseCase(market_data, settings, registry, task_runner, rules),
         portfolio=PortfolioUseCase(market_data, settings, registry, portfolio_engines or default_portfolio_engines(), rules),
+        rotation=RotationUseCase(market_data, settings, rotation_engine),
         chart=ChartUseCase(market_data, registry),
     )

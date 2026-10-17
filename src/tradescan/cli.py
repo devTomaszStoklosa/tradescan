@@ -14,8 +14,10 @@ from rich.console import Console
 
 from tradescan.backtest.metrics import Metrics
 from tradescan.backtest.priority import DEFAULT_PRIORITY, priority_rules
+from tradescan.backtest.rotation import DEFAULT_RANKING, Rebalance, ranking_rules
 from tradescan.backtest.sweep import MAX_VALUES, SweepAxis, SweepTarget
 from tradescan.backtest.trade_rules import RuleChoice, default_catalog
+from tradescan.backtest.weighting import DEFAULT_WEIGHTING, weight_rules
 from tradescan.config import Settings, load_settings
 from tradescan.data.provider import DataProvider
 from tradescan.parallel import ProcessRunner
@@ -32,10 +34,12 @@ from tradescan.report.tables import (
     pooled_frame,
     portfolio_metrics_frame,
     portfolio_trades_frame,
+    rotation_metrics_frame,
     signals_to_frame,
     spread_frame,
     sweep_cells_frame,
     sweep_to_frame,
+    targets_frame,
     trades_to_frame,
     watchlist_export_frame,
     watchlist_rows_frame,
@@ -45,6 +49,7 @@ from tradescan.services import (
     EdgeRequest,
     MarketRequest,
     PortfolioRequest,
+    RotationRequest,
     ScanRequest,
     SignalFilter,
     SweepRequest,
@@ -425,6 +430,76 @@ def cmd_portfolio_backtest(args: argparse.Namespace, settings: Settings, report:
     return 0
 
 
+def cmd_rotation_backtest(args: argparse.Namespace, settings: Settings, report: ConsoleReport) -> int:
+    universe = _universe(args)
+    _loading(report, len(universe.tickers), args.period or settings.backtest.period)
+    overrides = _overrides(
+        {
+            "account": {"equity": args.equity, "lot_size": args.lot_size},
+            "backtest": {"commission_pct": args.commission_pct, "slippage_pct": args.slippage_pct, "oos_pct": args.oos},
+            "rotation": {"holdings": args.holdings, "absolute_lookback": args.absolute_lookback},
+        }
+    )
+    request = RotationRequest(
+        universe=universe,
+        ranking=RuleChoice(args.rank) if args.rank else None,
+        weighting=RuleChoice(args.weighting) if args.weighting else None,
+        rebalance=Rebalance(args.rebalance),
+        safe_asset=args.safe_asset,
+        settings=overrides,
+        benchmark=args.benchmark,
+        period=args.period,
+        interval=args.interval,
+    )
+    result = _use_cases(settings, args).rotation.run(request)
+    _missing(report, result.missing)
+    rotation, config, run = result.rotation, result.config, result.result
+    defensive = rotation.safe_asset or "cash"
+    check = (
+        f"a pick at or below 0 over {rotation.absolute_lookback} bars goes to {defensive}"
+        if rotation.checks_momentum
+        else "no absolute momentum check"
+    )
+    tickers = sum(row.ticker in universe.tickers for row in result.contributions)
+    report.note(
+        f"Top {rotation.holdings} of {tickers} tickers of {universe.name}, rebalanced {rotation.rebalance.value}. "
+        f"Ranking: {result.ranking.describe()}. Weights: {result.weighting.describe()}. Absolute momentum: {check}. "
+        f"Costs {config.commission_pct:g}% + {config.slippage_pct:g}% slippage"
+    )
+    split = result.split
+    dates = run.equity.index
+    report.frame(
+        rotation_metrics_frame(result),
+        title=f"{universe.name} rotation, {dates[0].date()} to {dates[-1].date()}",
+        caption=f"from the first rebalance with a pick; buy & hold is {result.benchmark}'s, exposure the share of days "
+        "with a holding"
+        + (
+            f"; out-of-sample from {split.out_of_sample[0].date()} (last {split.oos_pct:g}%), each period with fresh equity"
+            if split
+            else ""
+        ),
+        show_index=True,
+    )
+    if split is None:
+        report.warning(f"History too short for an out-of-sample split at {config.oos_pct:g}%")
+    targets = run.targets
+    in_safe = f"{targets.safe_pct:.1f}% in {rotation.safe_asset}, " if rotation.safe_asset else ""
+    report.frame(
+        targets_frame(targets),
+        title=f"A rebalance at the {targets.date.date()} close would pick",
+        caption=f"{in_safe}{targets.cash_pct:.1f}% in cash",
+    )
+    rows = contributions_frame(result.contributions)
+    shown = rows if args.top <= 0 else rows.head(args.top)
+    report.frame(
+        shown,
+        title=f"{len(shown)} of {len(rows)} tickers by P&L",
+        caption="contribution in % of the initial equity" + ("" if len(shown) == len(rows) else "; --top 0 shows all"),
+    )
+    _export(report, portfolio_trades_frame(run.trades, run.engine), args.export)
+    return 0
+
+
 def cmd_update_universes(args: argparse.Namespace, settings: Settings, report: ConsoleReport) -> int:
     wanted = set(_split(args.only))
     unknown = wanted - {source.name for source in SOURCES}
@@ -622,6 +697,33 @@ def build_parser() -> argparse.ArgumentParser:
     portfolio.add_argument("--top", type=int, default=15, help="tickers to show, largest P&L first (0: all)")
     portfolio.add_argument("--export", help="save every engine's trades to .csv or .json")
     portfolio.set_defaults(handler=cmd_portfolio_backtest)
+
+    rotation = commands.add_parser(
+        "rotation-backtest", help="hold the strongest tickers of a watchlist, rebalanced weekly or monthly"
+    )
+    _add_universe_args(rotation)
+    _add_data_args(rotation)
+    rotation.add_argument(
+        "--rank", choices=[rule.name for rule in ranking_rules(priority_rules)], help=f"how the tickers are ranked (default {DEFAULT_RANKING})"
+    )
+    rotation.add_argument("--holdings", type=int, help="tickers picked at each rebalance (default 5)")
+    rotation.add_argument("--rebalance", choices=[item.value for item in Rebalance], default=Rebalance.MONTHLY.value)
+    rotation.add_argument(
+        "--weighting", choices=weight_rules.names(), help=f"how the picks share the equity (default {DEFAULT_WEIGHTING})"
+    )
+    rotation.add_argument(
+        "--absolute-lookback", type=int, help="a pick at or below 0 over this many bars goes to the safe asset (0: off, default 252)"
+    )
+    rotation.add_argument("--safe-asset", help="ticker for the slots of picks that fail the check, e.g. TLT (default: cash)")
+    rotation.add_argument("--benchmark", help="buy & hold benchmark (default: the watchlist's, else scan.benchmark)")
+    rotation.add_argument("--equity", type=float, help="account size")
+    rotation.add_argument("--lot-size", type=float, help="size step, e.g. 0.0001 for crypto")
+    rotation.add_argument("--commission-pct", type=float)
+    rotation.add_argument("--slippage-pct", type=float)
+    rotation.add_argument("--oos", type=float, help="out-of-sample share of the run in %% (10-50, default 30)")
+    rotation.add_argument("--top", type=int, default=15, help="tickers to show, largest P&L first (0: all)")
+    rotation.add_argument("--export", help="save the trades to .csv or .json")
+    rotation.set_defaults(handler=cmd_rotation_backtest)
 
     universes = commands.add_parser("update-universes", help="refresh the S&P 500 and Nasdaq-100 watchlists from Wikipedia")
     universes.add_argument("--only", help=f"comma separated: {', '.join(source.name for source in SOURCES)}")

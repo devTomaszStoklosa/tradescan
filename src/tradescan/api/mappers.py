@@ -17,6 +17,8 @@ from tradescan.backtest.oos import Split
 from tradescan.backtest.pooled import PooledTrades, Spread
 from tradescan.backtest.portfolio_metrics import PortfolioMetrics, TickerContribution
 from tradescan.backtest.priority import PriorityRule
+from tradescan.backtest.rotation import Targets
+from tradescan.backtest.rotation_metrics import RotationMetrics
 from tradescan.backtest.rules import Rule
 from tradescan.backtest.tickers import PeriodRun
 from tradescan.backtest.trade_rules import TradeRules
@@ -32,6 +34,7 @@ from tradescan.services import (
     EdgeReport,
     MarketReport,
     PortfolioReport,
+    RotationReport,
     ScanReport,
     SweepReport,
     WatchlistBacktestReport,
@@ -508,6 +511,76 @@ def portfolio_out(report: PortfolioReport) -> schemas.PortfolioOut:
             )
             for run in report.runs
         ],
+        missing=report.missing,
+    )
+
+
+def rotation_period_out(period: RotationMetrics) -> schemas.RotationPeriodOut:
+    stats = period.stats
+    return schemas.RotationPeriodOut(
+        metrics=metrics_out(period.metrics),
+        stats=schemas.RotationStatsOut(
+            rebalances=stats.rebalances,
+            orders=stats.orders,
+            unfilled_orders=stats.unfilled_orders,
+            average_holdings=finite(stats.average_holdings),
+            max_holdings=stats.max_holdings,
+            average_exposure_pct=finite(stats.average_exposure_pct),
+            average_safe_pct=finite(stats.average_safe_pct),
+            average_cash_pct=finite(stats.average_cash_pct),
+            turnover_pct=finite(stats.turnover_pct),
+            commissions=stats.commissions,
+        ),
+    )
+
+
+def targets_out(targets: Targets) -> schemas.TargetsOut:
+    return schemas.TargetsOut(
+        date=day(targets.date),
+        picks=[
+            schemas.PickOut(
+                ticker=pick.ticker,
+                score=finite(pick.score),
+                momentum_pct=finite(pick.momentum * 100.0),
+                weight_pct=pick.weight_pct,
+                held=pick.held,
+            )
+            for pick in targets.picks
+        ],
+        safe_pct=targets.safe_pct,
+        cash_pct=targets.cash_pct,
+    )
+
+
+def rotation_out(report: RotationReport) -> schemas.RotationOut:
+    result, config, rotation = report.result, report.config, report.rotation
+    close = report.benchmark_close.dropna()
+    buy_hold = close / close.iloc[0] * config.initial_equity if len(close) else close
+    return schemas.RotationOut(
+        universe=report.universe.name,
+        engine=result.engine,
+        start=day(result.equity.index[0]),
+        end=day(result.equity.index[-1]),
+        config=schemas.BacktestConfigOut(**{item.name: getattr(config, item.name) for item in fields(config)}),
+        rotation=schemas.RotationConfigOut(
+            holdings=rotation.holdings,
+            absolute_lookback=rotation.absolute_lookback,
+            rebalance=rotation.rebalance,
+            safe_asset=rotation.safe_asset,
+        ),
+        ranking=applied_rule_out(report.ranking),
+        weighting=applied_rule_out(report.weighting),
+        buy_hold_benchmark=report.benchmark,
+        buy_hold=points(buy_hold),
+        split=split_out(report.split) if report.split else None,
+        full=rotation_period_out(report.full),
+        in_sample=rotation_period_out(report.in_sample) if report.in_sample else None,
+        out_of_sample=rotation_period_out(report.out_of_sample) if report.out_of_sample else None,
+        equity=points(result.equity),
+        holdings=points(result.holdings.astype(float)),
+        targets=targets_out(result.targets),
+        trades=[schemas.PortfolioTradeOut(ticker=item.ticker, **trade_out(item.trade).model_dump()) for item in result.trades],
+        tickers=[contribution_out(row) for row in report.contributions],
         missing=report.missing,
     )
 

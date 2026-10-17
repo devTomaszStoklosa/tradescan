@@ -74,3 +74,8 @@ seed = 0                 # the same seed repeats the same simulations
 max_positions = 10       # open positions plus entry orders waiting to fill, in a portfolio backtest
 max_exposure_pct = 100.0 # gross value of positions and waiting orders as % of equity; above 100 is leverage
 # The priority rule (which signals go first when more fire than there is room for) is chosen per backtest.
+
+[rotation]
+holdings = 5             # tickers a momentum rotation holds after each rebalance
+absolute_lookback = 252  # a pick whose return over this many bars is at or below 0 goes to the safe asset or cash; 0: off
+# The ranking and weighting rules, the rebalance frequency and the safe asset are chosen per run.
