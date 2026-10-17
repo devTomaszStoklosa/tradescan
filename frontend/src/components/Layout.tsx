@@ -10,6 +10,7 @@ const LINKS = [
   { to: "/sweep", label: "Sweep", end: false },
   { to: "/watchlist", label: "Watchlist", end: false },
   { to: "/portfolio", label: "Portfolio", end: false },
+  { to: "/rotation", label: "Rotation", end: false },
   { to: "/edge", label: "Edge", end: false },
   { to: "/compare", label: "Compare", end: false },
   { to: "/signals", label: "Signals", end: false },

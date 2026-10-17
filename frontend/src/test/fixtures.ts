@@ -12,6 +12,8 @@ import type {
   PortfolioRunOut,
   PortfolioStatsOut,
   PriorityRuleOut,
+  RotationOut,
+  RotationStatsOut,
   RuleOut,
   ScanOut,
   SignalOut,
@@ -141,6 +143,18 @@ export const priorityRules: PriorityRuleOut[] = [
   },
 ];
 
+/** What /api/config lists as weighting rules of a rotation. */
+export const weightRules: RuleOut[] = [
+  { name: "equal", label: "Equal", description: "Every pick gets one slot", template: "Every pick gets one slot", params: [] },
+  {
+    name: "inverse_volatility",
+    label: "Inverse volatility",
+    description: "Picks weighted by 1 / the volatility of their daily returns over 63 bars",
+    template: "Picks weighted by 1 / the volatility of their daily returns over {lookback} bars",
+    params: [spec("lookback", "Volatility lookback", 63, [2, 1000, 1], "int", { unit: "bars" })],
+  },
+];
+
 /** A rule as a backtest result reports it. */
 export function appliedRule(rule: RuleOut, params: Record<string, number> = {}): AppliedRuleOut {
   const values = { ...Object.fromEntries(rule.params.map((item) => [item.name, item.default as number])), ...params };
@@ -222,6 +236,14 @@ export const config: ConfigOut = {
         spec("max_exposure_pct", "Max exposure", 100, [1, 300, 5], "float", { unit: "% of equity" }),
       ],
     },
+    {
+      name: "rotation",
+      label: "Rotation",
+      params: [
+        spec("holdings", "Holdings", 5, [1, 50, 1], "int"),
+        spec("absolute_lookback", "Absolute momentum", 252, [0, 1000, 1], "int", { unit: "bars" }),
+      ],
+    },
   ],
   families: ["trend", "momentum", "breakout", "mean_reversion", "volume", "pattern"],
   engines: ["vectorized", "cerebro"],
@@ -232,6 +254,11 @@ export const config: ConfigOut = {
   default_exits: ["target", "time"],
   priority_rules: priorityRules,
   default_priority: "relative_strength",
+  ranking_rules: priorityRules.filter((rule) => !rule.needs_scan).map(({ needs_scan: _needsScan, ...rule }) => rule),
+  default_ranking: "momentum",
+  weight_rules: weightRules,
+  default_weighting: "equal",
+  rebalances: ["weekly", "monthly"],
   sweep: {
     max_axes: 2,
     min_values: 2,
@@ -665,3 +692,70 @@ export function makePortfolioPin(slot: number, overrides: Partial<PortfolioSnaps
   const snapshot = snapshotPortfolioRun(portfolioResult, "vectorized", portfolioForm)!;
   return { ...toPinnedRun({ ...snapshot, ...overrides }, new Date("2026-10-14T09:00:00Z")), id: `portfolio-${slot}`, slot, ...extra };
 }
+
+const rotationStats = (overrides: Partial<RotationStatsOut> = {}): RotationStatsOut => ({
+  rebalances: 108,
+  orders: 418,
+  unfilled_orders: 0,
+  average_holdings: 3,
+  max_holdings: 3,
+  average_exposure_pct: 92.5,
+  average_safe_pct: 6.1,
+  average_cash_pct: 7.5,
+  turnover_pct: 415,
+  commissions: 11035,
+  ...overrides,
+});
+
+/** The top 3 ETFs by 12-1 momentum, monthly, inverse-volatility weights, TLT for falling picks; VNQ had no data. */
+export const rotationResult: RotationOut = {
+  universe: "etf",
+  engine: "vectorized",
+  start: "2017-10-31",
+  end: "2026-10-16",
+  config: backtestResult.config,
+  rotation: { holdings: 3, absolute_lookback: 252, rebalance: "monthly", safe_asset: "TLT" },
+  ranking: appliedRule(priorityRules[1]!),
+  weighting: appliedRule(weightRules[1]!),
+  buy_hold_benchmark: "SPY",
+  buy_hold: [
+    { time: "2017-10-31", value: 100000 },
+    { time: "2026-10-16", value: 340000 },
+  ],
+  split: { oos_pct: 30, in_sample_start: "2017-10-31", in_sample_end: "2024-02-06", out_of_sample_start: "2024-02-07", out_of_sample_end: "2026-10-16" },
+  full: { metrics: makeMetrics({ total_return_pct: 163.6, trades: 94, expectancy_r: null, sqn: null, buy_hold_pct: 240.7 }), stats: rotationStats() },
+  in_sample: { metrics: makeMetrics({ sharpe: 0.43, trades: 64, expectancy_r: null, sqn: null }), stats: rotationStats({ rebalances: 76 }) },
+  out_of_sample: { metrics: makeMetrics({ sharpe: 1.09, trades: 29, expectancy_r: null, sqn: null }), stats: rotationStats({ rebalances: 32 }) },
+  equity: [
+    { time: "2017-10-31", value: 100000 },
+    { time: "2026-10-16", value: 263600 },
+  ],
+  holdings: [
+    { time: "2017-10-31", value: 0 },
+    { time: "2026-10-16", value: 3 },
+  ],
+  targets: {
+    date: "2026-10-16",
+    picks: [
+      { ticker: "XLE", score: 0.53, momentum_pct: 62.6, weight_pct: 35.9, held: true },
+      { ticker: "EEM", score: 0.27, momentum_pct: -4.2, weight_pct: 34.2, held: false },
+    ],
+    safe_pct: 34.2,
+    cash_pct: 29.9,
+  },
+  trades: [
+    {
+      ticker: "GLD", direction: "long", signal_date: "2024-02-29", entry_date: "2024-03-01", exit_date: "2024-11-01",
+      entry_price: 190.5, exit_price: 250.2, size: 160, pnl: 9400, r_multiple: null, exit_reason: "rebalance",
+    },
+    {
+      ticker: "XLE", direction: "long", signal_date: "2026-08-31", entry_date: "2026-09-01", exit_date: "2026-10-16",
+      entry_price: 88.1, exit_price: 95.4, size: 400, pnl: 2900, r_multiple: null, exit_reason: "open",
+    },
+  ],
+  tickers: [
+    { ticker: "GLD", trades: 5, pnl: 56052, contribution_pct: 56.05, win_rate_pct: 80, expectancy_r: null },
+    { ticker: "TLT", trades: 6, pnl: 3722, contribution_pct: 3.72, win_rate_pct: 66.7, expectancy_r: null },
+  ],
+  missing: ["VNQ"],
+};
