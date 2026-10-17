@@ -201,6 +201,12 @@ class FilterRuleOut(RuleOut):
     needs_benchmark: bool = Field(description="True when the filter compares the benchmark, which a backtest then loads")
 
 
+class PriorityRuleOut(RuleOut):
+    needs_scan: bool = Field(
+        description="True when the rule reads the scanner's settings (scoring, trend, scan.fresh_bars), which a run can override"
+    )
+
+
 class WatchlistOut(BaseModel):
     name: str
     tickers: list[str]
@@ -230,7 +236,7 @@ class ConfigOut(BaseModel):
     filter_rules: list[FilterRuleOut] = Field(description="Entry filters; a backtest uses none unless it names them")
     default_entry: str
     default_exits: list[str]
-    priority_rules: list[RuleOut] = Field(description="Priority rules of a portfolio backtest")
+    priority_rules: list[PriorityRuleOut] = Field(description="Priority rules of a portfolio backtest")
     default_priority: str
     sweep: SweepLimitsOut
 

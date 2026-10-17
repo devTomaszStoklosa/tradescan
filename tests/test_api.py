@@ -48,7 +48,10 @@ def test_meta_endpoints(client):
     assert [param["name"] for param in limit["params"]] == ["offset_atr", "valid_bars"]
     assert limit["description"].startswith("Buy-limit 0.5 ATR") and "{offset_atr:g}" in limit["template"]
     assert "target_r" not in str(config["sections"])
-    assert [rule["name"] for rule in config["priority_rules"]] == ["relative_strength", "momentum"]
+    assert [(rule["name"], rule["needs_scan"]) for rule in config["priority_rules"]] == [
+        ("relative_strength", False), ("momentum", False), ("score", True),
+    ]  # fmt: skip
+    assert config["priority_rules"][2]["params"] == []
     assert config["default_priority"] == "relative_strength"
     momentum = config["priority_rules"][1]
     assert [param["name"] for param in momentum["params"]] == ["lookback", "skip"]
@@ -408,6 +411,33 @@ def test_portfolio_backtest(client):
     assert status(watchlist="demo", priority={"name": "nope"}) == 400
     assert status(watchlist="demo", priority={"name": "momentum", "params": {"skip": 300}}) == 400
     assert status(watchlist="demo", settings={"portfolio": {"max_positions": 0}}) == 400
+
+
+def test_portfolio_backtest_with_the_score_priority(client):
+    def run(settings):
+        body = {"watchlist": "demo", "signal": "connors_rsi2_long", "priority": {"name": "score"}, "settings": settings}
+        return client.post("/api/portfolio-backtest", json={**body, "engines": ["vectorized", "cerebro"]})
+
+    limits = {"portfolio": {"max_positions": 1}}
+    response = run(limits)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["priority"] == {
+        "name": "score",
+        "label": "Scan score",
+        "description": "The scanner's confluence score: fresh signals, daily and weekly trend, relative-strength rank",
+        "params": {},
+    }
+    def keys(run):
+        return [(trade["ticker"], trade["entry_date"], trade["exit_date"], trade["size"]) for trade in run["trades"]]
+
+    vectorized, cerebro = data["runs"]
+    assert keys(vectorized) == keys(cerebro) and vectorized["full"]["stats"]["skipped_no_slot"] > 0
+
+    scoring = {"scoring": {"rs_bonus": 3, "family_weights": {"breakout": 0}}, "scan": {"fresh_bars": 1}, "trend": {"fast_period": 20}}
+    assert run({**limits, **scoring}).status_code == 200
+    assert run({"scoring": {"rs_strong_pct": 10}}).status_code == 400
+    assert run({"scoring": {"signal_weights": {"nope": 1}}}).status_code == 400
 
 
 def test_sweep_limits_and_errors(client):
