@@ -35,7 +35,7 @@ from tradescan.backtest.portfolio import (
     shared_calendar,
 )
 from tradescan.backtest.portfolio_metrics import PortfolioMetrics, TickerContribution, contributions, portfolio_metrics
-from tradescan.backtest.priority import DEFAULT_PRIORITY, PriorityRule, priority_rules
+from tradescan.backtest.priority import DEFAULT_PRIORITY, PriorityRule, ScanScore, priority_rules
 from tradescan.backtest.rules import Rule, RuleRegistry
 from tradescan.backtest.sweep import SweepAxis, SweepCase, SweepJob, SweepTarget, check_axes, grid
 from tradescan.backtest.tickers import Period, PeriodRun, TickerJob, TickerRun
@@ -881,6 +881,8 @@ class PortfolioUseCase:
             raise ValueError(f"No data for any ticker of {universe.name}")
         if benchmark not in loaded.frames:
             raise ValueError(f"No data for the benchmark {benchmark}, which buy & hold compares")
+        if priority.needs_scan:
+            priority = priority.with_scan(_scan_score(frames, base, self._registry))
         calendar = shared_calendar(frames.values())
         benchmark_close = loaded.frames[benchmark]["close"].astype(float).reindex(calendar, method="ffill")
         split = split_history(calendar, base.config.oos_pct)
@@ -901,6 +903,16 @@ class PortfolioUseCase:
             runs=runs,
             missing=[ticker for ticker in loaded.missing if ticker in tickers],
         )
+
+
+def _scan_score(frames: Mapping[str, pd.DataFrame], base: ResolvedBacktest, registry: SignalRegistry) -> ScanScore:
+    """What the score priority reads: the run's scoring, trend and fresh-bars settings and every signal of the
+    traded direction, the traded one with the run's parameters. Built once, for every engine and both periods."""
+    settings, traded = base.settings, base.signal
+    signals = [traded if signal.name == traded.name else signal for signal in registry.select(directions={traded.direction})]
+    return ScanScore.build(
+        frames, signals, traded.direction, build_scorer(settings), build_context_builder(settings), settings.scan.fresh_bars
+    )
 
 
 def _portfolio_run(

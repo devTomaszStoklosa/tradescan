@@ -6,6 +6,8 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
+import numpy as np
+
 from tradescan.context import TickerContext, Trend
 from tradescan.signals.base import Direction, Signal
 
@@ -70,3 +72,24 @@ class Scorer:
         if direction is Direction.LONG:
             return self._rs_bonus if percentile >= self._rs_strong_pct else 0.0
         return self._rs_bonus if percentile <= 100.0 - self._rs_strong_pct else 0.0
+
+    def bar_scores(
+        self,
+        direction: Direction,
+        signal_points: np.ndarray,
+        daily_trend: np.ndarray,
+        weekly_trend: np.ndarray,
+        rs_percentile: np.ndarray,
+    ) -> np.ndarray:
+        """The total score at every bar, from each bar's signal points (the weights of the fresh signals), its
+        trends as 1 (up), -1 (down) or 0 (neutral) and its RS percentile (NaN for none)."""
+        if direction is Direction.LONG:
+            strong = rs_percentile >= self._rs_strong_pct  # NaN compares false
+        else:
+            strong = rs_percentile <= 100.0 - self._rs_strong_pct
+        return (
+            signal_points
+            + self._trend_bonus * direction.sign * daily_trend
+            + self._weekly_bonus * direction.sign * weekly_trend
+            + np.where(strong, self._rs_bonus, 0.0)
+        )
