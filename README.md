@@ -53,18 +53,19 @@ the built UI. The screens:
 - **Backtest**: one signal on one ticker with either or both engines; pick the entry filters a signal
   has to pass (trend, market, ADX, volume, ATR% band, with a benchmark for the market filter), the entry
   (next open, stop or limit order) and the exits (target, time exit, trailing, channel and breakeven stops,
-  RSI, SMA and Supertrend exits, failed breakout and no-progress exits) on top of the ATR stop; the
-  signal's and the rules' parameters are editable; key metrics, equity vs. buy & hold, in-sample vs.
-  out-of-sample metrics, a Monte Carlo of the trades, trades on the chart and in a sortable table.
+  RSI, SMA and Supertrend exits, failed breakout and no-progress exits) on top of the ATR stop, and
+  pyramiding (more units as the trade moves in its favour); the signal's and the rules' parameters are
+  editable; key metrics, equity vs. buy & hold, in-sample vs. out-of-sample metrics, a Monte Carlo of the
+  trades, trades on the chart (with every add) and in a sortable table.
 - **Sweep**: the same setup as Backtest over a range of one or two of its parameters (signal, filters,
-  entry, exits, stop or costs), as two heatmaps of a metric you pick: in-sample and out-of-sample. Click a
+  entry, exits, stop, pyramiding or costs), as two heatmaps of a metric you pick: in-sample and out-of-sample. Click a
   cell for its metrics, the average of its neighbours, and a link that opens it on the Backtest page.
 - **Watchlist**: the same setup as Backtest on every ticker of a watchlist (or your own tickers): the
   spread of a metric you pick across the tickers (worst, quartiles, median, best and the share above
   break-even) in-sample and out-of-sample, every ticker's trades pooled in R, and a sortable table of
   each ticker's metrics, where a ticker opens its own backtest.
-- **Portfolio**: the same setup as Watchlist with one shared equity, on either or both engines: the max
-  positions, the max exposure and the priority rule with its parameters are editable (the scan score
+- **Portfolio**: the same setup as Watchlist, without pyramiding, with one shared equity, on either or
+  both engines: the max positions, the max exposure and the priority rule with its parameters are editable (the scan score
   priority also offers the scanner's scoring, trend and fresh-signal settings and each signal's
   parameters and score weight, the traded signal's parameters coming from the setup); key metrics against
   the benchmark's buy & hold, skipped signals, equity and open positions over time, metrics and portfolio
@@ -129,6 +130,7 @@ tradescan edge -w etf --family breakout,trend --min-events 30
 tradescan backtest SPY donchian_breakout --engine both
 tradescan backtest SPY connors_rsi2_long --entry limit --exits time --max-hold 5
 tradescan backtest QQQ donchian_breakout --exits trailing,breakeven
+tradescan backtest QQQ donchian_breakout --exits trailing --max-units 4 --add-every-atr 0.5 --engine both
 tradescan backtest SPY connors_rsi2_long --exits rsi,time --engine both
 tradescan backtest QQQ donchian_breakout --entry stop --exits failed_breakout,no_progress,trailing
 tradescan backtest AAPL donchian_breakout --filters trend,market,volume --benchmark QQQ
@@ -146,10 +148,10 @@ tradescan update-universes
 | `scan` | Signals that fired within the last `--fresh` bars, scored and ranked, with stop/target/size and the edge of the most recent signal on that ticker. |
 | `market` | Regime label (risk-on / neutral / risk-off) from the benchmark trend and watchlist breadth. |
 | `edge` | For each signal, pooled across the watchlist: events, win rate, average and edge vs. baseline at several horizons. |
-| `backtest` | One signal on one ticker with the pandas engine, Cerebro, or `both` side by side, plus its in-sample and out-of-sample metrics. `--filters` picks the entry filters (none by default) and `--benchmark` the benchmark the market filter compares, `--entry` the entry rule, `--exits` the exit rules (`none` keeps only the stop), `--oos` the out-of-sample share. |
+| `backtest` | One signal on one ticker with the pandas engine, Cerebro, or `both` side by side, plus its in-sample and out-of-sample metrics. `--filters` picks the entry filters (none by default) and `--benchmark` the benchmark the market filter compares, `--entry` the entry rule, `--exits` the exit rules (`none` keeps only the stop), `--max-units` and `--add-every-atr` the pyramiding, `--oos` the out-of-sample share. |
 | `sweep` | The `backtest` setup over one or two `--axis` parameters (`target[.owner].name=FROM:TO:STEP` or `=V1,V2,...`), as in-sample and out-of-sample grids of `--metric`; `--export` saves every combination. |
 | `watchlist-backtest` | The `backtest` setup (without the ticker) on every ticker of `-w`/`-t` with the vectorized engine: the best `--top` tickers by `--metric` with their in-sample and out-of-sample values, the spread of `--metric` across tickers and all trades pooled; `--export` saves every ticker with every period's metrics. |
-| `portfolio-backtest` | The `backtest` setup (without the ticker) on every ticker of `-w`/`-t` with one shared equity: `--max-positions` and `--max-exposure` (% of equity) cap it, `--priority` ranks the signals when more fire than fit (`score` reads `[scoring]`, `[trend]` and `[scan] fresh_bars` from the settings file), `--engine` picks the engine (or `both`). Prints every engine's metrics and portfolio stats for the full history and both periods and the `--top` tickers by P&L; `--export` saves every engine's trades. |
+| `portfolio-backtest` | The `backtest` setup (without the ticker and without pyramiding) on every ticker of `-w`/`-t` with one shared equity: `--max-positions` and `--max-exposure` (% of equity) cap it, `--priority` ranks the signals when more fire than fit (`score` reads `[scoring]`, `[trend]` and `[scan] fresh_bars` from the settings file), `--engine` picks the engine (or `both`). Prints every engine's metrics and portfolio stats for the full history and both periods and the `--top` tickers by P&L; `--export` saves every engine's trades. |
 | `rotation-backtest` | A momentum rotation over every ticker of `-w`/`-t`: `--rank` ranks them (default `momentum`), `--holdings` picks the top N, `--rebalance` is `weekly` or `monthly` (default), `--weighting` is `equal` (default) or `inverse_volatility`, `--absolute-lookback` sets the absolute momentum check (0 turns it off) and `--safe-asset` takes the slots of the picks that fail it (default cash). Prints the metrics and rotation stats for the full run and both periods, what a rebalance at the last close would pick and the `--top` tickers by P&L; `--export` saves the trades. |
 | `list-signals` | All signals with family, direction, scoring weight and rule. |
 | `update-universes` | Refresh the `sp500` and `nasdaq100` watchlists from Wikipedia's constituent tables (`--only sp500`). |
@@ -257,6 +259,29 @@ the same way:
 - commission and slippage are percentages; slippage never moves a fill outside the bar's range, and a
   limit order never fills worse than its level.
 
+**Pyramiding.** With `pyramid.max_units` above 1 (default 1: off), a position that moves in the trade's
+favour adds units, Turtle style:
+
+- once the first unit has filled, a stop order for one more unit waits at every close
+  `pyramid.add_every_atr` ATRs (default 0.5) beyond the previous unit's fill, until the position holds
+  `max_units` units. The ATR is the signal bar's, the one that sized the first unit, so the units stay
+  evenly spaced; a gap through the level fills at the open, and the next add counts from that fill;
+- every add is the size of the first unit, so `max_position_pct` caps each unit, not the position;
+- after an add fills, the stop of the whole position moves to `atr_mult` ATRs from that fill. Together
+  with the initial stop and the exit rules, the tightest stop applies;
+- the exit rules close the whole position and measure from the first unit: the target from its
+  reference, the breakeven stop and the no-progress exit from its fill, the time exit from its entry bar.
+  On a bar where the position exits, no unit is added;
+- a trade is the whole position: its entry date is the first fill, its entry price the average fill of
+  its units, its size and P&L all units', and its R multiple the P&L in units of one unit's risk at the
+  initial stop, so 1R is the same loss with and without pyramiding. Each trade lists its adds (date and
+  price); the trades table shows the units and the chart marks every add.
+
+Both engines pyramid the same way. Neither refuses a fill for lack of cash (Cerebro's broker is set up as
+in the portfolio backtest), so several units can be worth more than the equity. Sweeps and watchlist
+backtests pyramid too; the portfolio backtest and the rotation do not, and a portfolio backtest with
+`max_units` above 1 is refused.
+
 Metrics: total return, CAGR, Sharpe, Sortino, max drawdown, win rate, profit factor, expectancy in R,
 SQN, exposure, buy & hold.
 
@@ -291,7 +316,7 @@ Carlo. The API reports it as `monte_carlo` on every run of `/api/backtest`.
 **Sweeps.** A sweep runs one setup for every combination of one or two parameters' values (at most 200
 combinations, 2–50 values per parameter), each on both periods, with the pandas engine on all CPU cores.
 Any single-number parameter of the signal, the setup's entry filters, the entry rule, the setup's exit
-rules or the `account`, `risk` and `backtest` settings can be swept; the out-of-sample share cannot,
+rules or the `account`, `risk`, `backtest` and `pyramid` settings can be swept; the out-of-sample share cannot,
 since it defines the split. A combination that breaks a rule between parameters (for example a fast
 average that is not shorter than the slow one) is shown as failed and the others still run. On 10 years
 of daily bars a sweep of 200 combinations takes a few seconds.
@@ -312,8 +337,8 @@ A setting that works on one or two tickers and not on the rest is fitted to them
 10 years of daily bars a watchlist backtest takes a few seconds once the data is cached.
 
 **Portfolio backtests.** One setup runs on every ticker of a watchlist with one shared equity, on the
-pandas engine, Cerebro or both, which produce the same trades. Every ticker trades by the rules above on
-its own bars; the portfolio decides at each close of the shared calendar (every date on which a ticker has
+pandas engine, Cerebro or both, which produce the same trades. Every ticker trades by the rules above,
+without pyramiding, on its own bars; the portfolio decides at each close of the shared calendar (every date on which a ticker has
 a bar):
 
 - a ticker whose entry order waits or whose position is open ignores its signals, as in a single backtest;
@@ -398,7 +423,7 @@ pandas engine runs rotations: 20 ETFs over 10 years take about a second once the
 
 `config/settings.toml` holds account size, risk per trade, ATR stop multiple, targets, freshness,
 benchmark, scoring weights, trend and relative-strength lookbacks, market regime thresholds,
-backtest costs, the Monte Carlo of a backtest's trades, a portfolio's limits and a rotation's holdings and
+backtest costs, pyramiding, the Monte Carlo of a backtest's trades, a portfolio's limits and a rotation's holdings and
 absolute momentum. Every key is optional; unknown keys and values outside a parameter's range are rejected.
 Data is cached as Parquet in `.cache/` for `cache_ttl_hours`; use `--no-cache` to force a download.
 
@@ -407,7 +432,7 @@ Data is cached as Parquet in `.cache/` for `cache_ttl_hours`; use `--no-cache` t
 Every number that changes a result is a declared parameter with a default, an allowed range and a label:
 the settings of all 38 signals (periods, thresholds, multipliers), of the backtest's entry filters,
 entry rules and exit rules, and the settings sections `account`, `risk`, `scan`, `scoring`, `trend`,
-`regime`, `backtest`, `monte_carlo`, `portfolio` and `rotation`. `settings.toml` holds the defaults of the settings sections, the code those of
+`regime`, `backtest`, `pyramid`, `monte_carlo`, `portfolio` and `rotation`. `settings.toml` holds the defaults of the settings sections, the code those of
 signals and rules; a single run can override any of them without touching the file:
 
 - in the web UI, where changed values are highlighted, kept in the URL and checked against their range;
@@ -426,7 +451,7 @@ signals and rules; a single run can override any of them without touching the fi
   `"params"`, `"rebalance": "weekly"`, `"safe_asset": "TLT"` and `"settings": {"rotation": {"holdings": 3}}`;
   `/api/config` lists the settings, the rules and the sweep limits, `/api/signals` the signals, each
   parameter with its range;
-- on the CLI, through the existing flags (`--atr-mult`, `--fresh`, `--equity`, `--target-r`, `--oos`, ...).
+- on the CLI, through the existing flags (`--atr-mult`, `--fresh`, `--equity`, `--target-r`, `--max-units`, `--oos`, ...).
 
 Values outside the range, unknown names and anything that is not a parameter (paths, cache settings)
 are refused. Signal descriptions are filled in from the values in use, so "RSI(3) < 15" always
