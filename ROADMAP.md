@@ -37,7 +37,7 @@ URL, pinned runs, Compare and the sweep pick them up.
 | O2 | One setup over a watchlist | done ([#26], [PR #27]) | | |
 | O3 | Monte Carlo of trades | done ([#28], [PR #29]) | | |
 | F3 | Portfolio backtest | done ([#30], [PR #31]) | | |
-| R1 | Momentum rotation | planned | L | F3 |
+| R1 | Momentum rotation | done ([#41]) | | F3 |
 | T2 | Pyramiding | planned | M | F1 |
 | O4 | Walk-forward analysis | planned | M/L | O1 |
 | O6 | Trade journal and server-side run storage | planned | M | C1 |
@@ -50,10 +50,6 @@ are weak. M1 is small. O2 and O3 show whether a result is robust before the larg
 which rotation (R1) needs. Pyramiding (T2), walk-forward analysis (O4) and the trade journal (O6) follow.
 
 ## Open items
-
-**R1 · Momentum rotation.** Rank a universe by momentum (12-1 month return or IBD-style relative
-strength), hold the top N, rebalance weekly or monthly, move to cash or a bond ETF when absolute momentum
-is negative, with equal or inverse-volatility weights. Builds on F3.
 
 **T2 · Pyramiding.** Turtle-style adds: another unit each time price moves a set number of ATRs in the
 trade's favour, up to a maximum, with the stops of all units moved together. Both engines.
@@ -89,3 +85,4 @@ server instead of only in the browser, with notes per trade and the backtest tha
 [PR #29]: https://github.com/devTomaszStoklosa/tradescan/pull/29
 [#30]: https://github.com/devTomaszStoklosa/tradescan/issues/30
 [PR #31]: https://github.com/devTomaszStoklosa/tradescan/pull/31
+[#41]: https://github.com/devTomaszStoklosa/tradescan/issues/41

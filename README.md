@@ -20,6 +20,8 @@ Trading signal scanner for daily bars: **vectorized pandas signals on yfinance d
 - one setup on every ticker of a watchlist: each ticker's metrics, all trades pooled, and how the results spread
 - one setup as a portfolio with one shared equity: a cap on open positions and on exposure, a priority when
   more signals fire than fit, and portfolio metrics, with Cerebro as a reference that produces the same trades
+- a momentum rotation: the strongest tickers of a watchlist, rebalanced weekly or monthly, with the slots of
+  falling picks in a safe asset or cash
 - a React web UI on top of a small FastAPI server (`tradescan serve`)
 
 > Not investment advice. This is a research tool; every number it prints is a historical statistic.
@@ -68,6 +70,12 @@ the built UI. The screens:
   the benchmark's buy & hold, skipped signals, equity and open positions over time, metrics and portfolio
   stats in-sample and out-of-sample, each ticker's contribution (a ticker opens its own backtest) and every
   trade with its ticker. **Pin run** keeps the shown engine's run for Compare.
+- **Rotation**: hold the strongest tickers of a watchlist, rebalanced weekly or monthly: the ranking and
+  weighting rules with their parameters, the holdings, the absolute momentum lookback, the safe asset,
+  the benchmark and the costs are editable; key metrics against the benchmark's buy & hold, the share held
+  defensively and the turnover, equity and holdings over time, what a rebalance at the last close would
+  pick, metrics and rotation stats in-sample and out-of-sample, each ticker's contribution and every
+  holding.
 - **Edge**: signal statistics across a watchlist at several horizons, coloured by edge.
 - **Compare**: backtest and portfolio runs pinned with **Pin run** on the Backtest and Portfolio pages,
   side by side: the parameters that differ (for a portfolio also its universe, max positions, max exposure
@@ -128,6 +136,7 @@ tradescan backtest SPY connors_rsi2_long --oos 20
 tradescan sweep SPY connors_rsi2_long --axis signal.oversold=4:16:2 --axis exit.target.target_r=1,2,3 --metric expectancy_r
 tradescan watchlist-backtest connors_rsi2_long -w etf --filters market --metric expectancy_r
 tradescan portfolio-backtest donchian_breakout -w sp500 --filters trend --max-positions 10 --priority momentum
+tradescan rotation-backtest -w etf --holdings 3 --weighting inverse_volatility --safe-asset TLT
 tradescan scan -w crypto --lot-size 0.0001
 tradescan update-universes
 ```
@@ -141,6 +150,7 @@ tradescan update-universes
 | `sweep` | The `backtest` setup over one or two `--axis` parameters (`target[.owner].name=FROM:TO:STEP` or `=V1,V2,...`), as in-sample and out-of-sample grids of `--metric`; `--export` saves every combination. |
 | `watchlist-backtest` | The `backtest` setup (without the ticker) on every ticker of `-w`/`-t` with the vectorized engine: the best `--top` tickers by `--metric` with their in-sample and out-of-sample values, the spread of `--metric` across tickers and all trades pooled; `--export` saves every ticker with every period's metrics. |
 | `portfolio-backtest` | The `backtest` setup (without the ticker) on every ticker of `-w`/`-t` with one shared equity: `--max-positions` and `--max-exposure` (% of equity) cap it, `--priority` ranks the signals when more fire than fit (`score` reads `[scoring]`, `[trend]` and `[scan] fresh_bars` from the settings file), `--engine` picks the engine (or `both`). Prints every engine's metrics and portfolio stats for the full history and both periods and the `--top` tickers by P&L; `--export` saves every engine's trades. |
+| `rotation-backtest` | A momentum rotation over every ticker of `-w`/`-t`: `--rank` ranks them (default `momentum`), `--holdings` picks the top N, `--rebalance` is `weekly` or `monthly` (default), `--weighting` is `equal` (default) or `inverse_volatility`, `--absolute-lookback` sets the absolute momentum check (0 turns it off) and `--safe-asset` takes the slots of the picks that fail it (default cash). Prints the metrics and rotation stats for the full run and both periods, what a rebalance at the last close would pick and the `--top` tickers by P&L; `--export` saves the trades. |
 | `list-signals` | All signals with family, direction, scoring weight and rule. |
 | `update-universes` | Refresh the `sp500` and `nasdaq100` watchlists from Wikipedia's constituent tables (`--only sp500`). |
 | `serve` | Web UI and HTTP API. |
@@ -348,11 +358,48 @@ a bar of its ticker after the one it was placed on. It is the reference and is s
 20 tickers of 10-year history. The pandas engine runs the S&P 500 over 10 years in under a minute once the
 data is cached.
 
+**Momentum rotation.** A rotation holds the strongest tickers of a watchlist with one shared equity,
+without signals or stops. At the close of the last day of every week or month of the shared calendar
+(`weekly` or `monthly`; the last week or month of the data may go on, so it never rebalances):
+
+- the ranking rule ranks every ticker that still trades, by its last bar on a day without one of its own.
+  The rankings are the priority rules that read bars only: `momentum` (default; 12-1 month momentum) and
+  `relative_strength` (IBD style), with the parameters in the priority table above;
+- the top `rotation.holdings` tickers are picked (default 5). With `rotation.absolute_lookback` above 0
+  (default 252 bars), a pick whose return over that many bars is at or below 0 hands its slot to the safe
+  asset, or to cash without one. The safe asset is held even when its own momentum is negative, and can
+  be one of the watchlist's tickers;
+- the weighting rule shares the equity among the picks: each pick averages one slot of
+  1 / `holdings`, so a full book is 100% of equity, and slots without a pick stay in cash;
+- target shares are a pick's share of the equity at the close divided by its close, rounded down to lots.
+  Only the difference to the shares held trades, with a market order for the next open at the backtest's
+  slippage and commission. Cash never limits a fill, so a gap can take the holdings slightly above 100%;
+  an order whose ticker has no bar before the next rebalance is dropped and counted.
+
+| Weighting | Share of the book |
+| --- | --- |
+| `equal` (default) | one slot per pick |
+| `inverse_volatility` | in proportion to 1 / the standard deviation of the pick's daily returns over `lookback` bars (default 63); a ticker whose closes did not move has none and cannot be picked |
+
+A trade is a holding: from the buy that opens a position to the sale that empties it at a rebalance, with
+every add, trim and commission in its P&L and the average prices of its buys and sales. Holdings have no
+stop and so no R multiple, which leaves expectancy and SQN empty; the win rate and profit factor count the
+holdings. The run starts at the close of the first rebalance at which a ticker can be picked, so the
+warm-up of the lookbacks does not count as time in cash, and buy & hold compares the benchmark over the
+same dates. Its dates are split in-sample and out-of-sample: the in-sample run gets the bars before the
+split, the out-of-sample run every bar, rebalancing from the split on with fresh equity and lookbacks that
+are already warm. The rotation also reports the average holdings, the shares of equity invested, in the
+safe asset and in cash, the yearly turnover (half the value traded, in % of the average equity), the
+commissions, and what a rebalance at the last close would pick. Cash earns nothing. A ticker whose bars
+end early keeps what it holds, marked to its last close, and the rebalances share out the rest. Only the
+pandas engine runs rotations: 20 ETFs over 10 years take about a second once the data is cached.
+
 ## Configuration
 
 `config/settings.toml` holds account size, risk per trade, ATR stop multiple, targets, freshness,
 benchmark, scoring weights, trend and relative-strength lookbacks, market regime thresholds,
-backtest costs, the Monte Carlo of a backtest's trades and a portfolio's limits. Every key is optional; unknown keys and values outside a parameter's range are rejected.
+backtest costs, the Monte Carlo of a backtest's trades, a portfolio's limits and a rotation's holdings and
+absolute momentum. Every key is optional; unknown keys and values outside a parameter's range are rejected.
 Data is cached as Parquet in `.cache/` for `cache_ttl_hours`; use `--no-cache` to force a download.
 
 ## Parameters
@@ -360,7 +407,7 @@ Data is cached as Parquet in `.cache/` for `cache_ttl_hours`; use `--no-cache` t
 Every number that changes a result is a declared parameter with a default, an allowed range and a label:
 the settings of all 38 signals (periods, thresholds, multipliers), of the backtest's entry filters,
 entry rules and exit rules, and the settings sections `account`, `risk`, `scan`, `scoring`, `trend`,
-`regime`, `backtest`, `monte_carlo` and `portfolio`. `settings.toml` holds the defaults of the settings sections, the code those of
+`regime`, `backtest`, `monte_carlo`, `portfolio` and `rotation`. `settings.toml` holds the defaults of the settings sections, the code those of
 signals and rules; a single run can override any of them without touching the file:
 
 - in the web UI, where changed values are highlighted, kept in the URL and checked against their range;
@@ -374,7 +421,9 @@ signals and rules; a single run can override any of them without touching the fi
   `"tickers": [...]` instead of the ticker, as does a portfolio backtest (`/api/portfolio-backtest`) with
   `"priority": {"name": "momentum", "params": {"skip": 0}}` and `"engines"`; the `score` priority takes
   `"settings": {"scoring": {...}, "trend": {...}, "scan": {"fresh_bars": 5}}` and the other signals'
-  parameters as `"score_signal_params": {"donchian_breakout": {"period": 55}}`);
+  parameters as `"score_signal_params": {"donchian_breakout": {"period": 55}}`); a rotation
+  (`/api/rotation-backtest`) takes the universe, `"ranking"` and `"weighting"` rules with their
+  `"params"`, `"rebalance": "weekly"`, `"safe_asset": "TLT"` and `"settings": {"rotation": {"holdings": 3}}`;
   `/api/config` lists the settings, the rules and the sweep limits, `/api/signals` the signals, each
   parameter with its range;
 - on the CLI, through the existing flags (`--atr-mult`, `--fresh`, `--equity`, `--target-r`, `--oos`, ...).
@@ -421,6 +470,10 @@ The code follows SOLID; each extension point is a new class, not an edit to exis
   Register it with `@entry_filters.register`, `@entry_rules.register` or `@exit_rules.register` and declare
   its numbers with `param(...)`. Both engines, the API, the CLI and the UI pick it up, and the engine-parity
   test runs it on both engines.
+- **New ranking or weighting rule:** a rotation ranks by any priority rule that does not read the scanner
+  (subclass `TickerPriorityRule` in `backtest/priority.py` and return each close's strength from
+  `strength`), and weights by any `WeightRule` (in `backtest/weighting.py`) that returns each close's raw
+  weight from `raw`. Register it with `@priority_rules.register` or `@weight_rules.register`.
 - **New data source:** implement the `DataProvider` protocol (`history(tickers, period, interval)`);
   `CachedProvider` wraps any provider.
 - **New backtest engine:** implement `BacktestEngine.run` and add it to `default_engines()` in
