@@ -400,17 +400,23 @@ class MetricsOut(BaseModel):
     buy_hold_pct: float | None
 
 
+class FillOut(BaseModel):
+    date: str
+    price: float
+
+
 class TradeOut(BaseModel):
     direction: Direction
     signal_date: str
-    entry_date: str
+    entry_date: str = Field(description="The first unit's fill")
     exit_date: str
-    entry_price: float
+    entry_price: float = Field(description="The average fill of the units")
     exit_price: float
-    size: float
+    size: float = Field(description="Of all units")
     pnl: float
-    r_multiple: float | None
+    r_multiple: float | None = Field(description="P&L as a multiple of one unit's risk at its initial stop")
     exit_reason: str
+    adds: list[FillOut] = Field(description="The units added after the first by pyramiding, in order")
 
 
 class PercentilesOut(BaseModel):
@@ -470,6 +476,8 @@ class BacktestConfigOut(BaseModel):
     slippage_pct: float
     bars_per_year: int
     oos_pct: float
+    max_units: int = Field(description="The first entry plus the adds; 1 is no pyramiding")
+    add_every_atr: float = Field(description="Distance between the units, in ATRs of the signal bar")
 
 
 class AppliedRuleOut(BaseModel):

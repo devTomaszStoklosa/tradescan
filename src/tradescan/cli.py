@@ -12,6 +12,7 @@ from pathlib import Path
 import pandas as pd
 from rich.console import Console
 
+from tradescan.backtest.base import BacktestConfig
 from tradescan.backtest.metrics import Metrics
 from tradescan.backtest.priority import DEFAULT_PRIORITY, priority_rules
 from tradescan.backtest.rotation import DEFAULT_RANKING, Rebalance, ranking_rules
@@ -131,6 +132,13 @@ def _exits(args: argparse.Namespace) -> tuple[RuleChoice, ...]:
     return tuple(RuleChoice(name, params.get(name, {})) for name in names)
 
 
+def _pyramiding(config: BacktestConfig) -> str:
+    """The pyramiding of a backtest for its caption; empty without it."""
+    if config.max_units <= 1:
+        return ""
+    return f", pyramiding up to {config.max_units} units {config.add_every_atr:g} ATR apart"
+
+
 def _backtest_request(args: argparse.Namespace, ticker: str, engines: tuple[str, ...]) -> BacktestRequest:
     """The setup flags shared by `backtest`, `sweep`, `watchlist-backtest` and `portfolio-backtest`."""
     return BacktestRequest(
@@ -142,6 +150,7 @@ def _backtest_request(args: argparse.Namespace, ticker: str, engines: tuple[str,
                 "account": _account(args),
                 "risk": {"atr_mult": args.atr_mult},
                 "backtest": {"commission_pct": args.commission_pct, "slippage_pct": args.slippage_pct, "oos_pct": args.oos},
+                "pyramid": {"max_units": args.max_units, "add_every_atr": args.add_every_atr},
             }
         ),
         entry=RuleChoice(args.entry) if args.entry else None,
@@ -287,7 +296,8 @@ def cmd_backtest(args: argparse.Namespace, settings: Settings, report: ConsoleRe
         metrics_to_frame(result.runs),
         title=f"{result.ticker} {signal.name} ({signal.direction.value}), "
         f"{result.close.index[0].date()} to {result.close.index[-1].date()}",
-        caption=f"filters: {filters}{benchmark}. Entry: {rules.entry.describe()}. Stop {config.atr_mult:g} ATR, exits: {exits}. "
+        caption=f"filters: {filters}{benchmark}. Entry: {rules.entry.describe()}. Stop {config.atr_mult:g} ATR"
+        f"{_pyramiding(config)}, exits: {exits}. "
         f"Risk {config.risk_pct:g}%/trade, costs {config.commission_pct:g}% + {config.slippage_pct:g}% slippage",
         show_index=True,
     )
@@ -353,7 +363,8 @@ def cmd_watchlist_backtest(args: argparse.Namespace, settings: Settings, report:
     benchmark = f" (benchmark {base.benchmark})" if base.benchmark else ""
     report.note(
         f"{signal.name} ({signal.direction.value}) on {len(result.rows)} tickers of {universe.name}, vectorized engine. "
-        f"Filters: {filters}{benchmark}. Entry: {rules.entry.describe()}. Stop {config.atr_mult:g} ATR, exits: {exits}. "
+        f"Filters: {filters}{benchmark}. Entry: {rules.entry.describe()}. Stop {config.atr_mult:g} ATR{_pyramiding(config)}, "
+        f"exits: {exits}. "
         f"Risk {config.risk_pct:g}%/trade, costs {config.commission_pct:g}% + {config.slippage_pct:g}% slippage"
     )
     rows = watchlist_rows_frame(result, metric)
@@ -602,6 +613,10 @@ def _add_backtest_setup_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--atr-mult", type=float, help="stop distance in ATRs")
     parser.add_argument("--target-r", type=float, help="target as a multiple of the risk (target exit)")
     parser.add_argument("--max-hold", type=int, help="time exit after N bars (time exit)")
+    parser.add_argument(
+        "--max-units", type=int, help="pyramiding: the first entry plus the adds (1 turns it off; not for portfolio-backtest)"
+    )
+    parser.add_argument("--add-every-atr", type=float, help="pyramiding: another unit every N ATRs in the trade's favour")
     parser.add_argument("--commission-pct", type=float)
     parser.add_argument("--slippage-pct", type=float)
     parser.add_argument("--oos", type=float, help="out-of-sample share of the history in %% (10-50, default 30)")

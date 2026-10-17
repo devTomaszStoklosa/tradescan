@@ -66,6 +66,17 @@ def test_backtest_entry_and_exit_options(provider, tmp_path):
     assert cli.main(["backtest", "AAA", "connors_rsi2_long", "--exits", "none"]) == 0
 
 
+def test_backtest_pyramiding_options(provider, tmp_path, capsys):
+    target = tmp_path / "trades.csv"
+    code = cli.main(["backtest", "AAA", "donchian_breakout", "--max-units", "3", "--add-every-atr", "1", "--export", str(target)])
+    assert code == 0
+    assert "pyramiding up to 3 units 1 ATR apart" in " ".join(capsys.readouterr().out.split())
+    trades = pd.read_csv(target)
+    assert trades["units"].max() > 1 and trades["units"].max() <= 3
+    assert cli.main(["portfolio-backtest", "donchian_breakout", "-t", "AAA,BBB", "--max-units", "2"]) == 2
+    assert "does not pyramid" in capsys.readouterr().out
+
+
 def test_backtest_filter_options(provider, capsys):
     assert cli.main(["backtest", "AAA", "connors_rsi2_long", "--filters", "trend,market", "--benchmark", "bbb"]) == 0
     output = capsys.readouterr().out

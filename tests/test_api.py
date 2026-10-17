@@ -27,9 +27,11 @@ def test_meta_endpoints(client):
     config = client.get("/api/config").json()
     sections = {section["name"]: {param["name"]: param for param in section["params"]} for section in config["sections"]}
     assert set(sections) == {
-        "account", "risk", "scan", "scoring", "trend", "regime", "backtest", "monte_carlo", "portfolio", "rotation",
+        "account", "risk", "scan", "scoring", "trend", "regime", "backtest", "pyramid", "monte_carlo", "portfolio",
+        "rotation",
     }  # fmt: skip
     assert [name for name in sections["rotation"]] == ["holdings", "absolute_lookback"]
+    assert [(name, spec["default"]) for name, spec in sections["pyramid"].items()] == [("max_units", 1), ("add_every_atr", 0.5)]
     assert [name for name in sections["monte_carlo"]] == ["simulations", "ruin_drawdown_pct", "seed"]
     assert [name for name in sections["portfolio"]] == ["max_positions", "max_exposure_pct"]
     assert sections["account"]["equity"]["default"] == 100_000
@@ -283,6 +285,27 @@ def test_backtest_with_entry_filters(client):
     assert all(cell["error"] is None for cell in sweep["cells"])
 
 
+def test_backtest_with_pyramiding(client):
+    body = {"ticker": "AAA", "signal": "donchian_breakout", "engines": ["vectorized", "cerebro"]}
+    default = client.post("/api/backtest", json=body).json()
+    assert (default["config"]["max_units"], default["config"]["add_every_atr"]) == (1, 0.5)
+    assert all(trade["adds"] == [] for run in default["runs"] for trade in run["trades"])
+
+    settings = {"pyramid": {"max_units": 3, "add_every_atr": 1}}
+    response = client.post("/api/backtest", json={**body, "settings": settings})
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert (data["config"]["max_units"], data["config"]["add_every_atr"]) == (3, 1.0)
+    vectorized, cerebro = (run["trades"] for run in data["runs"])
+    pyramided = [trade for trade in vectorized if trade["adds"]]
+    assert pyramided and all(len(trade["adds"]) <= 2 for trade in vectorized)
+    assert all(trade["adds"][0]["date"] > trade["entry_date"] for trade in pyramided)
+    assert [[fill["date"] for fill in trade["adds"]] for trade in vectorized] == [
+        [fill["date"] for fill in trade["adds"]] for trade in cerebro
+    ]
+    assert client.post("/api/backtest", json={**body, "settings": {"pyramid": {"max_units": 0}}}).status_code == 400
+
+
 def test_backtest_reports_the_split(client):
     body = {"ticker": "AAA", "signal": "connors_rsi2_long", "settings": {"backtest": {"oos_pct": 20}}}
     data = client.post("/api/backtest", json=body).json()
@@ -332,6 +355,12 @@ def test_sweep(client):
     single = client.post("/api/backtest", json=body).json()["runs"][0]
     assert data["cells"][4]["out_of_sample"] == single["out_of_sample"]
     assert data["cells"][4]["in_sample"] == single["in_sample"]
+
+    units = [{"target": "settings", "owner": "pyramid", "name": "max_units", "values": [1, 3]}]
+    pyramid = client.post("/api/sweep", json={"ticker": "AAA", "signal": "donchian_breakout", "axes": units}).json()
+    assert pyramid["axes"][0]["key"] == "settings.pyramid.max_units" and pyramid["axes"][0]["label"] == "Max units"
+    first, third = (cell["in_sample"] for cell in pyramid["cells"])
+    assert first["trades"] > 0 and first != third
 
 
 def test_watchlist_backtest(client):
@@ -418,6 +447,10 @@ def test_portfolio_backtest(client):
     assert status(watchlist="demo", priority={"name": "nope"}) == 400
     assert status(watchlist="demo", priority={"name": "momentum", "params": {"skip": 300}}) == 400
     assert status(watchlist="demo", settings={"portfolio": {"max_positions": 0}}) == 400
+    pyramided = client.post(
+        "/api/portfolio-backtest", json={"signal": "connors_rsi2_long", "watchlist": "demo", "settings": {"pyramid": {"max_units": 2}}}
+    )
+    assert pyramided.status_code == 400 and "does not pyramid" in pyramided.json()["detail"]
 
 
 def test_rotation_backtest(client):
@@ -505,7 +538,7 @@ def test_sweep_limits_and_errors(client):
     limits = client.get("/api/config").json()["sweep"]
     assert limits == {
         "max_axes": 2, "min_values": 2, "max_values": 50, "max_combinations": 200,
-        "sections": ["account", "risk", "backtest"], "fixed": ["backtest.oos_pct"], "min_period_bars": 60,
+        "sections": ["account", "risk", "backtest", "pyramid"], "fixed": ["backtest.oos_pct"], "min_period_bars": 60,
     }  # fmt: skip
 
     def sweep(*axes, **extra):

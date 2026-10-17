@@ -261,6 +261,7 @@ def trade_out(trade: Trade) -> schemas.TradeOut:
         pnl=trade.pnl,
         r_multiple=finite(trade.r_multiple),
         exit_reason=trade.exit_reason,
+        adds=[schemas.FillOut(date=day(fill.date), price=fill.price) for fill in trade.adds],
     )
 
 
