@@ -54,6 +54,7 @@ describe("WatchlistPage", () => {
     expect(screen.queryByLabelText("Ticker")).not.toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Universe" })).toHaveValue("us_large");
     expect(screen.getByRole("button", { name: "Run on every ticker" })).toBeDisabled();
+    expect(screen.getByLabelText("Max units")).toBeInTheDocument(); // every ticker's backtest can pyramid
 
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Signal" }), "connors_rsi2_long");
     await userEvent.click(screen.getByRole("button", { name: "Run on every ticker" }));

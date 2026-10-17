@@ -1,11 +1,12 @@
 /**
- * The fields of a backtest setup: ticker, signal and its parameters, entry filters, trade rules and costs. Shared by Backtest, Sweep
- * and Watchlist; a setup without a `ticker` (one run on a whole watchlist) gets no ticker field.
+ * The fields of a backtest setup: ticker, signal and its parameters, entry filters, trade rules, pyramiding and costs. Shared by
+ * Backtest, Sweep, Watchlist and Portfolio; a setup without a `ticker` (one run on a whole watchlist) gets no ticker field, and the
+ * portfolio backtest, which does not pyramid, no pyramiding fields.
  */
 import { useMemo } from "react";
 
 import type { ConfigOut, SignalOut } from "../api/client";
-import { BACKTEST_FIELDS, BACKTEST_SECTIONS, PERIODS } from "../lib/choices";
+import { BACKTEST_FIELDS, BACKTEST_SECTIONS, PERIODS, PYRAMID_SECTION } from "../lib/choices";
 import { describeSignal, pickSections, type Overrides } from "../lib/overrides";
 import type { BacktestRules } from "../lib/params";
 import { ParamFields, SectionFields } from "./ParamFields";
@@ -43,6 +44,7 @@ export function BacktestSetupFields<T extends BacktestRules & { ticker?: string 
   config,
   signals,
   defaultBenchmark = config.benchmark,
+  pyramiding = true,
 }: {
   draft: T;
   onChange: (next: T) => void;
@@ -50,11 +52,14 @@ export function BacktestSetupFields<T extends BacktestRules & { ticker?: string 
   signals: SignalOut[];
   /** The benchmark the server compares when the setup names none. */
   defaultBenchmark?: string;
+  /** Whether the engine adds units to a winning position, so the form offers the pyramiding fields. */
+  pyramiding?: boolean;
 }) {
   const set = <K extends keyof T>(key: K, value: T[K]) => onChange({ ...draft, [key]: value });
   const selected = signals.find((signal) => signal.name === draft.signal);
   const sections = pickSections(config.sections, BACKTEST_SECTIONS);
   const [stop, costs] = BACKTEST_SECTIONS.map((name) => sections.find((section) => section.name === name));
+  const pyramid = pyramiding ? config.sections.find((section) => section.name === PYRAMID_SECTION) : undefined;
   const setSettings = (settings: Overrides) => set("settings", settings);
 
   return (
@@ -116,6 +121,12 @@ export function BacktestSetupFields<T extends BacktestRules & { ticker?: string 
             params={draft.exitParams}
             onChange={(exits, exitParams) => onChange({ ...draft, exits, exitParams })}
           />
+          {pyramid && (
+            <div className="space-y-2">
+              <GroupHeading>Pyramiding (adds units, moves the stop with each)</GroupHeading>
+              <SectionFields section={pyramid} overrides={draft.settings} onChange={setSettings} className="grid grid-cols-2 gap-3" />
+            </div>
+          )}
         </div>
         {costs && (
           <div className="space-y-2">

@@ -1,6 +1,6 @@
 /** Checks and resets of a backtest setup, shared by the Backtest, Sweep and Watchlist forms. */
 import type { ConfigOut, SignalOut } from "../api/client";
-import { BACKTEST_SECTIONS } from "./choices";
+import { SETUP_SECTIONS } from "./choices";
 import { countChanges, hasProblems, pickSections, sectionSpecs } from "./overrides";
 import { rulesBody, type BacktestRules } from "./params";
 import { countRuleChanges, defaultRules, hasRuleProblems } from "./rules";
@@ -23,7 +23,7 @@ export function hasSetupProblems(
   setup: BacktestRules & { ticker?: string },
   config: ConfigOut,
   signals: SignalOut[],
-  sectionNames: readonly string[] = BACKTEST_SECTIONS,
+  sectionNames: readonly string[] = SETUP_SECTIONS,
 ): boolean {
   const sections = pickSections(config.sections, sectionNames);
   const selected = signals.find((signal) => signal.name === setup.signal);

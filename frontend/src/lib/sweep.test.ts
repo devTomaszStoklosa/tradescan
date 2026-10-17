@@ -43,9 +43,12 @@ describe("sweepParams", () => {
       "settings.risk.atr_mult",
       "settings.backtest.commission_pct",
       "settings.backtest.slippage_pct",
+      "settings.pyramid.max_units",
+      "settings.pyramid.add_every_atr",
     ]);
     expect(param("exit.target.target_r")).toMatchObject({ target: "exit", owner: "target", name: "target_r", group: "Exit: Profit target", current: 2 });
     expect(param("settings.risk.atr_mult").group).toBe("Risk plan");
+    expect(param("settings.pyramid.max_units")).toMatchObject({ target: "settings", owner: "pyramid", group: "Pyramiding", current: 1 });
   });
 
   it("follows the setup: its entry, its exits and its changed values", () => {

@@ -273,6 +273,16 @@ export interface components {
             bars_per_year: number;
             /** Oos Pct */
             oos_pct: number;
+            /**
+             * Max Units
+             * @description The first entry plus the adds; 1 is no pyramiding
+             */
+            max_units: number;
+            /**
+             * Add Every Atr
+             * @description Distance between the units, in ATRs of the signal bar
+             */
+            add_every_atr: number;
         };
         /** BacktestIn */
         BacktestIn: {
@@ -593,6 +603,13 @@ export interface components {
          * @enum {string}
          */
         Family: "trend" | "momentum" | "breakout" | "mean_reversion" | "volume" | "pattern";
+        /** FillOut */
+        FillOut: {
+            /** Date */
+            date: string;
+            /** Price */
+            price: number;
+        };
         /** FilterRuleOut */
         FilterRuleOut: {
             /** Name */
@@ -1151,22 +1168,39 @@ export interface components {
             direction: components["schemas"]["Direction"];
             /** Signal Date */
             signal_date: string;
-            /** Entry Date */
+            /**
+             * Entry Date
+             * @description The first unit's fill
+             */
             entry_date: string;
             /** Exit Date */
             exit_date: string;
-            /** Entry Price */
+            /**
+             * Entry Price
+             * @description The average fill of the units
+             */
             entry_price: number;
             /** Exit Price */
             exit_price: number;
-            /** Size */
+            /**
+             * Size
+             * @description Of all units
+             */
             size: number;
             /** Pnl */
             pnl: number;
-            /** R Multiple */
+            /**
+             * R Multiple
+             * @description P&L as a multiple of one unit's risk at its initial stop
+             */
             r_multiple: number | null;
             /** Exit Reason */
             exit_reason: string;
+            /**
+             * Adds
+             * @description The units added after the first by pyramiding, in order
+             */
+            adds: components["schemas"]["FillOut"][];
             /** Ticker */
             ticker: string;
         };
@@ -1821,22 +1855,39 @@ export interface components {
             direction: components["schemas"]["Direction"];
             /** Signal Date */
             signal_date: string;
-            /** Entry Date */
+            /**
+             * Entry Date
+             * @description The first unit's fill
+             */
             entry_date: string;
             /** Exit Date */
             exit_date: string;
-            /** Entry Price */
+            /**
+             * Entry Price
+             * @description The average fill of the units
+             */
             entry_price: number;
             /** Exit Price */
             exit_price: number;
-            /** Size */
+            /**
+             * Size
+             * @description Of all units
+             */
             size: number;
             /** Pnl */
             pnl: number;
-            /** R Multiple */
+            /**
+             * R Multiple
+             * @description P&L as a multiple of one unit's risk at its initial stop
+             */
             r_multiple: number | null;
             /** Exit Reason */
             exit_reason: string;
+            /**
+             * Adds
+             * @description The units added after the first by pyramiding, in order
+             */
+            adds: components["schemas"]["FillOut"][];
         };
         /** ValidationError */
         ValidationError: {

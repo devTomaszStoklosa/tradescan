@@ -30,6 +30,15 @@ describe("parameterRows", () => {
     expect(rows.find((row) => row.key === "ticker")).toMatchObject({ values: ["SPY", "SPY"], differs: false });
   });
 
+  it("tells a pyramided run apart by its units and their distance", () => {
+    const base = makeRun(1);
+    const pyramided = makeRun(2, { config: { ...base.config, max_units: 4, add_every_atr: 1 } });
+    expect(differing(parameterRows([base, pyramided], config.sections, signals))).toEqual([
+      { key: "config.max_units", label: "Max units", unit: "", values: ["1", "4"], differs: true },
+      { key: "config.add_every_atr", label: "Add every", unit: "ATR", values: ["0.5", "1"], differs: true },
+    ]);
+  });
+
   it("shows the Monte Carlo settings of runs that have one", () => {
     const base = makeRun(1);
     const rows = parameterRows([base, makeRun(2, { monteCarlo: makeMonteCarlo({ seed: 7 }) })], config.sections, signals);

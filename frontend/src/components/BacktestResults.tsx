@@ -171,6 +171,15 @@ const tradeColumns: Column<TradeOut>[] = [
   },
 ];
 
+/** The units of a pyramided position, with the date and price of each add on hover. */
+const unitsColumn: Column<TradeOut> = {
+  key: "units",
+  header: "Units",
+  align: "right",
+  sortValue: (t) => t.adds.length,
+  render: (t) => <span title={t.adds.map((fill) => `added ${fill.date} at ${fmtPrice(fill.price)}`).join("; ") || undefined}>{1 + t.adds.length}</span>,
+};
+
 type TickerTrade = TradeOut & { ticker?: string };
 
 const tickerColumn: Column<TickerTrade> = {
@@ -180,9 +189,11 @@ const tickerColumn: Column<TickerTrade> = {
   render: (t) => <span className="font-mono font-semibold">{t.ticker}</span>,
 };
 
-/** Trades of one ticker, or of many with a ticker column (a portfolio's). */
+/** Trades of one ticker, or of many with a ticker column (a portfolio's); a units column once a position was pyramided. */
 export function TradesTable({ trades }: { trades: TickerTrade[] }) {
-  const columns = trades.some((trade) => trade.ticker !== undefined) ? [tickerColumn, ...tradeColumns] : tradeColumns;
+  const pyramided = trades.some((trade) => trade.adds.length > 0);
+  const base = pyramided ? tradeColumns.flatMap((column) => (column.key === "size" ? [column, unitsColumn] : [column])) : tradeColumns;
+  const columns = trades.some((trade) => trade.ticker !== undefined) ? [tickerColumn, ...base] : base;
   return (
     <DataTable
       rows={trades}
