@@ -135,6 +135,13 @@ def test_portfolio_backtest_shares_one_equity_and_exports_every_engines_trades(p
         cli.main(["portfolio-backtest", "connors_rsi2_long", "-t", "AAA", "--priority", "nope"])
 
 
+def test_portfolio_backtest_ranks_by_the_scan_score(provider, capsys):
+    code = cli.main(["portfolio-backtest", "connors_rsi2_long", "-t", "AAA,BBB,CCC", "--max-positions", "1", "--priority", "score"])
+    assert code == 0
+    output = " ".join(capsys.readouterr().out.split())
+    assert "priority: The scanner's confluence score: fresh signals, daily and weekly trend, relative-strength rank" in output
+
+
 def test_backtest_and_sweep_still_take_a_ticker(provider):
     assert cli.build_parser().parse_args(["backtest", "AAA", "connors_rsi2_long"]).ticker == "AAA"
     assert cli.build_parser().parse_args(["sweep", "AAA", "connors_rsi2_long", "--axis", "signal.oversold=5,10"]).signal == "connors_rsi2_long"

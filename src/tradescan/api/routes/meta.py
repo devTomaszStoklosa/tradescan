@@ -7,7 +7,7 @@ from fastapi import APIRouter
 from tradescan import __version__
 from tradescan.api import schemas
 from tradescan.api.context import ApiContext
-from tradescan.api.mappers import filter_rule_out, rule_out, section_out
+from tradescan.api.mappers import filter_rule_out, priority_rule_out, rule_out, section_out
 from tradescan.backtest import sweep
 from tradescan.backtest.oos import MIN_PERIOD_BARS
 from tradescan.backtest.priority import DEFAULT_PRIORITY
@@ -40,7 +40,7 @@ def build_router(context: ApiContext) -> APIRouter:
             filter_rules=[filter_rule_out(rule) for rule in rules.filters.classes()],
             default_entry=rules.default_entry,
             default_exits=list(rules.default_exits),
-            priority_rules=[rule_out(rule) for rule in context.use_cases.portfolio.priorities.classes()],
+            priority_rules=[priority_rule_out(rule) for rule in context.use_cases.portfolio.priorities.classes()],
             default_priority=DEFAULT_PRIORITY,
             sweep=schemas.SweepLimitsOut(
                 max_axes=sweep.MAX_AXES,

@@ -62,7 +62,9 @@ the built UI. The screens:
   break-even) in-sample and out-of-sample, every ticker's trades pooled in R, and a sortable table of
   each ticker's metrics, where a ticker opens its own backtest.
 - **Portfolio**: the same setup as Watchlist with one shared equity, on either or both engines: the max
-  positions, the max exposure and the priority rule with its parameters are editable; key metrics against
+  positions, the max exposure and the priority rule with its parameters are editable (the scan score
+  priority also offers the scanner's scoring, trend and fresh-signal settings and each signal's score
+  weight); key metrics against
   the benchmark's buy & hold, skipped signals, equity and open positions over time, metrics and portfolio
   stats in-sample and out-of-sample, each ticker's contribution (a ticker opens its own backtest) and every
   trade with its ticker. **Pin run** keeps the shown engine's run for Compare.
@@ -138,7 +140,7 @@ tradescan update-universes
 | `backtest` | One signal on one ticker with the pandas engine, Cerebro, or `both` side by side, plus its in-sample and out-of-sample metrics. `--filters` picks the entry filters (none by default) and `--benchmark` the benchmark the market filter compares, `--entry` the entry rule, `--exits` the exit rules (`none` keeps only the stop), `--oos` the out-of-sample share. |
 | `sweep` | The `backtest` setup over one or two `--axis` parameters (`target[.owner].name=FROM:TO:STEP` or `=V1,V2,...`), as in-sample and out-of-sample grids of `--metric`; `--export` saves every combination. |
 | `watchlist-backtest` | The `backtest` setup (without the ticker) on every ticker of `-w`/`-t` with the vectorized engine: the best `--top` tickers by `--metric` with their in-sample and out-of-sample values, the spread of `--metric` across tickers and all trades pooled; `--export` saves every ticker with every period's metrics. |
-| `portfolio-backtest` | The `backtest` setup (without the ticker) on every ticker of `-w`/`-t` with one shared equity: `--max-positions` and `--max-exposure` (% of equity) cap it, `--priority` ranks the signals when more fire than fit, `--engine` picks the engine (or `both`). Prints every engine's metrics and portfolio stats for the full history and both periods and the `--top` tickers by P&L; `--export` saves every engine's trades. |
+| `portfolio-backtest` | The `backtest` setup (without the ticker) on every ticker of `-w`/`-t` with one shared equity: `--max-positions` and `--max-exposure` (% of equity) cap it, `--priority` ranks the signals when more fire than fit (`score` reads `[scoring]`, `[trend]` and `[scan] fresh_bars` from the settings file), `--engine` picks the engine (or `both`). Prints every engine's metrics and portfolio stats for the full history and both periods and the `--top` tickers by P&L; `--export` saves every engine's trades. |
 | `list-signals` | All signals with family, direction, scoring weight and rule. |
 | `update-universes` | Refresh the `sp500` and `nasdaq100` watchlists from Wikipedia's constituent tables (`--only sp500`). |
 | `serve` | Web UI and HTTP API. |
@@ -317,10 +319,18 @@ a bar):
   exposure can end slightly above the cap;
 - signals skipped for want of a slot or of exposure room are counted.
 
-| Priority | Score, the highest first (the lowest first for shorts) |
+| Priority | Score, the highest first |
 | --- | --- |
-| `relative_strength` (default) | the returns over `periods` bars times their `weights` (default 63/126/189/252 bars weighted 0.4/0.2/0.2/0.2, IBD style) |
-| `momentum` | the return from `lookback` bars ago to `skip` bars ago (default 252 and 21: 12-1 month momentum) |
+| `relative_strength` (default) | the returns over `periods` bars times their `weights` (default 63/126/189/252 bars weighted 0.4/0.2/0.2/0.2, IBD style); for shorts the lowest first |
+| `momentum` | the return from `lookback` bars ago to `skip` bars ago (default 252 and 21: 12-1 month momentum); for shorts the lowest first |
+| `score` | the scan's confluence score for the signal's direction at that close: the weights of the signals of that direction that fired within `scan.fresh_bars` bars, the daily and weekly trend bonuses and the relative-strength bonus, with relative strength ranked among the watchlist's tickers that have a bar at that close |
+
+The `score` priority has no parameters of its own: it reads the run's `[scoring]`, `[trend]` and
+`scan.fresh_bars` settings, so it scores like a scan with the same settings, and a run can override them
+like any setting. Every registered signal of the direction counts, the traded one with the run's
+parameters and the others with their defaults. Its scores move in steps of the weights and bonuses, so
+ties are common; tied signals keep the watchlist order. It reads every signal on every ticker once per
+run, about 0.1 s per ticker of 10 years.
 
 The metrics are a backtest's on the shared equity, except that buy & hold is the benchmark's (the setup's,
 else the watchlist's, else `scan.benchmark`) and exposure is the share of days with an open position. The
@@ -360,7 +370,8 @@ signals and rules; a single run can override any of them without touching the fi
   parameters as `"axes": [{"target": "exit", "owner": "target", "name": "target_r", "values": [1, 2, 3]}]`,
   and a watchlist backtest (`/api/watchlist-backtest`) the same setup with `"watchlist": "etf"` or
   `"tickers": [...]` instead of the ticker, as does a portfolio backtest (`/api/portfolio-backtest`) with
-  `"priority": {"name": "momentum", "params": {"skip": 0}}` and `"engines"`);
+  `"priority": {"name": "momentum", "params": {"skip": 0}}` and `"engines"`; the `score` priority takes
+  `"settings": {"scoring": {...}, "trend": {...}, "scan": {"fresh_bars": 5}}`);
   `/api/config` lists the settings, the rules and the sweep limits, `/api/signals` the signals, each
   parameter with its range;
 - on the CLI, through the existing flags (`--atr-mult`, `--fresh`, `--equity`, `--target-r`, `--oos`, ...).

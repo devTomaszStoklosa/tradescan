@@ -16,7 +16,8 @@ function SignalRow({
 }: {
   signal: SignalOut;
   values: Values;
-  onChange: (values: Values) => void;
+  /** Without it, the row offers only the score weight. */
+  onChange?: (values: Values) => void;
   weight?: { spec: ParamSpecOut; value: number | undefined; onChange: (value: number | null) => void };
 }) {
   const changed = Object.keys(values).length + (weight?.value !== undefined ? 1 : 0);
@@ -31,7 +32,7 @@ function SignalRow({
         {changed > 0 && <span className="text-xs font-medium text-accent">{changed} changed</span>}
       </summary>
       <div className="space-y-3 px-3 pt-1 pb-3">
-        <ParamFields specs={signal.params} values={values} onChange={onChange} />
+        {onChange && <ParamFields specs={signal.params} values={values} onChange={onChange} />}
         {weight && (
           <ParamFields
             specs={[weight.spec]}
@@ -54,7 +55,8 @@ function SignalParameters({
 }: {
   signals: SignalOut[];
   params: Overrides;
-  onParamsChange: (params: Overrides) => void;
+  /** Without it, only the score weights are offered. */
+  onParamsChange?: (params: Overrides) => void;
   scoring?: SettingsSectionOut;
   settings: Overrides;
   onSettingsChange: (settings: Overrides) => void;
@@ -72,7 +74,7 @@ function SignalParameters({
 
   return (
     <section className="space-y-2">
-      <h3 className="text-sm font-semibold">Signal parameters</h3>
+      <h3 className="text-sm font-semibold">{onParamsChange ? "Signal parameters" : "Signal weights"}</h3>
       {signals.length ? (
         <div className="divide-y divide-line overflow-hidden rounded-lg border border-line">
           {signals.map((signal) => (
@@ -80,7 +82,7 @@ function SignalParameters({
               key={signal.name}
               signal={signal}
               values={params[signal.name] ?? {}}
-              onChange={(values) => onParamsChange(withOwner(params, signal.name, values))}
+              onChange={onParamsChange && ((values) => onParamsChange(withOwner(params, signal.name, values)))}
               weight={
                 weightsSpec && {
                   spec: { ...weightsSpec, name: signal.name, kind: "float", label: "Score weight", unit: "", help: "", default: signal.weight, keys: null },
@@ -99,6 +101,8 @@ function SignalParameters({
 }
 
 export function AdvancedSettings({
+  title = "Advanced settings",
+  hint = "every parameter, defaults from settings.toml",
   sections,
   settings,
   onSettingsChange,
@@ -108,6 +112,9 @@ export function AdvancedSettings({
   onSignalParamsChange,
   signalWeights = false,
 }: {
+  title?: string;
+  /** Shown next to the title while nothing is changed. */
+  hint?: string;
   /** Sections to show, in order. */
   sections: SettingsSectionOut[];
   settings: Overrides;
@@ -117,7 +124,7 @@ export function AdvancedSettings({
   signals?: SignalOut[];
   signalParams?: Overrides;
   onSignalParamsChange?: (params: Overrides) => void;
-  /** Also offer each signal's score weight (scoring.signal_weights). */
+  /** Also offer each signal's score weight (scoring.signal_weights); without `onSignalParamsChange`, only that. */
   signalWeights?: boolean;
 }) {
   const names = sections.map((section) => section.name);
@@ -135,9 +142,9 @@ export function AdvancedSettings({
         <span className="inline-block text-muted transition group-open/advanced:rotate-90" aria-hidden>
           ›
         </span>
-        <span>Advanced settings</span>
+        <span>{title}</span>
         <span className="text-xs font-normal text-muted">
-          {changed ? <span className="text-accent">{changed} changed</span> : "every parameter, defaults from settings.toml"}
+          {changed ? <span className="text-accent">{changed} changed</span> : hint}
         </span>
       </summary>
       <div className="space-y-5 border-t border-line p-4">
@@ -147,7 +154,7 @@ export function AdvancedSettings({
             <SectionFields section={section} overrides={settings} onChange={onSettingsChange} exclude={exclude[section.name]} />
           </section>
         ))}
-        {signals && onSignalParamsChange && (
+        {signals && (onSignalParamsChange || scoring) && (
           <SignalParameters
             signals={signals}
             params={signalParams}

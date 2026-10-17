@@ -9,8 +9,9 @@ A ticker is busy, and ignores its signals, while its entry order waits or its po
 its slot until it fills or expires, a position until the close of its exit bar. A ticker whose bars end before
 the calendar does keeps a position that is still open, marked to its last close, until the end.
 
-Both portfolio engines prepare the tickers with `prepare` and allocate with `allocate`; only the order execution
-differs between them, as for the single-ticker engines.
+Both portfolio engines prepare the tickers with `prepare`, which also has the priority rule score every ticker at
+once, and allocate with `allocate`; only the order execution differs between them, as for the single-ticker
+engines.
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ from tradescan.backtest.allocation import Candidate, PortfolioConfig, allocate
 from tradescan.backtest.base import BacktestConfig, ExitReason, Trade
 from tradescan.backtest.exits import OpenTrade
 from tradescan.backtest.oos import SignalSince
-from tradescan.backtest.priority import PriorityRule
+from tradescan.backtest.priority import PriorityInputs, PriorityRule
 from tradescan.backtest.rules import Bars
 from tradescan.backtest.trade_rules import PreparedRules, TradeRules
 from tradescan.backtest.vectorized import FillModel, find_entry, find_exit, pnl_path
@@ -121,20 +122,21 @@ def prepare(
     if not frames:
         raise ValueError("A portfolio backtest needs at least one ticker with bars")
     calendar = shared_calendar(frames.values())
-    tickers = []
-    for ticker, df in frames.items():
-        bars = Bars.from_frame(df, config.atr_period)
-        tickers.append(
-            TickerSetup(
-                ticker=ticker,
-                bars=bars,
-                events=signal.events(df).to_numpy(dtype=bool),
-                rules=rules.prepare(bars, signal.direction),
-                scores=priority.scores(bars, signal.direction),
-                days=calendar.get_indexer(df.index),
-            )
+    bars = tuple(Bars.from_frame(df, config.atr_period) for df in frames.values())
+    days = tuple(calendar.get_indexer(df.index) for df in frames.values())
+    scores = priority.scores(PriorityInputs(tuple(frames), bars, days, calendar, signal.direction))
+    tickers = tuple(
+        TickerSetup(
+            ticker=ticker,
+            bars=ticker_bars,
+            events=signal.events(df).to_numpy(dtype=bool),
+            rules=rules.prepare(ticker_bars, signal.direction),
+            scores=ticker_scores,
+            days=ticker_days,
         )
-    return PortfolioSetup(calendar, tuple(tickers), signal.direction)
+        for (ticker, df), ticker_bars, ticker_days, ticker_scores in zip(frames.items(), bars, days, scores, strict=True)
+    )
+    return PortfolioSetup(calendar, tickers, signal.direction)
 
 
 @dataclass(frozen=True)

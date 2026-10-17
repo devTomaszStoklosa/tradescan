@@ -23,6 +23,10 @@ export const BACKTEST_PAGE_SECTIONS = [...BACKTEST_SECTIONS, MONTE_CARLO_SECTION
 export const PORTFOLIO_SECTION = "portfolio";
 /** Settings the Portfolio page reads: the shared setup's and the portfolio's. */
 export const PORTFOLIO_PAGE_SECTIONS = [...BACKTEST_SECTIONS, PORTFOLIO_SECTION] as const;
+/** Settings of the scanner's score, which a priority rule that `needs_scan` reads too. */
+export const SCORE_SECTIONS: readonly string[] = ["scoring", "trend", "scan"];
+/** Of those sections, the parameters the score reads, where it reads only some. */
+export const SCORE_FIELDS: Readonly<Record<string, readonly string[]>> = { scan: ["fresh_bars"] };
 
 export function defaultWatchlist(watchlists: WatchlistOut[]): string {
   return watchlists.find((item) => item.name === "us_large")?.name ?? watchlists[0]?.name ?? "";

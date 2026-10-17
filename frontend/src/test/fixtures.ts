@@ -11,6 +11,7 @@ import type {
   PortfolioOut,
   PortfolioRunOut,
   PortfolioStatsOut,
+  PriorityRuleOut,
   RuleOut,
   ScanOut,
   SignalOut,
@@ -110,7 +111,7 @@ export const filterRules: FilterRuleOut[] = [
 ];
 
 /** What /api/config lists as priority rules of a portfolio backtest. */
-export const priorityRules: RuleOut[] = [
+export const priorityRules: PriorityRuleOut[] = [
   {
     name: "relative_strength",
     label: "Relative strength",
@@ -120,6 +121,7 @@ export const priorityRules: RuleOut[] = [
       spec("periods", "Lookbacks", [63, 126, 189, 252], [1, 1000, 1], "int_list", { unit: "bars" }),
       spec("weights", "Weights", [0.4, 0.2, 0.2, 0.2], [0, 10, 0.05], "float_list"),
     ],
+    needs_scan: false,
   },
   {
     name: "momentum",
@@ -127,6 +129,15 @@ export const priorityRules: RuleOut[] = [
     description: "Return from 252 bars ago to 21 bars ago",
     template: "Return from {lookback} bars ago to {skip} bars ago",
     params: [spec("lookback", "Lookback", 252, [2, 1000, 1], "int", { unit: "bars" }), spec("skip", "Skip", 21, [0, 250, 1], "int", { unit: "bars" })],
+    needs_scan: false,
+  },
+  {
+    name: "score",
+    label: "Scan score",
+    description: "The scanner's confluence score: fresh signals, daily and weekly trend, relative-strength rank",
+    template: "The scanner's confluence score: fresh signals, daily and weekly trend, relative-strength rank",
+    params: [],
+    needs_scan: true,
   },
 ];
 
@@ -179,6 +190,11 @@ export const config: ConfigOut = {
         spec("family_weights", "Family weights", FAMILY_WEIGHTS, [-10, 10, 0.5], "weights", { keys: Object.keys(FAMILY_WEIGHTS) }),
         spec("signal_weights", "Signal weights", {}, [-10, 10, 0.5], "weights"),
       ],
+    },
+    {
+      name: "trend",
+      label: "Trend & relative strength",
+      params: [spec("fast_period", "Daily trend: fast SMA", 50, [2, 400, 1], "int", { unit: "bars" })],
     },
     {
       name: "backtest",

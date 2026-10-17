@@ -16,6 +16,7 @@ from tradescan.backtest.monte_carlo import Distribution, MonteCarlo, PathStats, 
 from tradescan.backtest.oos import Split
 from tradescan.backtest.pooled import PooledTrades, Spread
 from tradescan.backtest.portfolio_metrics import PortfolioMetrics, TickerContribution
+from tradescan.backtest.priority import PriorityRule
 from tradescan.backtest.rules import Rule
 from tradescan.backtest.tickers import PeriodRun
 from tradescan.backtest.trade_rules import TradeRules
@@ -102,6 +103,10 @@ def rule_out(rule: type[Rule]) -> schemas.RuleOut:
 
 def filter_rule_out(rule: type[EntryFilter]) -> schemas.FilterRuleOut:
     return schemas.FilterRuleOut(**rule_out(rule).model_dump(), needs_benchmark=rule.needs_benchmark)
+
+
+def priority_rule_out(rule: type[PriorityRule]) -> schemas.PriorityRuleOut:
+    return schemas.PriorityRuleOut(**rule_out(rule).model_dump(), needs_scan=rule.needs_scan)
 
 
 def applied_rule_out(rule: Rule) -> schemas.AppliedRuleOut:

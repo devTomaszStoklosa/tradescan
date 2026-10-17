@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router";
 
 import type { ConfigOut, PortfolioOut, PortfolioPeriodOut, PortfolioRunOut, SignalOut, TickerContributionOut, WatchlistOut } from "../api/client";
 import { useConfig, usePortfolioBacktest, useSignals, useWatchlists } from "../api/hooks";
+import { AdvancedSettings } from "../components/AdvancedSettings";
 import { enginesAgree, MetricsTable, TradesTable } from "../components/BacktestResults";
 import { BacktestSetupFields } from "../components/BacktestSetupFields";
 import { EquityChart, type EquityEvent, type EquitySeries } from "../components/charts/EquityChart";
@@ -14,16 +15,21 @@ import { PortfolioStatsTable } from "../components/PortfolioStats";
 import { GroupHeading, RuleChoiceFields } from "../components/TradeRuleFields";
 import { UniversePicker } from "../components/UniverseFilters";
 import { Button, DirectionBadge, EmptyState, ErrorBox, Field, Loading, Notice, PageHeader, Panel, Segmented, StatTile, ToggleChip } from "../components/ui";
-import { defaultWatchlist, LARGE_UNIVERSE, PORTFOLIO_PAGE_SECTIONS, PORTFOLIO_SECTION, universeSize } from "../lib/choices";
+import { defaultWatchlist, LARGE_UNIVERSE, PORTFOLIO_SECTION, universeSize } from "../lib/choices";
 import { downloadCsv } from "../lib/csv";
 import { DASH, fmtNumber, fmtPct, fmtSigned, tone } from "../lib/format";
+import { pickSections } from "../lib/overrides";
 import {
   backtestLink,
+  choosePriority,
   hasPriorityProblems,
   portfolioBody,
+  portfolioSections,
   priorityChanges,
+  prioritySections,
   readPortfolioForm,
   resetPortfolio,
+  scoreExclusions,
   watchlistLink,
   writePortfolioForm,
   type PortfolioForm,
@@ -57,10 +63,14 @@ function PortfolioFormPanel({
   const toggleEngine = (engine: string) =>
     setDraft({ ...draft, engines: draft.engines.includes(engine) ? draft.engines.filter((item) => item !== engine) : [...draft.engines, engine] });
   const changes = setupChanges(draft, config) + priorityChanges(draft, config);
-  const invalid = !portfolioBody(draft) || hasSetupProblems(draft, config, signals, PORTFOLIO_PAGE_SECTIONS) || hasPriorityProblems(draft, config);
+  const invalid = !portfolioBody(draft) || hasSetupProblems(draft, config, signals, portfolioSections(draft, config)) || hasPriorityProblems(draft, config);
   const watchlistBenchmark = watchlists.find((item) => item.name === draft.universe.watchlist)?.benchmark;
   const portfolio = config.sections.find((section) => section.name === PORTFOLIO_SECTION);
   const slowCerebro = draft.engines.includes("cerebro") && universeSize(draft.universe, watchlists) > SLOW_CEREBRO_TICKERS;
+  // A priority that scores like the scanner reads the scanner's settings and the weights of the traded direction's signals.
+  const scoreSections = pickSections(config.sections, prioritySections(draft.priority, config));
+  const traded = signals.find((signal) => signal.name === draft.signal);
+  const scoreSignals = traded ? signals.filter((signal) => signal.direction === traded.direction) : signals;
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -92,9 +102,21 @@ function PortfolioFormPanel({
               rules={config.priority_rules}
               value={draft.priority}
               params={draft.priorityParams}
-              onChange={(priority, priorityParams) => setDraft({ ...draft, priority, priorityParams })}
+              onChange={(priority, priorityParams) => setDraft(choosePriority(draft, priority, priorityParams, config))}
             />
           </div>
+          {scoreSections.length > 0 && (
+            <AdvancedSettings
+              title="Scan score settings"
+              hint="what the scanner's score reads, defaults from settings.toml"
+              sections={scoreSections}
+              settings={draft.settings}
+              onSettingsChange={(settings) => setDraft({ ...draft, settings })}
+              exclude={scoreExclusions(scoreSections)}
+              signals={scoreSignals}
+              signalWeights
+            />
+          )}
         </section>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <Field label="Engines">

@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import { config } from "../test/fixtures";
+import { pickSections } from "./overrides";
 import {
   backtestLink,
+  choosePriority,
   hasPriorityProblems,
   portfolioBody,
+  portfolioSections,
   priorityChanges,
   readPortfolioForm,
   resetPortfolio,
+  scoreExclusions,
   watchlistLink,
   writePortfolioForm,
 } from "./portfolio";
@@ -67,5 +71,26 @@ describe("portfolio form", () => {
     );
     expect(backtestLink(form, "AAPL", "vectorized", null, config)).toContain("b=QQQ");
     expect(watchlistLink(form, config)).toBe("/watchlist?w=us_large&signal=connors_rsi2_long&filter=market&b=QQQ&set.risk.atr_mult=3");
+  });
+
+  it("offers the scanner's settings while the priority scores like the scanner, and drops them with another rule", () => {
+    const scored = "w=us_large&signal=connors_rsi2_long&eng=vectorized&set.risk.atr_mult=3&set.scan.fresh_bars=5&set.scoring.trend_bonus=2&prio=score";
+    const form = readPortfolioForm(new URLSearchParams(scored), config);
+    expect(form.settings).toEqual({ risk: { atr_mult: 3 }, scan: { fresh_bars: 5 }, scoring: { trend_bonus: 2 } });
+    expect(writePortfolioForm(form, config).toString()).toBe(new URLSearchParams(scored).toString());
+    expect(portfolioSections(form, config)).toEqual(["risk", "backtest", "portfolio", "scoring", "trend", "scan"]);
+    expect(portfolioBody(form)).toMatchObject({ priority: { name: "score", params: {} }, settings: form.settings });
+    expect(backtestLink(form, "AAPL", "vectorized", null, config)).toBe("/backtest?ticker=AAPL&signal=connors_rsi2_long&eng=vectorized&set.risk.atr_mult=3");
+
+    const momentum = choosePriority(form, "momentum", {}, config);
+    expect(momentum).toMatchObject({ priority: "momentum", settings: { risk: { atr_mult: 3 } } });
+    expect(portfolioSections(momentum, config)).toEqual(["risk", "backtest", "portfolio"]);
+    expect(choosePriority(form, "score", {}, config).settings).toEqual(form.settings);
+    expect(readPortfolioForm(new URLSearchParams(scored.replace("prio=score", "prio=momentum")), config).settings).toEqual({ risk: { atr_mult: 3 } });
+  });
+
+  it("leaves out the scan settings the score does not read", () => {
+    const sections = pickSections(config.sections, ["scoring", "scan"]);
+    expect(scoreExclusions(sections)).toEqual({ scoring: [], scan: ["min_score", "edge_horizon"] });
   });
 });

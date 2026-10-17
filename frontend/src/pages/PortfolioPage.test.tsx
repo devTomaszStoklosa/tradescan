@@ -81,6 +81,31 @@ describe("PortfolioPage", () => {
     expect(bodies().at(-1)).not.toHaveProperty("ticker");
   });
 
+  it("offers the scanner's settings and signal weights while the priority is the scan score", async () => {
+    const router = renderPage("/portfolio?w=us_large&signal=connors_rsi2_long&eng=vectorized");
+    await screen.findByRole("button", { name: "Run portfolio" });
+    const priority = screen.getByRole("combobox", { name: "Priority when more signals fire than fit" });
+    expect(screen.queryByText("Scan score settings")).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(priority, "score");
+    await userEvent.click(screen.getByText("Scan score settings"));
+    expect(screen.queryByLabelText("Minimum score")).not.toBeInTheDocument(); // the scan settings the score does not read
+    expect(screen.getByText("Signal weights")).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Fresh within (bars)"), "5");
+    await userEvent.type(screen.getByLabelText("Daily trend bonus"), "2");
+    await userEvent.click(screen.getByRole("button", { name: "Run portfolio" }));
+    await waitFor(() =>
+      expect(router.state.location.search).toBe("?w=us_large&signal=connors_rsi2_long&eng=vectorized&set.scan.fresh_bars=5&set.scoring.trend_bonus=2&prio=score"),
+    );
+    await waitFor(() =>
+      expect(bodies().at(-1)).toMatchObject({ priority: { name: "score", params: {} }, settings: { scan: { fresh_bars: 5 }, scoring: { trend_bonus: 2 } } }),
+    );
+
+    await userEvent.selectOptions(priority, "momentum");
+    expect(screen.queryByText("Scan score settings")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reset 1 changed" })).toBeInTheDocument(); // only the priority: its settings went with it
+  });
+
   it("warns that Cerebro is slow on a large universe", async () => {
     renderPage("/portfolio?w=us_large&signal=connors_rsi2_long&eng=vectorized,cerebro");
     await screen.findByRole("button", { name: "Run portfolio" });

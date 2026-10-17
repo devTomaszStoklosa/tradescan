@@ -443,7 +443,7 @@ export interface components {
              * Priority Rules
              * @description Priority rules of a portfolio backtest
              */
-            priority_rules: components["schemas"]["RuleOut"][];
+            priority_rules: components["schemas"]["PriorityRuleOut"][];
             /** Default Priority */
             default_priority: string;
             sweep: components["schemas"]["SweepLimitsOut"];
@@ -1099,6 +1099,30 @@ export interface components {
             exit_reason: string;
             /** Ticker */
             ticker: string;
+        };
+        /** PriorityRuleOut */
+        PriorityRuleOut: {
+            /** Name */
+            name: string;
+            /** Label */
+            label: string;
+            /**
+             * Description
+             * @description The rule with the default parameters filled in
+             */
+            description: string;
+            /**
+             * Template
+             * @description The rule with {parameter} placeholders; format specs "", "g" and ".0%"
+             */
+            template: string;
+            /** Params */
+            params: components["schemas"]["ParamSpecOut"][];
+            /**
+             * Needs Scan
+             * @description True when the rule reads the scanner's settings (scoring, trend, scan.fresh_bars), which a run can override
+             */
+            needs_scan: boolean;
         };
         /** RegimeOut */
         RegimeOut: {
