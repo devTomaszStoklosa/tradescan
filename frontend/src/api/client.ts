@@ -39,6 +39,7 @@ export type PortfolioPeriodOut = Schemas["PortfolioPeriodOut"];
 export type PortfolioRunOut = Schemas["PortfolioRunOut"];
 export type PortfolioStatsOut = Schemas["PortfolioStatsOut"];
 export type PortfolioTradeOut = Schemas["PortfolioTradeOut"];
+export type PriorityRuleOut = Schemas["PriorityRuleOut"];
 export type RegimeOut = Schemas["RegimeOut"];
 export type RuleIn = Schemas["RuleIn"];
 export type RuleOut = Schemas["RuleOut"];
