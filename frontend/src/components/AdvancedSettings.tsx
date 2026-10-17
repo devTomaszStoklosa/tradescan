@@ -7,18 +7,22 @@ import { Button } from "./ui";
 
 const SCORING = "scoring";
 const SIGNAL_WEIGHTS = "signal_weights";
+const FIXED_NOTE = "Parameters from the setup";
 
 function SignalRow({
   signal,
   values,
   onChange,
   weight,
+  note,
 }: {
   signal: SignalOut;
   values: Values;
   /** Without it, the row offers only the score weight. */
   onChange?: (values: Values) => void;
   weight?: { spec: ParamSpecOut; value: number | undefined; onChange: (value: number | null) => void };
+  /** Shown instead of the signal's description. */
+  note?: string;
 }) {
   const changed = Object.keys(values).length + (weight?.value !== undefined ? 1 : 0);
   return (
@@ -28,7 +32,7 @@ function SignalRow({
           ›
         </span>
         <SignalChip name={signal.name} family={signal.family} />
-        <span className="min-w-0 flex-1 text-xs text-muted">{describeSignal(signal, values)}</span>
+        <span className="min-w-0 flex-1 text-xs text-muted">{note ?? describeSignal(signal, values)}</span>
         {changed > 0 && <span className="text-xs font-medium text-accent">{changed} changed</span>}
       </summary>
       <div className="space-y-3 px-3 pt-1 pb-3">
@@ -49,6 +53,7 @@ function SignalParameters({
   signals,
   params,
   onParamsChange,
+  fixedSignals,
   scoring,
   settings,
   onSettingsChange,
@@ -57,6 +62,8 @@ function SignalParameters({
   params: Overrides;
   /** Without it, only the score weights are offered. */
   onParamsChange?: (params: Overrides) => void;
+  /** Signals whose parameters are set elsewhere on the page: their rows offer only the score weight. */
+  fixedSignals: readonly string[];
   scoring?: SettingsSectionOut;
   settings: Overrides;
   onSettingsChange: (settings: Overrides) => void;
@@ -77,21 +84,25 @@ function SignalParameters({
       <h3 className="text-sm font-semibold">{onParamsChange ? "Signal parameters" : "Signal weights"}</h3>
       {signals.length ? (
         <div className="divide-y divide-line overflow-hidden rounded-lg border border-line">
-          {signals.map((signal) => (
-            <SignalRow
-              key={signal.name}
-              signal={signal}
-              values={params[signal.name] ?? {}}
-              onChange={onParamsChange && ((values) => onParamsChange(withOwner(params, signal.name, values)))}
-              weight={
-                weightsSpec && {
-                  spec: { ...weightsSpec, name: signal.name, kind: "float", label: "Score weight", unit: "", help: "", default: signal.weight, keys: null },
-                  value: weights[signal.name],
-                  onChange: (value) => setWeight(signal.name, value),
+          {signals.map((signal) => {
+            const fixed = fixedSignals.includes(signal.name);
+            return (
+              <SignalRow
+                key={signal.name}
+                signal={signal}
+                values={fixed ? {} : (params[signal.name] ?? {})}
+                onChange={fixed ? undefined : onParamsChange && ((values) => onParamsChange(withOwner(params, signal.name, values)))}
+                note={fixed ? FIXED_NOTE : undefined}
+                weight={
+                  weightsSpec && {
+                    spec: { ...weightsSpec, name: signal.name, kind: "float", label: "Score weight", unit: "", help: "", default: signal.weight, keys: null },
+                    value: weights[signal.name],
+                    onChange: (value) => setWeight(signal.name, value),
+                  }
                 }
-              }
-            />
-          ))}
+              />
+            );
+          })}
         </div>
       ) : (
         <p className="text-sm text-muted">No signals match the selected families and direction.</p>
@@ -110,6 +121,7 @@ export function AdvancedSettings({
   signals,
   signalParams = {},
   onSignalParamsChange,
+  fixedSignals = [],
   signalWeights = false,
 }: {
   title?: string;
@@ -124,6 +136,8 @@ export function AdvancedSettings({
   signals?: SignalOut[];
   signalParams?: Overrides;
   onSignalParamsChange?: (params: Overrides) => void;
+  /** Signals whose parameters are set elsewhere on the page: with `signalWeights`, their rows offer only the score weight. */
+  fixedSignals?: readonly string[];
   /** Also offer each signal's score weight (scoring.signal_weights); without `onSignalParamsChange`, only that. */
   signalWeights?: boolean;
 }) {
@@ -159,6 +173,7 @@ export function AdvancedSettings({
             signals={signals}
             params={signalParams}
             onParamsChange={onSignalParamsChange}
+            fixedSignals={fixedSignals}
             scoring={scoring}
             settings={settings}
             onSettingsChange={onSettingsChange}

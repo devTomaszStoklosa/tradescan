@@ -1,18 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { config } from "../test/fixtures";
+import { config, signals } from "../test/fixtures";
 import { pickSections } from "./overrides";
 import {
   backtestLink,
   choosePriority,
   hasPriorityProblems,
+  hasScoreSignalProblems,
   portfolioBody,
   portfolioSections,
   priorityChanges,
   readPortfolioForm,
   resetPortfolio,
   scoreExclusions,
+  scoreSignals,
   watchlistLink,
+  withCountedScoreSignals,
   writePortfolioForm,
 } from "./portfolio";
 
@@ -87,6 +90,34 @@ describe("portfolio form", () => {
     expect(portfolioSections(momentum, config)).toEqual(["risk", "backtest", "portfolio"]);
     expect(choosePriority(form, "score", {}, config).settings).toEqual(form.settings);
     expect(readPortfolioForm(new URLSearchParams(scored.replace("prio=score", "prio=momentum")), config).settings).toEqual({ risk: { atr_mult: 3 } });
+  });
+
+  it("round-trips the score's signal parameters while the priority scores like the scanner, and drops them with another rule", () => {
+    const scored = "w=us_large&signal=connors_rsi2_long&eng=vectorized&prio=score&ss.donchian_breakout.period=55";
+    const form = readPortfolioForm(new URLSearchParams(scored), config);
+    expect(form.scoreSignalParams).toEqual({ donchian_breakout: { period: 55 } });
+    expect(writePortfolioForm(form, config).toString()).toBe(new URLSearchParams(scored).toString());
+    expect(portfolioBody(form)).toMatchObject({ score_signal_params: { donchian_breakout: { period: 55 } } });
+    expect(priorityChanges(form, config)).toBe(2);
+    expect(backtestLink(form, "AAPL", "vectorized", null, config)).toBe("/backtest?ticker=AAPL&signal=connors_rsi2_long&eng=vectorized");
+    expect(resetPortfolio(form, config).scoreSignalParams).toEqual({});
+
+    expect(choosePriority(form, "momentum", {}, config).scoreSignalParams).toEqual({});
+    expect(choosePriority(form, "score", {}, config).scoreSignalParams).toEqual(form.scoreSignalParams);
+    expect(readPortfolioForm(new URLSearchParams(scored.replace("prio=score", "prio=momentum")), config).scoreSignalParams).toEqual({});
+  });
+
+  it("keeps the score's signal parameters only for the signals it counts besides the traded one, and checks them", () => {
+    const all = [...signals, { ...signals[0]!, name: "donchian_breakdown", direction: "short" as const }];
+    const form = readPortfolioForm(new URLSearchParams("w=us_large&signal=connors_rsi2_long&prio=score"), config);
+    expect(scoreSignals(form, all).map((signal) => signal.name)).toEqual(["donchian_breakout", "connors_rsi2_long"]);
+    expect(scoreSignals({ signal: "" }, all)).toEqual(all);
+    const params = { donchian_breakout: { period: 55 }, connors_rsi2_long: { oversold: 5 }, donchian_breakdown: { period: 30 } };
+    expect(withCountedScoreSignals({ ...form, scoreSignalParams: params }, all).scoreSignalParams).toEqual({ donchian_breakout: { period: 55 } });
+
+    expect(hasScoreSignalProblems({ scoreSignalParams: { donchian_breakout: { period: 55 } } }, all)).toBe(false);
+    expect(hasScoreSignalProblems({ scoreSignalParams: { donchian_breakout: { period: 1 } } }, all)).toBe(true);
+    expect(hasScoreSignalProblems({ scoreSignalParams: { nope: { period: 5 } } }, all)).toBe(true);
   });
 
   it("leaves out the scan settings the score does not read", () => {

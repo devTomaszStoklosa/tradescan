@@ -23,6 +23,7 @@ import {
   backtestLink,
   choosePriority,
   hasPriorityProblems,
+  hasScoreSignalProblems,
   portfolioBody,
   portfolioSections,
   priorityChanges,
@@ -30,7 +31,9 @@ import {
   readPortfolioForm,
   resetPortfolio,
   scoreExclusions,
+  scoreSignals,
   watchlistLink,
+  withCountedScoreSignals,
   writePortfolioForm,
   type PortfolioForm,
 } from "../lib/portfolio";
@@ -62,19 +65,24 @@ function PortfolioFormPanel({
   useEffect(() => setDraft(withUniverse(initial)), [initial, watchlists]);
   const toggleEngine = (engine: string) =>
     setDraft({ ...draft, engines: draft.engines.includes(engine) ? draft.engines.filter((item) => item !== engine) : [...draft.engines, engine] });
-  const changes = setupChanges(draft, config) + priorityChanges(draft, config);
-  const invalid = !portfolioBody(draft) || hasSetupProblems(draft, config, signals, portfolioSections(draft, config)) || hasPriorityProblems(draft, config);
+  // Score signal parameters left from another traded signal are neither counted nor sent.
+  const counted = withCountedScoreSignals(draft, signals);
+  const changes = setupChanges(counted, config) + priorityChanges(counted, config);
+  const invalid =
+    !portfolioBody(counted) ||
+    hasSetupProblems(counted, config, signals, portfolioSections(counted, config)) ||
+    hasPriorityProblems(counted, config) ||
+    hasScoreSignalProblems(counted, signals);
   const watchlistBenchmark = watchlists.find((item) => item.name === draft.universe.watchlist)?.benchmark;
   const portfolio = config.sections.find((section) => section.name === PORTFOLIO_SECTION);
   const slowCerebro = draft.engines.includes("cerebro") && universeSize(draft.universe, watchlists) > SLOW_CEREBRO_TICKERS;
-  // A priority that scores like the scanner reads the scanner's settings and the weights of the traded direction's signals.
+  // A priority that scores like the scanner reads the scanner's settings and the parameters and weights of the traded
+  // direction's signals; the traded signal's parameters are the setup's.
   const scoreSections = pickSections(config.sections, prioritySections(draft.priority, config));
-  const traded = signals.find((signal) => signal.name === draft.signal);
-  const scoreSignals = traded ? signals.filter((signal) => signal.direction === traded.direction) : signals;
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!invalid) onSubmit(draft);
+    if (!invalid) onSubmit(counted);
   };
 
   return (
@@ -113,7 +121,10 @@ function PortfolioFormPanel({
               settings={draft.settings}
               onSettingsChange={(settings) => setDraft({ ...draft, settings })}
               exclude={scoreExclusions(scoreSections)}
-              signals={scoreSignals}
+              signals={scoreSignals(draft, signals)}
+              signalParams={counted.scoreSignalParams}
+              onSignalParamsChange={(scoreSignalParams) => setDraft({ ...draft, scoreSignalParams })}
+              fixedSignals={[draft.signal]}
               signalWeights
             />
           )}
