@@ -8,14 +8,16 @@ closes with at least one open position (the gross exposure is in the stats).
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from typing import Protocol
 
 import numpy as np
 import pandas as pd
 
 from tradescan.backtest.base import Trade
 from tradescan.backtest.metrics import Metrics, compute_metrics
-from tradescan.backtest.portfolio import PortfolioResult
+from tradescan.backtest.portfolio import PortfolioResult, PortfolioTrade
 
 
 @dataclass(frozen=True)
@@ -73,7 +75,17 @@ class TickerContribution:
     expectancy_r: float  # of the closed trades
 
 
-def contributions(result: PortfolioResult, initial_equity: float) -> list[TickerContribution]:
+class TickerTrades(Protocol):
+    """A run whose trades carry their ticker: a portfolio's or a rotation's."""
+
+    @property
+    def tickers(self) -> tuple[str, ...]: ...
+
+    @property
+    def trades(self) -> Sequence[PortfolioTrade]: ...
+
+
+def contributions(result: TickerTrades, initial_equity: float) -> list[TickerContribution]:
     """Every ticker of the run in watchlist order, also those that never traded."""
     by_ticker: dict[str, list[Trade]] = {ticker: [] for ticker in result.tickers}
     for item in result.trades:

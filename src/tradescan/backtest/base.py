@@ -43,6 +43,7 @@ class ExitReason:
     TARGET = "target"
     TIME = "time"
     OPEN = "open"  # still open on the last bar, marked to the last close
+    REBALANCE = "rebalance"  # sold out by a rotation's rebalance
 
 
 @dataclass(frozen=True)
