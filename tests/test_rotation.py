@@ -5,7 +5,7 @@ from typing import ClassVar
 import numpy as np
 import pandas as pd
 import pytest
-from synthetic import random_walk
+from synthetic import FakeProvider, random_walk
 
 from tradescan.backtest.base import BacktestConfig, ExitReason
 from tradescan.backtest.portfolio_metrics import contributions
@@ -23,7 +23,11 @@ from tradescan.backtest.rotation import (
 )
 from tradescan.backtest.rotation_metrics import rotation_metrics
 from tradescan.backtest.rules import Bars
+from tradescan.backtest.trade_rules import RuleChoice
 from tradescan.backtest.weighting import EqualWeight, InverseVolatilityWeight, book_weights, weight_rules
+from tradescan.config import Settings
+from tradescan.services import RotationRequest, build_use_cases
+from tradescan.watchlist import Watchlist
 
 NO_COSTS = BacktestConfig(commission_pct=0.0, slippage_pct=0.0)
 # 2020-01-01 is a Wednesday: with 60 business days, January ends on bar 22 and February on bar 42.
@@ -259,3 +263,58 @@ def test_metrics_compare_the_benchmark_and_report_how_the_rotation_traded(walks)
     assert stats.average_cash_pct == pytest.approx(100.0 - stats.average_exposure_pct)
     years = (len(dates) - 1) / 252
     assert stats.turnover_pct == pytest.approx(result.traded_value / 2 / result.equity.mean() / years * 100)
+
+
+# --- Use case ------------------------------------------------------------------------------------------
+
+
+def _use_case(frames):
+    return build_use_cases(Settings(), FakeProvider(frames)).rotation
+
+
+@pytest.fixture(scope="module")
+def market(walks):
+    return {**walks, "SPY": random_walk(1500, seed=50), "TLT": random_walk(1500, seed=51, volatility=0.005)}
+
+
+def test_the_use_case_runs_the_watchlist_with_a_safe_asset_and_both_periods(market):
+    universe = Watchlist("demo", ("T0", "T1", "T2", "T3", "NODATA"), benchmark="SPY")
+    report = _use_case(market).run(
+        RotationRequest(
+            universe,
+            ranking=RuleChoice("relative_strength"),
+            weighting=RuleChoice("inverse_volatility", {"lookback": 20}),
+            rebalance=Rebalance.WEEKLY,
+            safe_asset=" tlt ",
+            settings={"rotation": {"holdings": 2, "absolute_lookback": 63}},
+        )
+    )
+    assert report.rotation == RotationConfig(holdings=2, absolute_lookback=63, rebalance=Rebalance.WEEKLY, safe_asset="TLT")
+    assert report.weighting == InverseVolatilityWeight(lookback=20) and report.benchmark == "SPY"
+    assert report.benchmark_close.index.equals(report.result.equity.index)
+    assert report.split is not None and report.in_sample is not None and report.out_of_sample is not None
+    assert report.split.in_sample[0] == report.result.equity.index[0]
+    assert [row.ticker for row in report.contributions] == ["T0", "T1", "T2", "T3", "TLT"]
+    assert report.missing == ["NODATA"]
+
+
+def test_the_use_case_defaults_to_momentum_with_equal_weights_and_cash(market):
+    report = _use_case(market).run(RotationRequest(Watchlist("demo", ("T0", "T1"))))
+    assert (report.ranking, report.weighting) == (MomentumPriority(), EqualWeight())
+    assert report.rotation == RotationConfig() and report.benchmark == "SPY"
+
+
+def test_the_use_case_rejects_what_it_cannot_run(market):
+    use_case = _use_case(market)
+    universe = Watchlist("demo", ("T0", "T1"))
+    with pytest.raises(ValueError, match="Unknown ranking rule 'score'. Use: relative_strength, momentum"):
+        use_case.run(RotationRequest(universe, ranking=RuleChoice("score")))
+    with pytest.raises(ValueError, match="No data for the safe asset IEF"):
+        use_case.run(RotationRequest(universe, safe_asset="IEF"))
+    with pytest.raises(ValueError, match="No data for the benchmark QQQ"):
+        use_case.run(RotationRequest(universe, benchmark="QQQ"))
+    with pytest.raises(ValueError, match="No data for any ticker"):
+        use_case.run(RotationRequest(Watchlist("none", ("NODATA",))))
+    short = _use_case({"T0": market["T0"].iloc[:200], "SPY": market["SPY"]})
+    with pytest.raises(ValueError, match="shorter than the ranking"):
+        short.run(RotationRequest(Watchlist("demo", ("T0",))))

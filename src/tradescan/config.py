@@ -185,6 +185,16 @@ class PortfolioSettings:
 
 
 @dataclass(frozen=True)
+class RotationSettings:
+    label: ClassVar[str] = "Rotation"
+    holdings: int = param(5, minimum=1, maximum=50, step=1, label="Holdings", help="Tickers picked at each rebalance")
+    absolute_lookback: int = param(
+        252, minimum=0, maximum=1000, step=1, label="Absolute momentum", unit="bars",
+        help="A pick whose return over this lookback is at or below 0 goes to the safe asset or cash; 0 turns the check off",
+    )
+
+
+@dataclass(frozen=True)
 class Settings:
     data: DataSettings = field(default_factory=DataSettings)
     account: AccountSettings = field(default_factory=AccountSettings)
@@ -196,6 +206,7 @@ class Settings:
     backtest: BacktestSettings = field(default_factory=BacktestSettings)
     monte_carlo: MonteCarloSettings = field(default_factory=MonteCarloSettings)
     portfolio: PortfolioSettings = field(default_factory=PortfolioSettings)
+    rotation: RotationSettings = field(default_factory=RotationSettings)
 
     def with_overrides(self, overrides: GroupOverrides | None) -> Settings:
         """These settings with validated overrides for one run, e.g. {"risk": {"atr_mult": 3}}."""
