@@ -38,7 +38,7 @@ URL, pinned runs, Compare and the sweep pick them up.
 | O3 | Monte Carlo of trades | done ([#28], [PR #29]) | | |
 | F3 | Portfolio backtest | done ([#30], [PR #31]) | | |
 | R1 | Momentum rotation | done ([#41], [PR #42]) | | F3 |
-| T2 | Pyramiding | done ([#48]) | | F1 |
+| T2 | Pyramiding | done ([#48], [PR #49]) | | F1 |
 | O4 | Walk-forward analysis | planned | M/L | O1 |
 | O6 | Trade journal and server-side run storage | planned | M | C1 |
 
@@ -85,3 +85,4 @@ server instead of only in the browser, with notes per trade and the backtest tha
 [#41]: https://github.com/devTomaszStoklosa/tradescan/issues/41
 [PR #42]: https://github.com/devTomaszStoklosa/tradescan/pull/42
 [#48]: https://github.com/devTomaszStoklosa/tradescan/issues/48
+[PR #49]: https://github.com/devTomaszStoklosa/tradescan/pull/49
