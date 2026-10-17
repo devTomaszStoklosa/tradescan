@@ -230,6 +230,15 @@ describe("runs file", () => {
     expect(runKey(run!)).toBe(runKey(makeRun(1)));
   });
 
+  it("upgrades version 6 portfolio runs, whose score counted the other signals with their defaults", () => {
+    const pins = [makeRun(1), makePortfolioPin(2)];
+    const old = encodeRuns(pins).runs.map((run) => (run.kind === "portfolio" ? { ...run, form: { ...run.form, scoreSignalParams: undefined } } : run));
+    const runs = parseRunsFile(JSON.stringify({ version: 6, runs: old }));
+    expect(runs[1]).toMatchObject({ kind: "portfolio", form: { scoreSignalParams: {} } });
+    expect(runs.map(runKey)).toEqual(pins.map(runKey));
+    expect(() => parseRunsFile(JSON.stringify({ version: RUNS_FILE_VERSION, runs: old }))).toThrow('Run 2 has an invalid "form"');
+  });
+
   it("round-trips portfolio runs next to backtest runs", () => {
     const runs = [makeRun(1), makePortfolioPin(2, {}, { name: "top 5 by momentum" })];
     const decoded = parseRunsFile(JSON.stringify(encodeRuns(runs)));

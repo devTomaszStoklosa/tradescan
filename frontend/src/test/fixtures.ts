@@ -657,6 +657,7 @@ export const portfolioForm: PortfolioForm = {
   filters: ["market"],
   priority: "momentum",
   priorityParams: {},
+  scoreSignalParams: {},
 };
 
 /** A pinned run of `portfolioResult`, changed by `overrides`, with a fixed slot. */

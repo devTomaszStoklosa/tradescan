@@ -951,6 +951,15 @@ export interface components {
             engines?: string[];
             /** @description Which signals go first when more fire than there is room for; omit for the default priority */
             priority?: components["schemas"]["RuleIn"] | null;
+            /**
+             * Score Signal Params
+             * @description Parameters of the signals the score priority counts besides the traded one, by signal name, e.g. {"donchian_breakout": {"period": 55}}; the traded signal's come from params
+             */
+            score_signal_params?: {
+                [key: string]: {
+                    [key: string]: number | number[];
+                };
+            };
         };
         /** PortfolioOut */
         PortfolioOut: {

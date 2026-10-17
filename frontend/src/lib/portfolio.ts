@@ -5,17 +5,19 @@
  * The URL holds the universe (`w=<watchlist>` or `t=<tickers>`), the setup with the Backtest page's keys apart from
  * the ticker (the max positions and the max exposure are settings, `set.portfolio.<name>`), the engines (`eng`), and
  * the priority rule (`prio=<rule>`, left out for the default) with its parameters (`pr.<rule>.<name>`). A rule that
- * scores like the scanner reads the scanner's settings too, with the Scan page's keys (`set.scoring.<name>`, ...).
+ * scores like the scanner reads the scanner's settings too, with the Scan page's keys (`set.scoring.<name>`, ...), and
+ * the parameters of the signals it counts besides the traded one (`ss.<signal>.<name>`).
  */
-import type { ConfigOut, PortfolioIn, RuleIn, SettingsSectionOut } from "../api/client";
+import type { ConfigOut, PortfolioIn, RuleIn, SettingsSectionOut, SignalOut } from "../api/client";
 import { PORTFOLIO_PAGE_SECTIONS, PORTFOLIO_SECTION, SCORE_FIELDS, SCORE_SECTIONS } from "./choices";
-import { hasProblems, readOverrides, writeOverrides, type Overrides, type Values } from "./overrides";
+import { countChanges, hasProblems, pickOwners, readOverrides, signalSpecs, writeOverrides, type Overrides, type Values } from "./overrides";
 import { readBacktestRules, readUniverse, rulesBody, universeBody, writeBacktestForm, writeBacktestSetup, writeUniverse, type BacktestRules, type Universe } from "./params";
 import { findRule, type RuleDefaults } from "./rules";
 import { resetSetup } from "./setup";
 import { writeWatchlistForm } from "./watchlistBacktest";
 
 export const PRIORITY_PREFIX = "pr";
+export const SCORE_SIGNALS_PREFIX = "ss";
 
 export type PortfolioDefaults = RuleDefaults & Pick<ConfigOut, "default_priority" | "priority_rules">;
 
@@ -25,6 +27,8 @@ export interface PortfolioForm extends BacktestRules {
   priority: string;
   /** Parameters of the selected priority rule. */
   priorityParams: Values;
+  /** Parameters of the signals a priority that scores like the scanner counts besides the traded one, by signal. */
+  scoreSignalParams: Overrides;
 }
 
 const engineList = (value: string | null): string[] =>
@@ -33,9 +37,28 @@ const engineList = (value: string | null): string[] =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+/** True when the priority rule scores like the scanner, so it reads the scanner's settings and signals. */
+const readsScan = (priority: string, config: Pick<ConfigOut, "priority_rules">): boolean => Boolean(findRule(config.priority_rules, priority)?.needs_scan);
+
 /** The settings sections the priority rule reads: the scanner's for a rule that scores like the scanner, else none. */
 export const prioritySections = (priority: string, config: Pick<ConfigOut, "priority_rules">): readonly string[] =>
-  findRule(config.priority_rules, priority)?.needs_scan ? SCORE_SECTIONS : [];
+  readsScan(priority, config) ? SCORE_SECTIONS : [];
+
+/** The signals a priority that scores like the scanner counts: those of the traded signal's direction, all until one is chosen. */
+export function scoreSignals(form: Pick<PortfolioForm, "signal">, signals: SignalOut[]): SignalOut[] {
+  const traded = signals.find((signal) => signal.name === form.signal);
+  return traded ? signals.filter((signal) => signal.direction === traded.direction) : signals;
+}
+
+/** The form with score signal parameters only for the signals the score counts besides the traded one, so entries
+ * left from another traded signal go. */
+export const withCountedScoreSignals = (form: PortfolioForm, signals: SignalOut[]): PortfolioForm => ({
+  ...form,
+  scoreSignalParams: pickOwners(
+    form.scoreSignalParams,
+    scoreSignals(form, signals).map((signal) => signal.name).filter((name) => name !== form.signal),
+  ),
+});
 
 /** The settings sections the form offers: the setup's, the portfolio's and those its priority rule reads. */
 export const portfolioSections = (form: Pick<PortfolioForm, "priority">, config: Pick<ConfigOut, "priority_rules">): string[] => [
@@ -58,12 +81,14 @@ function withoutUnreadSettings(settings: Overrides, priority: string, config: Pi
   return Object.fromEntries(Object.entries(settings).filter(([owner]) => !SCORE_SECTIONS.includes(owner) || read.includes(owner)));
 }
 
-/** The form with this priority rule and its parameters; the scanner's settings go when the rule does not read them. */
+/** The form with this priority rule and its parameters; the scanner's settings and signal parameters go when the rule
+ * does not read them. */
 export const choosePriority = (form: PortfolioForm, priority: string, priorityParams: Values, config: Pick<ConfigOut, "priority_rules">): PortfolioForm => ({
   ...form,
   priority,
   priorityParams,
   settings: withoutUnreadSettings(form.settings, priority, config),
+  scoreSignalParams: readsScan(priority, config) ? form.scoreSignalParams : {},
 });
 
 /** Rules the URL leaves out are the server's defaults. */
@@ -78,6 +103,7 @@ export function readPortfolioForm(params: URLSearchParams, defaults: PortfolioDe
     engines: engines.length ? engines : ["vectorized"],
     priority,
     priorityParams: readOverrides(params, PRIORITY_PREFIX)[priority] ?? {},
+    scoreSignalParams: readsScan(priority, defaults) ? readOverrides(params, SCORE_SIGNALS_PREFIX) : {},
   };
 }
 
@@ -88,6 +114,7 @@ export function writePortfolioForm(form: PortfolioForm, defaults?: PortfolioDefa
   for (const [key, value] of writeBacktestSetup(form, defaults, form.engines)) params.append(key, value);
   if (form.priority !== defaults?.default_priority) params.set("prio", form.priority);
   writeOverrides(params, PRIORITY_PREFIX, { [form.priority]: form.priorityParams });
+  writeOverrides(params, SCORE_SIGNALS_PREFIX, form.scoreSignalParams);
   return params;
 }
 
@@ -96,12 +123,18 @@ export function portfolioBody(form: PortfolioForm): PortfolioIn | null {
   const universe = universeBody(form.universe);
   const rules = rulesBody(form);
   if (!universe || !rules || !form.engines.length) return null;
-  return { ...universe, ...rules, engines: form.engines, priority: { name: form.priority, params: form.priorityParams as RuleIn["params"] } };
+  return {
+    ...universe,
+    ...rules,
+    engines: form.engines,
+    priority: { name: form.priority, params: form.priorityParams as RuleIn["params"] },
+    score_signal_params: form.scoreSignalParams as PortfolioIn["score_signal_params"],
+  };
 }
 
-/** How many of the priority rule's choices differ from the defaults. */
+/** How many of the priority rule's choices and the score's signal parameters differ from the defaults. */
 export const priorityChanges = (form: PortfolioForm, defaults: PortfolioDefaults): number =>
-  Number(form.priority !== defaults.default_priority) + Object.keys(form.priorityParams).length;
+  Number(form.priority !== defaults.default_priority) + Object.keys(form.priorityParams).length + countChanges(form.scoreSignalParams);
 
 /** True when the priority rule is unknown or one of its parameters is invalid. */
 export function hasPriorityProblems(form: PortfolioForm, config: Pick<ConfigOut, "priority_rules">): boolean {
@@ -109,17 +142,31 @@ export function hasPriorityProblems(form: PortfolioForm, config: Pick<ConfigOut,
   return !rule || hasProblems({ [rule.name]: form.priorityParams }, { [rule.name]: rule.params });
 }
 
-/** The form with the setup and the priority rule back at their defaults; the universe and the engines stay. */
+/** True when a score signal parameter names an unknown signal or parameter, or its value is invalid. */
+export const hasScoreSignalProblems = (form: Pick<PortfolioForm, "scoreSignalParams">, signals: SignalOut[]): boolean =>
+  hasProblems(form.scoreSignalParams, signalSpecs(signals));
+
+/** The form with the setup, the priority rule and the score's signal parameters back at their defaults; the universe
+ * and the engines stay. */
 export const resetPortfolio = (form: PortfolioForm, config: ConfigOut): PortfolioForm => ({
   ...resetSetup(form, config),
   priority: config.default_priority,
   priorityParams: {},
+  scoreSignalParams: {},
 });
 
-/** The setup without what only a portfolio has: the universe, the engines, the priority and the settings of the
- * portfolio and of the scanner's score. */
+/** The setup without what only a portfolio has: the universe, the engines, the priority, the settings of the
+ * portfolio and of the scanner's score, and the score's signal parameters. */
 function setupOf(form: PortfolioForm): BacktestRules {
-  const { universe: _universe, engines: _engines, priority: _priority, priorityParams: _priorityParams, settings, ...rules } = form;
+  const {
+    universe: _universe,
+    engines: _engines,
+    priority: _priority,
+    priorityParams: _priorityParams,
+    scoreSignalParams: _scoreSignalParams,
+    settings,
+    ...rules
+  } = form;
   const setupSettings = Object.fromEntries(
     Object.entries(settings).filter(([owner]) => owner !== PORTFOLIO_SECTION && !SCORE_SECTIONS.includes(owner)),
   );

@@ -3,14 +3,15 @@
  * `{version, runs}`, with each equity curve as two arrays (dates, values rounded to cents),
  * about half the size of one object per point. Older files are upgraded when read: version 1 is from
  * before entry and exit rules, version 2 from before out-of-sample results, version 3 from before entry filters,
- * version 4 from before Monte Carlo results, version 5 from before portfolio runs.
+ * version 4 from before Monte Carlo results, version 5 from before portfolio runs, version 6 from before the score
+ * priority's signal parameters.
  */
 import type { AppliedRuleOut, MetricsOut } from "../api/client";
 import { formatTemplate, type Overrides } from "./overrides";
 import { moveLegacyExitSettings } from "./rules";
 import { MAX_RUNS, type PinnedBacktestRun, type PinnedPortfolioRun, type PinnedRun, type RunKind } from "./runs";
 
-export const RUNS_FILE_VERSION = 6;
+export const RUNS_FILE_VERSION = 7;
 
 interface StoredEquity {
   time: string[];
@@ -81,7 +82,8 @@ const portfolioForm: Check = (value) =>
   isRecord(value) &&
   universe(value.universe) &&
   text(value.priority) &&
-  recordOf(paramValue)(value.priorityParams);
+  recordOf(paramValue)(value.priorityParams) &&
+  recordOf(recordOf(paramValue))(value.scoreSignalParams);
 
 const split: Check = (value) =>
   isRecord(value) &&
@@ -235,12 +237,18 @@ const upgradeV4 = (value: unknown): unknown => (isRecord(value) ? { ...value, mo
 
 const upgradeV5 = (value: unknown): unknown => (isRecord(value) ? { ...value, kind: "backtest" } : value);
 
+// --- Version 6: the score priority counted the signals other than the traded one with their defaults ------
+
+const upgradeV6 = (value: unknown): unknown =>
+  isRecord(value) && value.kind === "portfolio" && isRecord(value.form) ? { ...value, form: { ...value.form, scoreSignalParams: {} } } : value;
+
 const UPGRADES: Record<number, (value: unknown) => unknown> = {
-  1: (value) => upgradeV5(upgradeV4(upgradeV3(upgradeV2(upgradeV1(value))))),
-  2: (value) => upgradeV5(upgradeV4(upgradeV3(upgradeV2(value)))),
-  3: (value) => upgradeV5(upgradeV4(upgradeV3(value))),
-  4: (value) => upgradeV5(upgradeV4(value)),
-  5: upgradeV5,
+  1: (value) => upgradeV6(upgradeV5(upgradeV4(upgradeV3(upgradeV2(upgradeV1(value)))))),
+  2: (value) => upgradeV6(upgradeV5(upgradeV4(upgradeV3(upgradeV2(value))))),
+  3: (value) => upgradeV6(upgradeV5(upgradeV4(upgradeV3(value)))),
+  4: (value) => upgradeV6(upgradeV5(upgradeV4(value))),
+  5: (value) => upgradeV6(upgradeV5(value)),
+  6: upgradeV6,
   [RUNS_FILE_VERSION]: (value) => value,
 };
 

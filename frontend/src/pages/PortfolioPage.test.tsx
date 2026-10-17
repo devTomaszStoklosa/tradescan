@@ -90,7 +90,7 @@ describe("PortfolioPage", () => {
     await userEvent.selectOptions(priority, "score");
     await userEvent.click(screen.getByText("Scan score settings"));
     expect(screen.queryByLabelText("Minimum score")).not.toBeInTheDocument(); // the scan settings the score does not read
-    expect(screen.getByText("Signal weights")).toBeInTheDocument();
+    expect(within(screen.getByText("Scan score settings").closest("details")!).getByText("Signal parameters")).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("Fresh within (bars)"), "5");
     await userEvent.type(screen.getByLabelText("Daily trend bonus"), "2");
     await userEvent.click(screen.getByRole("button", { name: "Run portfolio" }));
@@ -104,6 +104,29 @@ describe("PortfolioPage", () => {
     await userEvent.selectOptions(priority, "momentum");
     expect(screen.queryByText("Scan score settings")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reset 1 changed" })).toBeInTheDocument(); // only the priority: its settings went with it
+  });
+
+  it("sets the parameters of the signals the score counts, and only the weight of the traded one", async () => {
+    const router = renderPage("/portfolio?w=us_large&signal=connors_rsi2_long&eng=vectorized&prio=score");
+    await screen.findByRole("button", { name: "Run portfolio" });
+    await userEvent.click(screen.getByText("Scan score settings"));
+    const traded = screen.getByText("Parameters from the setup").closest("details")!;
+    expect(within(traded).getByLabelText("Score weight")).toBeInTheDocument();
+    expect(within(traded).queryByLabelText(/Oversold/)).not.toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText("Channel length (bars)"), "55");
+    expect(screen.getByRole("button", { name: "Reset 2 changed" })).toBeInTheDocument(); // the priority and the channel length
+    await userEvent.click(screen.getByRole("button", { name: "Run portfolio" }));
+    await waitFor(() =>
+      expect(router.state.location.search).toBe("?w=us_large&signal=connors_rsi2_long&eng=vectorized&prio=score&ss.donchian_breakout.period=55"),
+    );
+    await waitFor(() => expect(bodies().at(-1)).toMatchObject({ score_signal_params: { donchian_breakout: { period: 55 } } }));
+
+    // Traded now, the breakout's parameters come from the setup, so the score's entry for it goes.
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: /^Signal/ }), "donchian_breakout");
+    expect(screen.getByRole("button", { name: "Reset 1 changed" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Run portfolio" }));
+    await waitFor(() => expect(router.state.location.search).toBe("?w=us_large&signal=donchian_breakout&eng=vectorized&prio=score"));
   });
 
   it("warns that Cerebro is slow on a large universe", async () => {
