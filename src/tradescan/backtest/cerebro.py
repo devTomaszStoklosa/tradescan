@@ -3,6 +3,10 @@
 Signals and rule levels are precomputed by the same code the pandas engine uses and read by bar
 index, so every rule is defined once. Cerebro adds realistic order handling: real market, stop and
 limit orders, the stop and target linked as one-cancels-other, percentage commission and slippage.
+
+As in the vectorized engine, cash never limits a fill: the commission scheme's leverage is so high that a
+purchase takes almost no cash, which leaves the portfolio value (`getvalue`) unchanged. A pyramided position can
+hold several units of up to `max_position_pct` of equity each.
 """
 
 from __future__ import annotations
@@ -14,15 +18,17 @@ try:
 except ImportError as error:  # pragma: no cover - depends on the optional extra
     raise ImportError("The cerebro engine needs backtrader: pip install -e .[cerebro]") from error
 
-from tradescan.backtest.base import BacktestConfig, BacktestResult, ExitReason, Trade
+from tradescan.backtest.base import BacktestConfig, BacktestResult, ExitReason, Fill, Trade
 from tradescan.backtest.entries import OrderType
 from tradescan.backtest.exits import ExitOrders, OpenTrade
+from tradescan.backtest.pyramid import Pyramiding, Units
 from tradescan.backtest.rules import Bars
 from tradescan.backtest.trade_rules import EntryPlan, PreparedRules, TradeRules
 from tradescan.data.schema import OHLCV_COLUMNS
 from tradescan.signals.base import Direction, Signal
 
 _EXEC_TYPES = {OrderType.MARKET: bt.Order.Market, OrderType.STOP: bt.Order.Stop, OrderType.LIMIT: bt.Order.Limit}
+LEVERAGE = 1e9  # buying takes 1e-9 of the price in cash, so cash never runs out
 
 
 class TickerOrders:
@@ -30,13 +36,26 @@ class TickerOrders:
     tickers too: the strategy calls `update` at every close of the ticker and forwards its order notifications.
 
     Notifications carry clones of orders, so orders are matched by `ref`, never by identity.
+
+    With pyramiding, the stop order for the next unit is submitted after the exit orders and linked to them as one
+    one-cancels-other group. The broker tries orders in the order they were submitted, so an exit on a bar cancels
+    that bar's add, and an add cancels the exit orders only after they were tried; they are then submitted again at
+    the close, for the new size.
     """
 
-    def __init__(self, strategy: bt.Strategy, data: bt.AbstractDataBase, rules: PreparedRules, direction: Direction) -> None:
+    def __init__(
+        self,
+        strategy: bt.Strategy,
+        data: bt.AbstractDataBase,
+        rules: PreparedRules,
+        direction: Direction,
+        pyramid: Pyramiding = Pyramiding(),
+    ) -> None:
         self._strategy = strategy
         self._data = data
         self._rules = rules
         self._direction = direction
+        self._pyramid = pyramid
         self.trades: list[Trade] = []
         self._reset()
 
@@ -44,11 +63,13 @@ class TickerOrders:
         self._entry_order = None
         self._plan: EntryPlan | None = None
         self._signal: tuple[int, pd.Timestamp] | None = None  # (bar index, date)
-        self._entry: tuple[pd.Timestamp, float, float, float] | None = None  # (date, price, size, commission)
+        self._fills: list[tuple[pd.Timestamp, float, float, float]] = []  # (date, price, size, commission) per unit
         self._tracker = None
+        self._units: Units | None = None
         self._exit_orders: list = []
         self._exit_reasons: dict[int, str] = {}
-        self._levels: tuple | None = None  # the levels and reasons of the live exit orders
+        self._add_order = None
+        self._levels: tuple | None = None  # the levels and reasons of the live exit orders, the add level and the size
         self._closing = False
 
     @property
@@ -98,16 +119,19 @@ class TickerOrders:
             self._exit_reasons[self._strategy.close(data=self._data).ref] = orders.at_open
             self._closing = True
             return
-        levels = (orders.stop, orders.stop_reason, orders.target, orders.target_reason)
+        add = self._units.add_level() if self._units is not None else None
+        levels = (orders.stop, orders.stop_reason, orders.target, orders.target_reason, add, abs(self.position.size))
         if levels != self._levels:
             self._cancel_exits()
-            self._submit_exits(orders)
+            self._submit_exits(orders, add)
             self._levels = levels
 
-    def _submit_exits(self, orders: ExitOrders) -> None:
-        """The stop first, so it is checked first on a bar that touches both, and the target linked to it."""
+    def _submit_exits(self, orders: ExitOrders, add: float | None) -> None:
+        """The stop first, so it is checked first on a bar that touches both, the target linked to it, and last the
+        stop order for the next unit, linked to both."""
         size = abs(self.position.size)
-        order = self._strategy.sell if self._direction is Direction.LONG else self._strategy.buy
+        long = self._direction is Direction.LONG
+        order = self._strategy.sell if long else self._strategy.buy
         stop = None
         if orders.stop is not None:
             stop = order(data=self._data, size=size, exectype=bt.Order.Stop, price=orders.stop)
@@ -117,12 +141,21 @@ class TickerOrders:
             target = order(data=self._data, size=size, exectype=bt.Order.Limit, price=orders.target, oco=stop)
             self._exit_orders.append(target)
             self._exit_reasons[target.ref] = orders.target_reason
+        if add is not None:
+            assert self._plan is not None
+            adder = self._strategy.buy if long else self._strategy.sell
+            self._add_order = adder(data=self._data, size=self._plan.size, exectype=bt.Order.Stop, price=add, oco=stop)
 
     def _cancel_exits(self) -> None:
+        """Cancels the exit orders and the add order; cancelling one of a linked group cancels them all, and a second
+        cancel is a no-op."""
         for order in self._exit_orders:
-            self._strategy.cancel(order)  # cancelling one of a linked pair cancels both; a second cancel is a no-op
+            self._strategy.cancel(order)
             self._exit_reasons.pop(order.ref, None)
         self._exit_orders = []
+        if self._add_order is not None:
+            self._strategy.cancel(self._add_order)
+            self._add_order = None
 
     def notify_order(self, order: bt.Order) -> None:
         is_entry = self._entry_order is not None and order.ref == self._entry_order.ref
@@ -132,12 +165,20 @@ class TickerOrders:
         if order.status != order.Completed:
             return
         executed = order.executed
+        fill = (pd.Timestamp(bt.num2date(executed.dt)), executed.price, abs(executed.size), executed.comm)
         if is_entry:
             assert self._plan is not None
-            self._entry = (pd.Timestamp(bt.num2date(executed.dt)), executed.price, abs(executed.size), executed.comm)
+            self._fills = [fill]
             plan = self._plan
             trade = OpenTrade(self._direction, self._index(), executed.price, plan.reference, plan.stop, plan.risk)
-            self._tracker = self._rules.track(trade)
+            self._units = self._pyramid.start(trade, plan.atr) if self._pyramid.enabled else None
+            self._tracker = self._rules.track(trade, (self._units,) if self._units is not None else ())
+            return
+        if self._add_order is not None and order.ref == self._add_order.ref:
+            assert self._units is not None
+            self._fills.append(fill)
+            self._units.add(self._index(), executed.price)
+            self._add_order = None  # the add cancelled the exit orders, which the next close submits again
             return
         reason = self._exit_reasons.get(order.ref)
         if reason is not None:
@@ -146,13 +187,16 @@ class TickerOrders:
 
     def finish(self) -> None:
         """At the end of the run: a position still open is marked to the ticker's last close."""
-        if self.position and self._entry is not None:
+        if self.position and self._fills:
             last_date = pd.Timestamp(self._data.datetime.datetime(0))
             self._record(last_date, self._data.close[0], 0.0, ExitReason.OPEN)
 
     def _record(self, exit_date: pd.Timestamp, exit_price: float, exit_commission: float, reason: str) -> None:
-        assert self._plan is not None and self._entry is not None and self._signal is not None
-        entry_date, entry_price, size, entry_commission = self._entry
+        assert self._plan is not None and self._fills and self._signal is not None
+        entry_date, _, unit_size, _ = self._fills[0]
+        size = sum(fill[2] for fill in self._fills)
+        entry_price = sum(fill[1] * fill[2] for fill in self._fills) / size
+        entry_commission = sum(fill[3] for fill in self._fills)
         direction = self._direction
         pnl = direction.sign * size * (exit_price - entry_price) - entry_commission - exit_commission
         self.trades.append(
@@ -165,8 +209,9 @@ class TickerOrders:
                 exit_price=exit_price,
                 size=size,
                 pnl=pnl,
-                r_multiple=pnl / (size * self._plan.risk),
+                r_multiple=pnl / (unit_size * self._plan.risk),
                 exit_reason=reason,
+                adds=tuple(Fill(date, price) for date, price, _, _ in self._fills[1:]),
             )
         )
 
@@ -177,7 +222,7 @@ class _RulesStrategy(bt.Strategy):
     def __init__(self) -> None:
         self.equity_dates: list[pd.Timestamp] = []
         self.equity_values: list[float] = []
-        self._ticker = TickerOrders(self, self.data, self.p.rules, self.p.direction)
+        self._ticker = TickerOrders(self, self.data, self.p.rules, self.p.direction, Pyramiding.of(self.p.config))
 
     @property
     def trades(self) -> list[Trade]:
@@ -213,7 +258,7 @@ class CerebroEngine:
         cerebro.adddata(bt.feeds.PandasData(dataname=df.loc[:, list(OHLCV_COLUMNS)], openinterest=None), name=ticker)
         cerebro.addstrategy(_RulesStrategy, events=events, rules=prepared, direction=signal.direction, config=config)
         cerebro.broker.setcash(config.initial_equity)
-        cerebro.broker.setcommission(commission=config.commission_pct / 100.0)
+        cerebro.broker.setcommission(commission=config.commission_pct / 100.0, leverage=LEVERAGE)
         cerebro.broker.set_slippage_perc(config.slippage_pct / 100.0)
         strategy = cerebro.run()[0]
 

@@ -90,6 +90,7 @@ class EntryPlan:
     risk: float  # per share
     size: float
     valid_bars: int
+    atr: float  # of the signal bar, which sized the order
 
 
 @dataclass(frozen=True, eq=False)
@@ -115,12 +116,13 @@ class PreparedRules:
         size = position_size(equity, reference, risk, config.risk_pct, config.max_position_pct, config.lot_size)
         if size <= 0:
             return None
-        return EntryPlan(self.entry.type, level, reference, stop, risk, size, self.entry.valid_bars)
+        return EntryPlan(self.entry.type, level, reference, stop, risk, size, self.entry.valid_bars, atr)
 
-    def track(self, trade: OpenTrade) -> ExitTracker:
-        """The exit orders of one trade: the initial stop plus every exit rule."""
+    def track(self, trade: OpenTrade, extra: tuple[ExitTracker, ...] = ()) -> ExitTracker:
+        """The exit orders of one trade: the initial stop plus every exit rule, and `extra` trackers such as the
+        stop that pyramiding moves."""
         initial = FixedOrders(ExitOrders(stop=trade.stop))
-        return CombinedExits(self.direction, (initial, *(start(trade) for start in self.exits)))
+        return CombinedExits(self.direction, (initial, *(start(trade) for start in self.exits), *extra))
 
 
 @dataclass(frozen=True)

@@ -26,14 +26,12 @@ except ImportError as error:  # pragma: no cover - depends on the optional extra
 
 from tradescan.backtest.allocation import Candidate, PortfolioConfig, allocate
 from tradescan.backtest.base import BacktestConfig
-from tradescan.backtest.cerebro import TickerOrders
+from tradescan.backtest.cerebro import LEVERAGE, TickerOrders
 from tradescan.backtest.portfolio import PortfolioResult, PortfolioSetup, PortfolioTrade, prepare
 from tradescan.backtest.priority import PriorityRule
 from tradescan.backtest.trade_rules import TradeRules
 from tradescan.data.schema import OHLCV_COLUMNS
 from tradescan.signals.base import Signal
-
-_LEVERAGE = 1e9  # buying takes 1e-9 of the price in cash, so cash never runs out
 
 
 class _Broker(bt.brokers.BackBroker):
@@ -133,7 +131,7 @@ class CerebroPortfolioEngine:
             cerebro.adddata(bt.feeds.PandasData(dataname=df.loc[:, list(OHLCV_COLUMNS)], openinterest=None), name=ticker)
         cerebro.addstrategy(_PortfolioStrategy, setup=setup, config=config, portfolio=portfolio)
         cerebro.broker.setcash(config.initial_equity)
-        cerebro.broker.setcommission(commission=config.commission_pct / 100.0, leverage=_LEVERAGE)
+        cerebro.broker.setcommission(commission=config.commission_pct / 100.0, leverage=LEVERAGE)
         cerebro.broker.set_slippage_perc(config.slippage_pct / 100.0)
         strategy = cerebro.run()[0]
 

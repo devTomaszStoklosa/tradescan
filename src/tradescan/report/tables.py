@@ -250,6 +250,8 @@ def trades_to_frame(trades: Sequence[Trade], engine: str = "") -> pd.DataFrame:
     frame["direction"] = frame["direction"].astype(str)
     for column in ("signal_date", "entry_date", "exit_date"):
         frame[column] = pd.to_datetime(frame[column]).dt.date.astype(str)
+    frame["units"] = [trade.units for trade in trades]
+    frame["adds"] = ["; ".join(f"{fill.date.date().isoformat()} {fill.price:g}" for fill in trade.adds) for trade in trades]
     if engine:
         frame.insert(0, "engine", engine)
     return frame

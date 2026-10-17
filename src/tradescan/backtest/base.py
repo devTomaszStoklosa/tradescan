@@ -8,7 +8,9 @@
 * exit orders are placed on the entry bar and checked from the next bar (backtrader bracket
   semantics); exit rules can move them at every close or ask to exit at the next open,
 * on a bar that touches both, the stop wins over the target; a gap through a level fills at the open,
-* fill prices follow backtrader's percentage slippage, which never moves a fill outside the bar.
+* fill prices follow backtrader's percentage slippage, which never moves a fill outside the bar,
+* with pyramiding (`max_units` above 1) a position adds units by stop orders `add_every_atr` ATRs apart and
+  moves its stop with every add (see `pyramid`); on a bar where the position exits, no unit is added.
 """
 
 from __future__ import annotations
@@ -36,6 +38,8 @@ class BacktestConfig:
     slippage_pct: float = 0.05
     bars_per_year: int = 252
     oos_pct: float = 30.0  # the last part of the history, reported separately (see `oos`)
+    max_units: int = 1  # the first entry plus the adds; 1 is no pyramiding (see `pyramid`)
+    add_every_atr: float = 0.5  # distance between units, in ATRs of the signal bar
 
 
 class ExitReason:
@@ -47,7 +51,16 @@ class ExitReason:
 
 
 @dataclass(frozen=True)
+class Fill:
+    date: pd.Timestamp
+    price: float
+
+
+@dataclass(frozen=True)
 class Trade:
+    """One position. With pyramiding it holds every unit: `entry_date` is the first unit's fill, `entry_price`
+    the average fill of the units, `size` and `pnl` all units', and `adds` the fills after the first."""
+
     direction: Direction
     signal_date: pd.Timestamp
     entry_date: pd.Timestamp
@@ -56,8 +69,13 @@ class Trade:
     exit_price: float
     size: float
     pnl: float  # net of commissions
-    r_multiple: float  # pnl / planned risk
+    r_multiple: float  # pnl / planned risk (of one unit)
     exit_reason: str
+    adds: tuple[Fill, ...] = ()
+
+    @property
+    def units(self) -> int:
+        return 1 + len(self.adds)
 
     @property
     def is_closed(self) -> bool:
