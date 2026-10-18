@@ -1,8 +1,3 @@
-cd C:\Users\Tomasz\Desktop\Repo\Backtrader
-npm --prefix frontend install
-npm --prefix frontend run build
-tradescan serve
-
 # tradescan
 
 Trading signal scanner for daily bars: **vectorized pandas signals on yfinance data**, with
