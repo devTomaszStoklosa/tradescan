@@ -40,7 +40,7 @@ URL, pinned runs, Compare and the sweep pick them up.
 | R1 | Momentum rotation | done ([#41], [PR #42]) | | F3 |
 | T2 | Pyramiding | done ([#48], [PR #49]) | | F1 |
 | O4 | Walk-forward analysis | done ([#52], [PR #53]) | | O1 |
-| O6 | Trade journal and server-side run storage | planned | M | C1 |
+| O6 | Trade journal and server-side run storage | done ([#55]) | | C1 |
 
 Sizes: S is a few rule or signal classes, M touches the engines, API or UI, L is a new engine or page.
 
@@ -51,8 +51,7 @@ which rotation (R1) needs. Pyramiding (T2), walk-forward analysis (O4) and the t
 
 ## Open items
 
-**O6 · Trade journal and server-side run storage.** Keep pinned runs and real trades in SQLite on the
-server instead of only in the browser, with notes per trade and the backtest that suggested it.
+None: every item above is done.
 
 [#4]: https://github.com/devTomaszStoklosa/tradescan/issues/4
 [PR #6]: https://github.com/devTomaszStoklosa/tradescan/pull/6
@@ -84,3 +83,4 @@ server instead of only in the browser, with notes per trade and the backtest tha
 [PR #49]: https://github.com/devTomaszStoklosa/tradescan/pull/49
 [#52]: https://github.com/devTomaszStoklosa/tradescan/issues/52
 [PR #53]: https://github.com/devTomaszStoklosa/tradescan/pull/53
+[#55]: https://github.com/devTomaszStoklosa/tradescan/issues/55
