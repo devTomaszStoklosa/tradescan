@@ -1,5 +1,5 @@
 /** Small presentational building blocks shared by every page. */
-import type { ComponentProps, CSSProperties, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
+import type { ComponentProps, CSSProperties, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 import type { Direction } from "../api/client";
 
@@ -65,6 +65,10 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
 
 export function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return <select className={cx(control, className)} {...props} />;
+}
+
+export function TextArea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea className={cx(control, "h-auto py-2", className)} {...props} />;
 }
 
 /** Number input bound to `number | null`; empty means "server default". */

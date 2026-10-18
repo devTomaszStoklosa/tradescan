@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AccountProvider } from "../state/account";
 import { PinnedRunsProvider } from "../state/pinnedRuns";
+import { MemoryRunStore } from "../test/runStore";
 import { config, makePortfolioRun, portfolioResult, signals, watchlists } from "../test/fixtures";
 import { PortfolioPage } from "./PortfolioPage";
 
@@ -13,7 +14,10 @@ vi.mock("../components/charts/EquityChart", () => ({ EquityChart: () => null }))
 
 let result: unknown = portfolioResult;
 
+let store = new MemoryRunStore();
+
 function renderPage(path: string) {
+  store = new MemoryRunStore();
   const responses: Record<string, unknown> = { "/config": config, "/signals": signals, "/watchlists": watchlists, "/portfolio-backtest": result };
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);
@@ -30,7 +34,7 @@ function renderPage(path: string) {
   );
   render(
     <AccountProvider>
-      <PinnedRunsProvider>
+      <PinnedRunsProvider store={store}>
         <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
           <RouterProvider router={router} />
         </QueryClientProvider>
@@ -173,13 +177,15 @@ describe("PortfolioPage", () => {
   });
 });
 
-const storedRuns = () => (JSON.parse(localStorage.getItem("tradescan.runs") ?? '{"runs":[]}') as { runs: Record<string, unknown>[] }).runs;
+const storedRuns = () => store.runs();
 
 describe("PortfolioPage pinning", () => {
   it("pins the shown run with its universe, portfolio settings and priority, and unpins it", async () => {
     renderPage(RESULT_URL);
-    await userEvent.click(await screen.findByRole("button", { name: "Pin run" }));
-    expect(storedRuns()).toHaveLength(1);
+    const pin = await screen.findByRole("button", { name: "Pin run" });
+    await waitFor(() => expect(pin).toBeEnabled());
+    await userEvent.click(pin);
+    await waitFor(() => expect(storedRuns()).toHaveLength(1));
     expect(storedRuns()[0]).toMatchObject({
       kind: "portfolio",
       name: "us_large connors_rsi2_long",
@@ -193,11 +199,11 @@ describe("PortfolioPage pinning", () => {
       monteCarlo: null,
       form: { universe: { watchlist: "us_large", tickers: "" }, engines: ["vectorized"], priority: "momentum", settings: { portfolio: { max_positions: 5 } } },
     });
-    expect(storedRuns()[0]).not.toHaveProperty("trades");
+    expect(store.records[0]?.snapshot).not.toHaveProperty("trades");
     expect(screen.getByRole("link", { name: "Compare 1 pinned →" })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Unpin run" }));
-    expect(storedRuns()).toHaveLength(0);
+    await waitFor(() => expect(storedRuns()).toHaveLength(0));
   });
 
   it("pins the engine that is shown", async () => {
@@ -205,6 +211,7 @@ describe("PortfolioPage pinning", () => {
     renderPage(RESULT_URL.replace("eng=vectorized", "eng=vectorized,cerebro"));
     await userEvent.click(await screen.findByRole("radio", { name: "cerebro" }));
     await userEvent.click(screen.getByRole("button", { name: "Pin cerebro run" }));
+    await waitFor(() => expect(storedRuns()).toHaveLength(1));
     expect(storedRuns()[0]).toMatchObject({ engine: "cerebro", form: { engines: ["cerebro"] } });
     result = portfolioResult;
   });

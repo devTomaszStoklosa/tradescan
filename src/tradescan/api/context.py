@@ -13,6 +13,8 @@ from tradescan.config import Settings
 from tradescan.scoring import Scorer
 from tradescan.services import SignalFilter, UseCases
 from tradescan.signals.registry import SignalRegistry
+from tradescan.storage.runs import PinnedRunStore
+from tradescan.storage.trades import TradeJournal
 from tradescan.watchlist import Watchlist, available_watchlists, from_tickers, load_watchlist
 
 
@@ -23,6 +25,8 @@ class ApiContext:
     registry: SignalRegistry
     scorer: Scorer
     watchlists_dir: Path
+    runs: PinnedRunStore
+    journal: TradeJournal
 
     def watchlist_names(self) -> list[str]:
         return available_watchlists(self.watchlists_dir)

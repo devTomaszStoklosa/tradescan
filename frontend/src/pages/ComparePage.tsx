@@ -9,7 +9,7 @@ import { OutOfSampleTable } from "../components/OutOfSample";
 import { ParameterDiffTable } from "../components/ParameterDiffTable";
 import { PortfolioStatsTable } from "../components/PortfolioStats";
 import { RunCard, RunLabel } from "../components/RunCard";
-import { Button, EmptyState, ErrorBox, PageHeader, Panel, Segmented } from "../components/ui";
+import { Button, EmptyState, ErrorBox, Loading, PageHeader, Panel, Segmented } from "../components/ui";
 import { parameterRows, returnCurve } from "../lib/compare";
 import { downloadFile } from "../lib/csv";
 import { methodsOf, PREFERRED_METHOD } from "../lib/monteCarlo";
@@ -36,7 +36,7 @@ function describeImport({ added, duplicates, overflow }: MergeResult): string {
 }
 
 export function ComparePage() {
-  const { runs, error, update, remove, clear, importRuns, exportRuns } = usePinnedRuns();
+  const { runs, loading, error, notice, update, remove, clear, importRuns, exportRuns } = usePinnedRuns();
   // Labels and units only; without the server the page still works with the stored runs.
   const config = useConfig();
   const signals = useSignals();
@@ -71,7 +71,7 @@ export function ComparePage() {
     event.target.value = "";
     if (!file) return;
     try {
-      setMessage({ ok: true, text: describeImport(importRuns(await file.text())) });
+      setMessage({ ok: true, text: describeImport(await importRuns(await file.text())) });
     } catch (problem) {
       setMessage({ ok: false, text: `Import failed: ${problem instanceof Error ? problem.message : String(problem)}` });
     }
@@ -87,7 +87,7 @@ export function ComparePage() {
     <>
       <PageHeader
         title="Compare"
-        subtitle={`Pinned backtest and portfolio runs side by side, up to ${MAX_RUNS}. They are kept in this browser only: export them as a backup.`}
+        subtitle={`Pinned backtest and portfolio runs side by side, up to ${MAX_RUNS}. They are kept on the tradescan server: export them as a backup.`}
         actions={
           <>
             <input ref={fileInput} type="file" accept="application/json,.json" aria-label="Runs file to import" className="hidden" onChange={onImport} />
@@ -102,12 +102,19 @@ export function ComparePage() {
         }
       />
       {error && <ErrorBox error={error} />}
+      {notice && (
+        <p role="status" className="text-sm text-muted">
+          {notice}
+        </p>
+      )}
       {message && (
         <p role="status" className={`text-sm ${message.ok ? "text-muted" : "text-down"}`}>
           {message.text}
         </p>
       )}
-      {!runs.length ? (
+      {loading ? (
+        <Loading message="Loading pinned runs…" />
+      ) : !runs.length ? (
         <EmptyState title="No pinned runs yet">
           Run a <Link to="/backtest" className="text-accent hover:underline">backtest</Link> or a{" "}
           <Link to="/portfolio" className="text-accent hover:underline">portfolio</Link> and press <strong>Pin run</strong> to keep it here, then change

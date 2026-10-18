@@ -21,6 +21,10 @@ export type EngineRunOut = Schemas["EngineRunOut"];
 export type Family = Schemas["Family"];
 export type FilterRuleOut = Schemas["FilterRuleOut"];
 export type HitOut = Schemas["HitOut"];
+export type JournalOut = Schemas["JournalOut"];
+export type JournalSummaryOut = Schemas["JournalSummaryOut"];
+export type JournalTradeIn = Schemas["JournalTradeIn"];
+export type JournalTradeOut = Schemas["JournalTradeOut"];
 export type MetricsOut = Schemas["MetricsOut"];
 export type MetricSpreadOut = Schemas["MetricSpreadOut"];
 export type MonteCarloMethodOut = Schemas["MonteCarloMethodOut"];
@@ -31,6 +35,9 @@ export type ParamSpecOut = Schemas["ParamSpecOut"];
 export type PercentilesOut = Schemas["PercentilesOut"];
 export type Period = Schemas["Period"];
 export type PickOut = Schemas["PickOut"];
+export type PinnedRunIn = Schemas["PinnedRunIn"];
+export type PinnedRunOut = Schemas["PinnedRunOut"];
+export type PinnedRunPatchIn = Schemas["PinnedRunPatchIn"];
 export type PeriodSummaryOut = Schemas["PeriodSummaryOut"];
 export type Point = Schemas["Point"];
 export type PooledTradesOut = Schemas["PooledTradesOut"];
@@ -54,6 +61,7 @@ export type ScanOut = Schemas["ScanOut"];
 export type SettingsSectionOut = Schemas["SettingsSectionOut"];
 export type SignalOut = Schemas["SignalOut"];
 export type SplitOut = Schemas["SplitOut"];
+export type SuggestingRun = Schemas["SuggestingRun"];
 export type SweepAxisIn = Schemas["SweepAxisIn"];
 export type SweepAxisOut = Schemas["SweepAxisOut"];
 export type SweepCellOut = Schemas["SweepCellOut"];
@@ -118,10 +126,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(response.status, message);
   }
-  return (await response.json()) as T;
+  // 204 No Content: a removal has nothing to return.
+  return (response.status === 204 ? undefined : await response.json()) as T;
 }
 
-const post = <T>(path: string, body: unknown) => request<T>(path, { method: "POST", body: JSON.stringify(body) });
+const send = <T>(method: string, path: string, body?: unknown) =>
+  request<T>(path, { method, body: body === undefined ? undefined : JSON.stringify(body) });
+
+const post = <T>(path: string, body: unknown) => send<T>("POST", path, body);
 
 export const api = {
   config: () => request<ConfigOut>("/config"),
@@ -136,6 +148,15 @@ export const api = {
   portfolioBacktest: (body: PortfolioIn) => post<PortfolioOut>("/portfolio-backtest", body),
   rotationBacktest: (body: RotationIn) => post<RotationOut>("/rotation-backtest", body),
   chart: (body: ChartIn) => post<ChartOut>("/chart", body),
+  runs: () => request<PinnedRunOut[]>("/runs"),
+  pinRun: (body: PinnedRunIn) => post<PinnedRunOut>("/runs", body),
+  updateRun: (id: string, body: PinnedRunPatchIn) => send<PinnedRunOut>("PATCH", `/runs/${encodeURIComponent(id)}`, body),
+  unpinRun: (id: string) => send<void>("DELETE", `/runs/${encodeURIComponent(id)}`),
+  clearRuns: () => send<void>("DELETE", "/runs"),
+  journal: () => request<JournalOut>("/journal"),
+  logTrade: (body: JournalTradeIn) => post<JournalTradeOut>("/journal/trades", body),
+  replaceTrade: (id: number, body: JournalTradeIn) => send<JournalTradeOut>("PUT", `/journal/trades/${id}`, body),
+  deleteTrade: (id: number) => send<void>("DELETE", `/journal/trades/${id}`),
 };
 
 export type Api = typeof api;

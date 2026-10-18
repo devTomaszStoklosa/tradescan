@@ -219,3 +219,26 @@ def test_errors_are_reported_not_raised(provider):
     assert cli.main(["backtest", "AAA", "golden_cross", "--exits", "time", "--target-r", "3"]) == 2
     assert cli.main(["backtest", "AAA", "golden_cross", "--exits", "nope"]) == 2
     assert cli.main(["scan", "--watchlist", "missing-list"]) == 2
+
+
+def test_serve_keeps_runs_and_the_journal_in_the_db_file(provider, monkeypatch, tmp_path):
+    uvicorn = pytest.importorskip("uvicorn")
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    served = []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **options: served.append(app))
+    path = tmp_path / "journal" / "trades.db"
+    trade = {"ticker": "AAA", "direction": "long", "opened": "2026-03-02", "entry_price": 10.0, "quantity": 5.0}
+    assert cli.main(["serve", "--static", str(tmp_path / "no-ui"), "--db", str(path)]) == 0
+    assert TestClient(served[0]).post("/api/journal/trades", json=trade).status_code == 201
+    assert cli.main(["serve", "--static", str(tmp_path / "no-ui"), "--db", str(path)]) == 0
+    assert [item["ticker"] for item in TestClient(served[1]).get("/api/journal").json()["trades"]] == ["AAA"]
+
+
+def test_serve_refuses_a_file_that_is_not_a_database(provider, monkeypatch, tmp_path):
+    uvicorn = pytest.importorskip("uvicorn")
+    monkeypatch.setattr(uvicorn, "run", lambda app, **options: pytest.fail("the server must not start"))
+    path = tmp_path / "notes.txt"
+    path.write_text("not a database " * 100)
+    assert cli.main(["serve", "--static", str(tmp_path / "no-ui"), "--db", str(path)]) == 2

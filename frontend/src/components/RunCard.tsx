@@ -29,6 +29,9 @@ const CARDS: { [K in RunKind]: CardSpec<Extract<PinnedRun, { kind: K }>> } = {
 
 const cardOf = <R extends PinnedRun>(run: R) => CARDS[run.kind] as unknown as CardSpec<R>;
 
+/** The page and link that run the same setup again. */
+export const openRun = (run: PinnedRun) => cardOf(run).open(run);
+
 /** A run's colour, number and name, as used in table headers. */
 export function RunLabel({ run }: { run: PinnedRun }) {
   return (
@@ -53,7 +56,7 @@ export function RunCard({
 }) {
   const [name, setName] = useState(run.name);
   useEffect(() => setName(run.name), [run.name]);
-  // Saved on blur rather than per keystroke: each save rewrites every pinned run in storage.
+  // Saved on blur rather than per keystroke: each save is a request to the server.
   const commit = () => {
     const next = name.trim();
     if (next && next !== run.name) onRename(next);
@@ -62,7 +65,7 @@ export function RunCard({
   const fewTrades = run.metrics.trades < MIN_TRADES;
   const card = cardOf(run);
   const scope = card.scope(run);
-  const open = card.open(run);
+  const open = openRun(run);
 
   return (
     <article
@@ -98,6 +101,12 @@ export function RunCard({
       <div className="flex flex-wrap gap-1.5">
         <Link to={open.to} className="inline-flex items-center rounded-lg border border-line px-3 py-1.5 text-sm font-medium hover:bg-panel-2">
           {open.label}
+        </Link>
+        <Link
+          to={`/journal?run=${encodeURIComponent(run.id)}`}
+          className="inline-flex items-center rounded-lg border border-line px-3 py-1.5 text-sm font-medium hover:bg-panel-2"
+        >
+          Log a trade
         </Link>
         <Button onClick={onToggle}>{run.hidden ? "Show" : "Hide"}</Button>
         <Button variant="ghost" onClick={onRemove}>

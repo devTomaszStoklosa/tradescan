@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from tradescan.api.app import create_app  # noqa: E402
 from tradescan.config import Settings  # noqa: E402
+from tradescan.storage.database import Database  # noqa: E402
 
 
 @pytest.fixture
@@ -623,3 +624,110 @@ def test_static_ui_with_spa_fallback(watchlists, tmp_path):
     assert client.get("/backtest").text == "<html>ui</html>"
     assert client.get("/api/health").status_code == 200
     assert client.get("/api/missing").status_code == 404
+
+
+# --- Pinned runs and the trade journal ----------------------------------------------------------------
+
+SNAPSHOT = {"kind": "backtest", "ticker": "SPY", "equity": {"time": ["2026-01-02"], "value": [100000.0]}}
+
+
+def pinned_run(slot: int, run_id: str | None = None) -> dict:
+    return {
+        "id": run_id or f"run-{slot}",
+        "slot": slot,
+        "name": f"SPY run {slot}",
+        "hidden": False,
+        "pinned_at": "2026-10-18T09:00:00.000Z",
+        "format": 7,
+        "snapshot": SNAPSHOT,
+    }
+
+
+def test_runs_are_pinned_renamed_and_unpinned(client):
+    assert client.get("/api/runs").json() == []
+    created = client.post("/api/runs", json=pinned_run(2))
+    assert created.status_code == 201 and created.json() == pinned_run(2)
+    client.post("/api/runs", json=pinned_run(1))
+    assert [run["slot"] for run in client.get("/api/runs").json()] == [1, 2]
+
+    renamed = client.patch("/api/runs/run-2", json={"name": "baseline", "hidden": True}).json()
+    assert (renamed["name"], renamed["hidden"], renamed["snapshot"]) == ("baseline", True, SNAPSHOT)
+    assert client.patch("/api/runs/run-2", json={"hidden": False}).json()["name"] == "baseline"
+
+    assert client.delete("/api/runs/run-2").status_code == 204
+    assert [run["id"] for run in client.get("/api/runs").json()] == ["run-1"]
+    assert client.delete("/api/runs").status_code == 204
+    assert client.get("/api/runs").json() == []
+
+
+def test_run_conflicts_and_unknown_runs(client):
+    client.post("/api/runs", json=pinned_run(1))
+    taken = client.post("/api/runs", json=pinned_run(1, "other"))
+    assert taken.status_code == 409 and "Slot 1 is taken" in taken.json()["detail"]
+    assert client.post("/api/runs", json=pinned_run(2, "run-1")).status_code == 409
+    assert client.post("/api/runs", json=pinned_run(9)).status_code == 422
+    assert client.post("/api/runs", json=pinned_run(2) | {"color": "red"}).status_code == 422
+    assert client.patch("/api/runs/missing", json={"name": "x"}).status_code == 404
+    missing = client.delete("/api/runs/missing")
+    assert missing.status_code == 404 and missing.json()["detail"] == "No pinned run missing"
+
+
+def test_runs_are_kept_in_the_database_given(watchlists, tmp_path):
+    database = Database(tmp_path / "tradescan.db")
+    first = TestClient(create_app(Settings(), FakeProvider({}), watchlists, database=database))
+    first.post("/api/runs", json=pinned_run(1))
+    second = TestClient(create_app(Settings(), FakeProvider({}), watchlists, database=Database(tmp_path / "tradescan.db")))
+    assert [run["id"] for run in second.get("/api/runs").json()] == ["run-1"]
+
+
+TRADE = {
+    "ticker": " SPY ",
+    "direction": "long",
+    "opened": "2026-03-02",
+    "entry_price": 500.0,
+    "quantity": 2.0,
+    "stop": 490.0,
+}
+
+
+def test_trades_are_logged_closed_and_summarized(client):
+    run = {"format": 7, "snapshot": SNAPSHOT | {"name": "baseline"}}
+    logged = client.post("/api/journal/trades", json=TRADE | {"notes": "Pullback to SMA", "run": run})
+    assert logged.status_code == 201
+    trade = logged.json()
+    assert trade["ticker"] == "SPY" and trade["run"] == run and trade["is_open"]
+    assert (trade["risk"], trade["profit"], trade["r_multiple"]) == (20.0, None, None)
+
+    closed = client.put(
+        f"/api/journal/trades/{trade['id']}",
+        json=TRADE | {"closed": "2026-03-20", "exit_price": 530.0, "fees": 2.0, "notes": "Target", "run": run},
+    ).json()
+    assert (closed["is_open"], closed["profit"], closed["r_multiple"]) == (False, 58.0, 2.9)
+    assert closed["return_pct"] == pytest.approx(5.8) and closed["created_at"] == trade["created_at"]
+    client.post("/api/journal/trades", json=TRADE | {"direction": "short", "stop": 510.0})
+
+    journal = client.get("/api/journal").json()
+    assert [item["direction"] for item in journal["trades"]] == ["short", "long"]
+    assert journal["summary"] == {
+        "open_trades": 1,
+        "closed_trades": 1,
+        "win_rate_pct": 100.0,
+        "average_return_pct": pytest.approx(5.8),
+        "r_trades": 1,
+        "average_r": 2.9,
+        "total_r": 2.9,
+    }
+    assert client.delete(f"/api/journal/trades/{trade['id']}").status_code == 204
+    assert len(client.get("/api/journal").json()["trades"]) == 1
+
+
+def test_invalid_and_unknown_trades(client):
+    wrong_stop = client.post("/api/journal/trades", json=TRADE | {"stop": 510.0})
+    assert wrong_stop.status_code == 400 and "must be below the entry price" in wrong_stop.json()["detail"]
+    half_exit = client.post("/api/journal/trades", json=TRADE | {"exit_price": 520.0})
+    assert half_exit.status_code == 400 and "both its date and its price" in half_exit.json()["detail"]
+    assert client.post("/api/journal/trades", json=TRADE | {"quantity": 0}).status_code == 422
+    assert client.post("/api/journal/trades", json=TRADE | {"opened": "March"}).status_code == 422
+    assert client.put("/api/journal/trades/99", json=TRADE).status_code == 404
+    assert client.delete("/api/journal/trades/99").status_code == 404
+    assert client.get("/api/journal").json()["trades"] == []

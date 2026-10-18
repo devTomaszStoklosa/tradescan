@@ -245,6 +245,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Runs */
+        get: operations["list_runs_api_runs_get"];
+        put?: never;
+        /** Pin Run */
+        post: operations["pin_run_api_runs_post"];
+        /** Clear Runs */
+        delete: operations["clear_runs_api_runs_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unpin Run */
+        delete: operations["unpin_run_api_runs__run_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Run */
+        patch: operations["update_run_api_runs__run_id__patch"];
+        trace?: never;
+    };
+    "/api/journal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Trades */
+        get: operations["list_trades_api_journal_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/journal/trades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Log Trade */
+        post: operations["log_trade_api_journal_trades_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/journal/trades/{trade_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace Trade */
+        put: operations["replace_trade_api_journal_trades__trade_id__put"];
+        post?: never;
+        /** Delete Trade */
+        delete: operations["delete_trade_api_journal_trades__trade_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -629,6 +718,11 @@ export interface components {
             /** Trades */
             trades: components["schemas"]["TradeOut"][];
         };
+        /** ErrorOut */
+        ErrorOut: {
+            /** Detail */
+            detail: string;
+        };
         /**
          * Family
          * @enum {string}
@@ -708,6 +802,160 @@ export interface components {
             score: components["schemas"]["ScoreOut"];
             risk: components["schemas"]["RiskOut"];
             edge: components["schemas"]["EdgeStatsOut"] | null;
+        };
+        /** JournalOut */
+        JournalOut: {
+            /**
+             * Trades
+             * @description The latest opened first
+             */
+            trades: components["schemas"]["JournalTradeOut"][];
+            summary: components["schemas"]["JournalSummaryOut"];
+        };
+        /**
+         * JournalSummaryOut
+         * @description Over the closed trades, in R and percent only: tickers in different currencies cannot be summed.
+         */
+        JournalSummaryOut: {
+            /** Open Trades */
+            open_trades: number;
+            /** Closed Trades */
+            closed_trades: number;
+            /**
+             * Win Rate Pct
+             * @description Closed trades with a profit after fees
+             */
+            win_rate_pct: number | null;
+            /** Average Return Pct */
+            average_return_pct: number | null;
+            /**
+             * R Trades
+             * @description Closed trades with a stop, which have an R multiple
+             */
+            r_trades: number;
+            /** Average R */
+            average_r: number | null;
+            /** Total R */
+            total_r: number | null;
+        };
+        /**
+         * JournalTradeIn
+         * @description A real trade. Prices are per unit, in the ticker's currency; an exit needs both its date and its price.
+         */
+        JournalTradeIn: {
+            /** Ticker */
+            ticker: string;
+            direction: components["schemas"]["Direction"];
+            /**
+             * Opened
+             * Format: date
+             * @description Entry date
+             */
+            opened: string;
+            /** Entry Price */
+            entry_price: number;
+            /**
+             * Quantity
+             * @description Units bought (long) or sold short
+             */
+            quantity: number;
+            /**
+             * Stop
+             * @description The initial stop, which sets the risk of 1R
+             */
+            stop?: number | null;
+            /**
+             * Closed
+             * @description Exit date; null while the trade is open
+             */
+            closed?: string | null;
+            /** Exit Price */
+            exit_price?: number | null;
+            /**
+             * Fees
+             * @description Commissions and other costs, entry and exit together
+             * @default 0
+             */
+            fees: number;
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+            /** @description The pinned run that suggested the trade */
+            run?: components["schemas"]["SuggestingRun"] | null;
+        };
+        /** JournalTradeOut */
+        JournalTradeOut: {
+            /** Ticker */
+            ticker: string;
+            direction: components["schemas"]["Direction"];
+            /**
+             * Opened
+             * Format: date
+             * @description Entry date
+             */
+            opened: string;
+            /** Entry Price */
+            entry_price: number;
+            /**
+             * Quantity
+             * @description Units bought (long) or sold short
+             */
+            quantity: number;
+            /**
+             * Stop
+             * @description The initial stop, which sets the risk of 1R
+             */
+            stop?: number | null;
+            /**
+             * Closed
+             * @description Exit date; null while the trade is open
+             */
+            closed?: string | null;
+            /** Exit Price */
+            exit_price?: number | null;
+            /**
+             * Fees
+             * @description Commissions and other costs, entry and exit together
+             * @default 0
+             */
+            fees: number;
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+            /** @description The pinned run that suggested the trade */
+            run?: components["schemas"]["SuggestingRun"] | null;
+            /** Id */
+            id: number;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Is Open */
+            is_open: boolean;
+            /**
+             * Risk
+             * @description What the initial stop put at risk; null without a stop
+             */
+            risk: number | null;
+            /**
+             * Profit
+             * @description After fees, in the ticker's currency; null while the trade is open
+             */
+            profit: number | null;
+            /**
+             * Return Pct
+             * @description Profit after fees as a percent of the position's value at the entry
+             */
+            return_pct: number | null;
+            /**
+             * R Multiple
+             * @description Profit after fees in units of the initial risk; null while open or without a stop
+             */
+            r_multiple: number | null;
         };
         /** MarketIn */
         MarketIn: {
@@ -960,6 +1208,84 @@ export interface components {
              * @description False when its absolute momentum hands its slot to the safe asset or cash
              */
             held: boolean;
+        };
+        /** PinnedRunIn */
+        PinnedRunIn: {
+            /** Id */
+            id: string;
+            /**
+             * Slot
+             * @description The run's number and colour in Compare
+             */
+            slot: number;
+            /** Name */
+            name: string;
+            /**
+             * Hidden
+             * @description True when Compare leaves the run out of its tables and chart
+             */
+            hidden: boolean;
+            /**
+             * Pinned At
+             * @description When the run was pinned, as an ISO 8601 time
+             */
+            pinned_at: string;
+            /**
+             * Format
+             * @description The UI's runs-file version the snapshot was written in
+             */
+            format: number;
+            /**
+             * Snapshot
+             * @description The run as the UI keeps it; the server stores it unchanged
+             */
+            snapshot: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * PinnedRunOut
+         * @description A pinned run as the server stores it.
+         */
+        PinnedRunOut: {
+            /** Id */
+            id: string;
+            /**
+             * Slot
+             * @description The run's number and colour in Compare
+             */
+            slot: number;
+            /** Name */
+            name: string;
+            /**
+             * Hidden
+             * @description True when Compare leaves the run out of its tables and chart
+             */
+            hidden: boolean;
+            /**
+             * Pinned At
+             * @description When the run was pinned, as an ISO 8601 time
+             */
+            pinned_at: string;
+            /**
+             * Format
+             * @description The UI's runs-file version the snapshot was written in
+             */
+            format: number;
+            /**
+             * Snapshot
+             * @description The run as the UI keeps it; the server stores it unchanged
+             */
+            snapshot: {
+                [key: string]: unknown;
+            };
+        };
+        /** PinnedRunPatchIn */
+        PinnedRunPatchIn: {
+            /** Name */
+            name?: string | null;
+            /** Hidden */
+            hidden?: boolean | null;
         };
         /** Point */
         Point: {
@@ -1630,6 +1956,24 @@ export interface components {
             out_of_sample_start: string;
             /** Out Of Sample End */
             out_of_sample_end: string;
+        };
+        /**
+         * SuggestingRun
+         * @description A copy of the pinned run that suggested a trade, so the trade keeps it after the run is unpinned.
+         */
+        SuggestingRun: {
+            /**
+             * Format
+             * @description The UI's runs-file version the snapshot was written in
+             */
+            format: number;
+            /**
+             * Snapshot
+             * @description The run as the UI keeps it, its pin name included
+             */
+            snapshot: {
+                [key: string]: unknown;
+            };
         };
         /** SweepAxisIn */
         SweepAxisIn: {
@@ -2724,6 +3068,303 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChartOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_runs_api_runs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinnedRunOut"][];
+                };
+            };
+        };
+    };
+    pin_run_api_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PinnedRunIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinnedRunOut"];
+                };
+            };
+            /** @description The id is already pinned or the slot is taken */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_runs_api_runs_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    unpin_run_api_runs__run_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No pinned run has this id */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_run_api_runs__run_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PinnedRunPatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinnedRunOut"];
+                };
+            };
+            /** @description No pinned run has this id */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_trades_api_journal_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalOut"];
+                };
+            };
+        };
+    };
+    log_trade_api_journal_trades_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JournalTradeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalTradeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_trade_api_journal_trades__trade_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trade_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JournalTradeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalTradeOut"];
+                };
+            };
+            /** @description No trade in the journal has this id */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_trade_api_journal_trades__trade_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trade_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No trade in the journal has this id */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
             /** @description Validation Error */

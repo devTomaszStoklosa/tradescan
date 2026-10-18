@@ -15,8 +15,8 @@ import {
   portfolioResult,
   priorityRules,
 } from "../test/fixtures";
-import { freeSlot, MAX_RUNS, mergeRuns, runKey, snapshotPortfolioRun, snapshotRun, toPinnedRun } from "./runs";
-import { decodeRuns, encodeRuns, parseRunsFile, RUNS_FILE_VERSION } from "./runsFile";
+import { freeSlot, MAX_RUNS, mergeRuns, runKey, snapshotPortfolioRun, snapshotRun, toPinnedRun, type PinnedRun } from "./runs";
+import { decodeRunRecord, decodeRuns, decodeSuggestingRun, encodeRuns, parseRunsFile, runRecord, RUNS_FILE_VERSION, suggestingRun } from "./runsFile";
 
 describe("snapshotRun", () => {
   it("keeps one engine's result and reopens with only that engine", () => {
@@ -319,5 +319,34 @@ describe("runs file", () => {
     ],
   ])("rejects %s", (_, content, message) => {
     expect(() => parseRunsFile(content)).toThrow(message);
+  });
+});
+
+describe("server records of runs", () => {
+  const rounded = (run: PinnedRun) => ({ ...run, equity: run.equity.map((point) => ({ ...point, value: Math.round(point.value * 100) / 100 })) });
+
+  it("keeps the pin in its own fields and the rest as the snapshot", () => {
+    const run = makePortfolioPin(3, {}, { name: "top 5", hidden: true });
+    const record = runRecord(run);
+    expect(record).toMatchObject({ id: run.id, slot: 3, name: "top 5", hidden: true, pinned_at: run.pinnedAt, format: RUNS_FILE_VERSION });
+    for (const field of ["id", "slot", "name", "hidden", "pinnedAt"]) expect(record.snapshot).not.toHaveProperty(field);
+    expect(record.snapshot).toMatchObject({ kind: "portfolio", universe: "us_large" });
+    expect(decodeRunRecord(JSON.parse(JSON.stringify(record)) as typeof record)).toEqual(rounded(run));
+  });
+
+  it("upgrades a record written in an older version", () => {
+    const { kind: _kind, ...snapshot } = runRecord(makeRun(1)).snapshot;
+    const run = decodeRunRecord({ ...runRecord(makeRun(1)), format: 5, snapshot });
+    expect(run).toMatchObject({ kind: "backtest", ticker: "SPY" });
+    expect(() => decodeRunRecord({ ...runRecord(makeRun(1)), format: 99 })).toThrow("Unsupported runs file version: 99");
+    expect(() => decodeRunRecord({ ...runRecord(makeRun(1)), slot: 0 }, 2)).toThrow('Run 3 has an invalid "slot"');
+  });
+
+  it("copies the whole run, its name included, for the trade it suggested", () => {
+    const run = makeRun(2, {}, { name: "RSI2 15" });
+    const copy = suggestingRun(run);
+    expect(copy.format).toBe(RUNS_FILE_VERSION);
+    expect(copy.snapshot).toMatchObject({ id: run.id, slot: 2, name: "RSI2 15" });
+    expect(decodeSuggestingRun(JSON.parse(JSON.stringify(copy)) as typeof copy)).toEqual(rounded(run));
   });
 });

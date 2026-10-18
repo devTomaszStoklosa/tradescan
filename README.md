@@ -24,7 +24,10 @@ Trading signal scanner for daily bars: **vectorized pandas signals on yfinance d
   more signals fire than fit, and portfolio metrics, with Cerebro as a reference that produces the same trades
 - a momentum rotation: the strongest tickers of a watchlist, rebalanced weekly or monthly, with the slots of
   falling picks in a safe asset or cash
-- a React web UI on top of a small FastAPI server (`tradescan serve`)
+- a trade journal: real trades with notes and the pinned backtest that suggested each, its R next to the
+  backtest's
+- a React web UI on top of a small FastAPI server (`tradescan serve`), which keeps pinned runs and the journal
+  in one SQLite file
 
 > Not investment advice. This is a research tool; every number it prints is a historical statistic.
 
@@ -92,7 +95,12 @@ the built UI. The screens:
   out-of-sample), a Monte Carlo check (unlucky and median return, drawdown and losing streak, and the
   chance of ruin, per method), every metric of the full history or of one period with the best value
   highlighted, the portfolio stats (open positions, exposure, skipped signals) of the same period, and the
-  return curves on one chart.
+  return curves on one chart. **Log a trade** on a run opens the Journal with that run picked.
+- **Journal**: your real trades: ticker, direction, entry date and price, quantity, initial stop, exit date and
+  price, fees and notes, with the pinned run that suggested the trade. Each trade shows its profit after fees,
+  its return and its R (from the initial stop) next to the win rate and expectancy of the backtest that suggested
+  it, with a link that opens that backtest again; the summary counts open and closed trades and gives the win rate,
+  the average return and the average and total R of the closed ones.
 - **Signals**: the signal library with families, weights, rules and each parameter's default and range.
 
 Scanner and Edge have an **Advanced settings** panel with every other parameter (see
@@ -102,12 +110,20 @@ backtest can be bookmarked, shared or opened in two tabs to compare.
 
 Up to 8 runs can be pinned. A pinned run is a snapshot: it keeps the result you saw even after new bars
 arrive, and **Open in Backtest** (or **Open in Portfolio**) runs it again with today's data and the
-account currently set in the header. Pinned runs live in this browser only (clearing site data deletes them), so use **Export JSON**
-as a backup or to move them to another browser, and **Import JSON** to bring them back. Runs with fewer
-than 20 trades are flagged, because their metrics are mostly noise. Runs pinned before out-of-sample or
-Monte Carlo results existed have none, since a pin is never re-run; portfolio runs have no Monte Carlo.
+account currently set in the header. Runs with fewer than 20 trades are flagged, because their metrics are
+mostly noise. Runs pinned before out-of-sample or Monte Carlo results existed have none, since a pin is never
+re-run; portfolio runs have no Monte Carlo.
 
-> The API has no authentication. `serve` binds to 127.0.0.1; do not expose it to a network.
+Pinned runs and the journal are kept by the server in one SQLite file, `tradescan.db` in the folder `serve`
+starts from (`tradescan serve --db PATH` picks another), so every browser on this machine sees the same runs and
+trades. Copy that file while the server is stopped to back it up; **Export JSON** on Compare still saves the
+pinned runs alone, and **Import JSON** brings them back. Runs pinned by earlier versions, which kept them in the
+browser, move to the server the first time the UI opens in that browser; runs that do not fit next to the ones
+already there stay in the browser until a slot is free and the page is reloaded. A journal trade keeps its own
+copy of the run that suggested it, so unpinning the run leaves the trade as it was.
+
+> The API has no authentication. `serve` binds to 127.0.0.1; do not expose it to a network, all the more
+> as the journal holds your real trades.
 
 For frontend development run the API and Vite's dev server side by side (Vite proxies `/api`):
 
@@ -165,7 +181,7 @@ tradescan update-universes
 | `rotation-backtest` | A momentum rotation over every ticker of `-w`/`-t`: `--rank` ranks them (default `momentum`), `--holdings` picks the top N, `--rebalance` is `weekly` or `monthly` (default), `--weighting` is `equal` (default) or `inverse_volatility`, `--absolute-lookback` sets the absolute momentum check (0 turns it off) and `--safe-asset` takes the slots of the picks that fail it (default cash). Prints the metrics and rotation stats for the full run and both periods, what a rebalance at the last close would pick and the `--top` tickers by P&L; `--export` saves the trades. |
 | `list-signals` | All signals with family, direction, scoring weight and rule. |
 | `update-universes` | Refresh the `sp500` and `nasdaq100` watchlists from Wikipedia's constituent tables (`--only sp500`). |
-| `serve` | Web UI and HTTP API. |
+| `serve` | Web UI and HTTP API; `--db` sets the SQLite file for the pinned runs and the journal (default `tradescan.db`). |
 
 Watchlists are text files in `config/watchlists/` (tickers separated by spaces or commas, `#` comments).
 A line `# benchmark: SPY` sets the benchmark for that list. Bundled: `sp500` (503, benchmark SPY),
@@ -550,6 +566,9 @@ The code follows SOLID; each extension point is a new class, not an edit to exis
 - **New export format:** add a writer to `_WRITERS` in `report/export.py`.
 - **New API endpoint:** add a router module under `api/routes/` with `build_router(context)` and list
   it in `ROUTERS` in `api/app.py`.
+- **New stored data:** add a store next to `PinnedRunStore` and `TradeJournal` in `storage/` that opens
+  connections from the shared `Database`, and append the tables it needs as a new migration to `_MIGRATIONS`
+  in `storage/database.py` (never edit an existing one: files written by older versions are upgraded from it).
 
 The use cases in `services.py` (scan, market, edge, backtest, chart) hold the workflow; `cli.py` and
 `api/` only translate input and output. `build_use_cases` and `create_app` wire concrete classes.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import fields
 
 import pandas as pd
@@ -24,6 +25,7 @@ from tradescan.backtest.tickers import PeriodRun
 from tradescan.backtest.trade_rules import TradeRules
 from tradescan.backtest.vectorized import VectorizedEngine
 from tradescan.config import SettingsSection
+from tradescan.journal import JournalTrade, summarize
 from tradescan.params import ParamSpec, parameters_of
 from tradescan.regime import MarketRegime
 from tradescan.scanner import ScanHit
@@ -43,6 +45,7 @@ from tradescan.services import (
     WindowPick,
 )
 from tradescan.signals.base import Signal
+from tradescan.storage.runs import PinnedRun
 from tradescan.watchlist import Watchlist
 
 
@@ -669,4 +672,58 @@ def chart_out(data: ChartData) -> schemas.ChartOut:
             schemas.ChartEventOut(time=day(event.date), signal=event.signal, direction=event.direction)
             for event in data.events
         ],
+    )
+
+
+def pinned_run_out(run: PinnedRun) -> schemas.PinnedRunOut:
+    return schemas.PinnedRunOut(
+        id=run.id,
+        slot=run.slot,
+        name=run.name,
+        hidden=run.hidden,
+        pinned_at=run.pinned_at,
+        format=run.format,
+        snapshot=run.snapshot,
+    )
+
+
+def journal_trade_out(trade: JournalTrade) -> schemas.JournalTradeOut:
+    entry = trade.entry
+    run = entry.run
+    return schemas.JournalTradeOut(
+        id=trade.id,
+        ticker=entry.ticker,
+        direction=entry.direction,
+        opened=entry.opened,
+        entry_price=entry.entry_price,
+        quantity=entry.quantity,
+        stop=entry.stop,
+        closed=entry.closed,
+        exit_price=entry.exit_price,
+        fees=entry.fees,
+        notes=entry.notes,
+        run=schemas.SuggestingRun(format=run.format, snapshot=run.snapshot) if run else None,
+        created_at=trade.created_at,
+        updated_at=trade.updated_at,
+        is_open=entry.is_open,
+        risk=finite(entry.risk),
+        profit=finite(entry.profit),
+        return_pct=finite(entry.return_pct),
+        r_multiple=finite(entry.r_multiple),
+    )
+
+
+def journal_out(trades: Sequence[JournalTrade]) -> schemas.JournalOut:
+    summary = summarize([trade.entry for trade in trades])
+    return schemas.JournalOut(
+        trades=[journal_trade_out(trade) for trade in trades],
+        summary=schemas.JournalSummaryOut(
+            open_trades=summary.open_trades,
+            closed_trades=summary.closed_trades,
+            win_rate_pct=finite(summary.win_rate_pct),
+            average_return_pct=finite(summary.average_return_pct),
+            r_trades=summary.r_trades,
+            average_r=finite(summary.average_r),
+            total_r=finite(summary.total_r),
+        ),
     )

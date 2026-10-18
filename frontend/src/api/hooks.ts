@@ -10,6 +10,10 @@ export const useSignals = () => useQuery({ queryKey: ["signals"], queryFn: api.s
 
 export const useWatchlists = () => useQuery({ queryKey: ["watchlists"], queryFn: api.watchlists, staleTime: Infinity });
 
+export const JOURNAL_KEY = ["journal"];
+
+export const useJournal = () => useQuery({ queryKey: JOURNAL_KEY, queryFn: api.journal });
+
 export const useScan = (body: ScanIn | null) =>
   useQuery({
     queryKey: ["scan", body],

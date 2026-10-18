@@ -1,12 +1,14 @@
 /**
- * Pinned runs on disk. Browser storage and the JSON export use the same format:
- * `{version, runs}`, with each equity curve as two arrays (dates, values rounded to cents),
- * about half the size of one object per point. Older files are upgraded when read: version 1 is from
+ * Pinned runs on disk. The JSON export is `{version, runs}`, with each equity curve as two arrays (dates, values
+ * rounded to cents), about half the size of one object per point. The server keeps each run in the same format,
+ * with the version it was written in: the pin (id, slot, name, hidden, pinned time) in its own fields and the rest
+ * as the snapshot; a journal trade keeps the whole run that suggested it, pin included, as its snapshot.
+ * Older runs are upgraded when read: version 1 is from
  * before entry and exit rules, version 2 from before out-of-sample results, version 3 from before entry filters,
  * version 4 from before Monte Carlo results, version 5 from before portfolio runs, version 6 from before the score
  * priority's signal parameters.
  */
-import type { AppliedRuleOut, MetricsOut } from "../api/client";
+import type { AppliedRuleOut, MetricsOut, PinnedRunIn, PinnedRunOut, SuggestingRun } from "../api/client";
 import { formatTemplate, type Overrides } from "./overrides";
 import { moveLegacyExitSettings } from "./rules";
 import { MAX_RUNS, type PinnedBacktestRun, type PinnedPortfolioRun, type PinnedRun, type RunKind } from "./runs";
@@ -26,18 +28,25 @@ export interface RunsFile {
   runs: StoredRun[];
 }
 
-export function encodeRuns(runs: PinnedRun[]): RunsFile {
+export function encodeRun({ equity, ...run }: PinnedRun): StoredRun {
   return {
-    version: RUNS_FILE_VERSION,
-    runs: runs.map(
-      ({ equity, ...run }) =>
-        ({
-          ...run,
-          equity: { time: equity.map((point) => point.time), value: equity.map((point) => Math.round(point.value * 100) / 100) },
-        }) as StoredRun,
-    ),
-  };
+    ...run,
+    equity: { time: equity.map((point) => point.time), value: equity.map((point) => Math.round(point.value * 100) / 100) },
+  } as StoredRun;
 }
+
+export function encodeRuns(runs: PinnedRun[]): RunsFile {
+  return { version: RUNS_FILE_VERSION, runs: runs.map(encodeRun) };
+}
+
+/** A pinned run as the server keeps it. */
+export function runRecord(run: PinnedRun): PinnedRunIn {
+  const { id, slot, name, hidden, pinnedAt, ...snapshot } = encodeRun(run);
+  return { id, slot, name, hidden, pinned_at: pinnedAt, format: RUNS_FILE_VERSION, snapshot };
+}
+
+/** A copy of a pinned run for the journal trade it suggested. */
+export const suggestingRun = (run: PinnedRun): SuggestingRun => ({ format: RUNS_FILE_VERSION, snapshot: { ...encodeRun(run) } });
 
 // --- Validation: an imported file or edited storage must not break the page ------------------------
 
@@ -252,13 +261,27 @@ const UPGRADES: Record<number, (value: unknown) => unknown> = {
   [RUNS_FILE_VERSION]: (value) => value,
 };
 
+function upgradeOf(version: unknown): (value: unknown) => unknown {
+  const upgrade = typeof version === "number" ? UPGRADES[version] : undefined;
+  if (!upgrade) throw new Error(`Unsupported runs file version: ${String(version)}`);
+  return upgrade;
+}
+
 /** Runs from parsed JSON; throws an Error naming the first problem. */
 export function decodeRuns(data: unknown): PinnedRun[] {
   if (!isRecord(data) || !Array.isArray(data.runs)) throw new Error("This is not a tradescan runs file");
-  const upgrade = typeof data.version === "number" ? UPGRADES[data.version] : undefined;
-  if (!upgrade) throw new Error(`Unsupported runs file version: ${String(data.version)}`);
+  const upgrade = upgradeOf(data.version);
   return data.runs.map((run, index) => decodeRun(upgrade(run), index));
 }
+
+/** A run the server keeps; throws an Error naming the first problem. */
+export function decodeRunRecord(record: PinnedRunOut, index = 0): PinnedRun {
+  const { id, slot, name, hidden, pinned_at: pinnedAt, format, snapshot } = record;
+  return decodeRun(upgradeOf(format)({ ...snapshot, id, slot, name, hidden, pinnedAt }), index);
+}
+
+/** The run a journal trade keeps; throws an Error naming the first problem. */
+export const decodeSuggestingRun = ({ format, snapshot }: SuggestingRun): PinnedRun => decodeRun(upgradeOf(format)(snapshot), 0);
 
 export function parseRunsFile(content: string): PinnedRun[] {
   let data: unknown;
