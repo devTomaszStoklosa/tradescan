@@ -203,6 +203,30 @@ def test_backtest_and_sweep_still_take_a_ticker(provider):
 
 
 @pytest.mark.parametrize(
+    ("command", "benchmark_help"),
+    [
+        ("backtest", "--benchmark BENCHMARK benchmark the market filter compares (default: scan.benchmark from the settings)"),
+        ("sweep", "--benchmark BENCHMARK benchmark the market filter compares (default: scan.benchmark from the settings)"),
+        ("walk-forward", "--benchmark BENCHMARK benchmark the market filter compares (default: scan.benchmark from the settings)"),
+        (
+            "watchlist-backtest",
+            "--benchmark BENCHMARK benchmark the market filter compares "
+            "(default: the watchlist's '# benchmark:' line, else scan.benchmark from the settings)",
+        ),
+        (
+            "portfolio-backtest",
+            "--benchmark BENCHMARK benchmark for buy & hold and for the market filter "
+            "(default: the watchlist's '# benchmark:' line, else scan.benchmark from the settings)",
+        ),
+    ],
+)
+def test_benchmark_help_names_each_commands_default(command, benchmark_help, capsys):
+    with pytest.raises(SystemExit):
+        cli.main([command, "--help"])
+    assert benchmark_help in " ".join(capsys.readouterr().out.split())
+
+
+@pytest.mark.parametrize(
     "axis",
     ["oversold=5:20:5", "signal.oversold", "nope.oversold=1,2", "signal.oversold=5:1:1", "signal.oversold=1:100:1", "signal.oversold=a,b"],
 )
