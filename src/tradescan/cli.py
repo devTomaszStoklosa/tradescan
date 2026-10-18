@@ -70,6 +70,7 @@ from tradescan.services import (
     default_provider,
 )
 from tradescan.signals import Direction, Family, default_registry
+from tradescan.storage.database import Database
 from tradescan.universes import SOURCES, update_universe
 from tradescan.watchlist import Watchlist, from_tickers, load_watchlist
 
@@ -618,14 +619,17 @@ def cmd_serve(args: argparse.Namespace, settings: Settings, report: ConsoleRepor
     static = Path(args.static)
     if not static.is_dir():
         report.warning(f"{static} not found: serving the API only. Build the UI with `npm run build` in frontend/.")
+    database = Database(Path(args.db))
+    database.migrate()  # a file that is not a tradescan database stops the server before it starts
     app = create_app(
         settings=settings,
         provider=_provider(settings, args),
         watchlists_dir=Path(args.watchlists_dir),
         static_dir=static if static.is_dir() else None,
         runner=ProcessRunner(),
+        database=database,
     )
-    report.note(f"tradescan UI on http://{args.host}:{args.port}")
+    report.note(f"tradescan UI on http://{args.host}:{args.port}, pinned runs and the journal in {database.location}")
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
     return 0
 
@@ -831,6 +835,7 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
     serve.add_argument("--static", default="frontend/dist", help="built frontend to serve")
+    serve.add_argument("--db", default="tradescan.db", help="SQLite file for the pinned runs and the trade journal")
     serve.add_argument("--no-cache", action="store_true", help="always download fresh data")
     serve.set_defaults(handler=cmd_serve)
     return parser

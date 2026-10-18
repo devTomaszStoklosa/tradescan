@@ -18,10 +18,12 @@ from tradescan.api.routes import (
     backtest,
     chart,
     edge,
+    journal,
     market,
     meta,
     portfolio,
     rotation,
+    runs,
     scan,
     signals,
     sweep,
@@ -34,10 +36,13 @@ from tradescan.data.provider import DataProvider
 from tradescan.parallel import TaskRunner
 from tradescan.services import EngineFactory, PortfolioEngineFactory, build_scorer, build_use_cases
 from tradescan.signals.registry import SignalRegistry, default_registry
+from tradescan.storage.database import Conflict, Database, NotFound
+from tradescan.storage.runs import PinnedRunStore
+from tradescan.storage.trades import TradeJournal
 
 ROUTERS = (
     meta, signals, watchlists, scan, market, edge, backtest, sweep, walk_forward, watchlist_backtest, portfolio, rotation,
-    chart,
+    chart, runs, journal,
 )  # fmt: skip
 
 
@@ -65,19 +70,32 @@ def create_app(
     engines: dict[str, EngineFactory] | None = None,
     runner: TaskRunner | None = None,
     portfolio_engines: dict[str, PortfolioEngineFactory] | None = None,
+    database: Database | None = None,
 ) -> FastAPI:
+    """Without a `database`, pinned runs and journal trades last only as long as the app."""
+    database = database or Database.in_memory()
     context = ApiContext(
         settings=settings,
         use_cases=build_use_cases(settings, provider, registry, engines, runner, portfolio_engines=portfolio_engines),
         registry=registry,
         scorer=build_scorer(settings),
         watchlists_dir=watchlists_dir,
+        runs=PinnedRunStore(database),
+        journal=TradeJournal(database),
     )
     app = FastAPI(title="tradescan", version=__version__, description="Trading signal scanner API")
 
     @app.exception_handler(ValueError)
     async def value_error(_: Request, error: ValueError) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": str(error)})
+
+    @app.exception_handler(NotFound)
+    async def not_found(_: Request, error: NotFound) -> JSONResponse:
+        return JSONResponse(status_code=404, content={"detail": str(error)})
+
+    @app.exception_handler(Conflict)
+    async def conflict(_: Request, error: Conflict) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(error)})
 
     @app.exception_handler(ImportError)
     async def import_error(_: Request, error: ImportError) -> JSONResponse:
