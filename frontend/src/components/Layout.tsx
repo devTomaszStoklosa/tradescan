@@ -14,6 +14,7 @@ const LINKS = [
   { to: "/rotation", label: "Rotation", end: false },
   { to: "/edge", label: "Edge", end: false },
   { to: "/compare", label: "Compare", end: false },
+  { to: "/journal", label: "Journal", end: false },
   { to: "/signals", label: "Signals", end: false },
 ];
 
