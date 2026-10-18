@@ -37,7 +37,10 @@ from tradescan.services import (
     RotationReport,
     ScanReport,
     SweepReport,
+    SweptParameter,
+    WalkForwardReport,
     WatchlistBacktestReport,
+    WindowPick,
 )
 from tradescan.signals.base import Signal
 from tradescan.watchlist import Watchlist
@@ -368,20 +371,7 @@ def sweep_out(report: SweepReport) -> schemas.SweepOut:
         **_setup_out(report.ticker, base.signal, base.config, base.rules, base.benchmark, report.close),  # type: ignore[arg-type]
         engine=VectorizedEngine.name,
         split=split_out(report.split),
-        axes=[
-            schemas.SweepAxisOut(
-                target=item.axis.target,
-                owner=item.axis.owner or None,
-                name=item.axis.name,
-                key=item.axis.key,
-                label=item.spec.label,
-                unit=item.spec.unit,
-                kind=item.spec.kind,
-                current=item.spec.default,  # type: ignore[arg-type]
-                values=list(item.axis.values),
-            )
-            for item in report.parameters
-        ],
+        axes=_axes_out(report.parameters),
         cells=[
             schemas.SweepCellOut(
                 values=list(cell.values),
@@ -391,6 +381,85 @@ def sweep_out(report: SweepReport) -> schemas.SweepOut:
             )
             for cell in report.cells
         ],
+    )
+
+
+def _axes_out(parameters: tuple[SweptParameter, ...]) -> list[schemas.SweepAxisOut]:
+    return [
+        schemas.SweepAxisOut(
+            target=item.axis.target,
+            owner=item.axis.owner or None,
+            name=item.axis.name,
+            key=item.axis.key,
+            label=item.spec.label,
+            unit=item.spec.unit,
+            kind=item.spec.kind,
+            current=item.spec.default,  # type: ignore[arg-type]
+            values=list(item.axis.values),
+        )
+        for item in parameters
+    ]
+
+
+def _pick_fields(report: WalkForwardReport, pick: WindowPick) -> dict[str, object]:
+    """What an in-sample window picked, as the fields `WindowPickOut` and `WalkForwardWindowOut` share."""
+    index = report.close.index
+    return {
+        "in_sample_start": day(index[pick.span.start]),
+        "in_sample_end": day(index[pick.span.end - 1]),
+        "values": list(report.combinations[pick.combination].values) if pick.combination is not None else None,
+        "qualified": pick.qualified,
+        "in_sample": metrics_out(pick.in_sample) if pick.in_sample else None,
+    }
+
+
+def walk_forward_out(report: WalkForwardReport) -> schemas.WalkForwardOut:
+    base, plan, index = report.base, report.plan, report.close.index
+    start = plan.start
+    close = report.close.iloc[start:]
+    first = plan.windows[0]
+    windows = []
+    for item in report.windows:
+        segment = item.segment
+        windows.append(
+            schemas.WalkForwardWindowOut(
+                **_pick_fields(report, item.pick),  # type: ignore[arg-type]
+                out_of_sample_start=day(index[item.window.out_of_sample.start]),
+                out_of_sample_end=day(index[item.window.out_of_sample.end - 1]),
+                traded_from=day(index[segment.start]) if segment.traded else None,
+                traded_to=day(index[segment.end]) if segment.traded else None,
+                out_of_sample=metrics_out(item.out_of_sample) if item.out_of_sample else None,
+            )
+        )
+    return schemas.WalkForwardOut(
+        **_setup_out(report.ticker, base.signal, base.config, base.rules, base.benchmark, report.close),  # type: ignore[arg-type]
+        engine=VectorizedEngine.name,
+        scheme=plan.scheme,
+        metric=report.metric,
+        walk_forward=schemas.WalkForwardSettingsOut(
+            windows=report.settings.windows,
+            in_sample_ratio=report.settings.in_sample_ratio,
+            min_trades=report.settings.min_trades,
+            in_sample_bars=first.in_sample.bars,
+            out_of_sample_bars=first.out_of_sample.bars,
+        ),
+        axes=_axes_out(report.parameters),
+        combinations=len(report.combinations),
+        errors=[
+            schemas.CombinationErrorOut(values=list(item.values), error=item.error)
+            for item in report.combinations
+            if item.error is not None
+        ],
+        out_of_sample_start=day(index[start]),
+        windows=windows,
+        next=schemas.WindowPickOut(**_pick_fields(report, report.next_pick)),  # type: ignore[arg-type]
+        metrics=metrics_out(report.metrics),
+        unchanged=metrics_out(report.unchanged_metrics),
+        efficiency=finite(report.efficiency),
+        equity=points(report.stitched.equity),
+        unchanged_equity=points(report.unchanged.equity.iloc[start:]),
+        buy_hold=points(close / close.iloc[0] * base.config.initial_equity),
+        trades=[trade_out(trade) for trade in report.stitched.trades],
     )
 
 

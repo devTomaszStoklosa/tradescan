@@ -28,8 +28,11 @@ def test_meta_endpoints(client):
     sections = {section["name"]: {param["name"]: param for param in section["params"]} for section in config["sections"]}
     assert set(sections) == {
         "account", "risk", "scan", "scoring", "trend", "regime", "backtest", "pyramid", "monte_carlo", "portfolio",
-        "rotation",
+        "rotation", "walk_forward",
     }  # fmt: skip
+    assert [(name, spec["default"]) for name, spec in sections["walk_forward"].items()] == [
+        ("windows", 5), ("in_sample_ratio", 3.0), ("min_trades", 10),
+    ]  # fmt: skip
     assert [name for name in sections["rotation"]] == ["holdings", "absolute_lookback"]
     assert [(name, spec["default"]) for name, spec in sections["pyramid"].items()] == [("max_units", 1), ("add_every_atr", 0.5)]
     assert [name for name in sections["monte_carlo"]] == ["simulations", "ruin_drawdown_pct", "seed"]
@@ -555,6 +558,58 @@ def test_sweep_limits_and_errors(client):
     assert sweep({"target": "nope", "name": "fast", "values": [5, 6]}).status_code == 422
     assert sweep(fast, engines=["cerebro"]).status_code == 422  # engines belong to backtests
     assert client.post("/api/sweep", json={"ticker": "AAA", "signal": "nope", "axes": [fast]}).status_code == 400
+
+
+def test_walk_forward(client):
+    axes = [
+        {"target": "signal", "name": "oversold", "values": [5, 10, 15, 20]},
+        {"target": "exit", "owner": "target", "name": "target_r", "values": [1.5, 2.5]},
+    ]
+    body = {"ticker": "aaa", "signal": "connors_rsi2_long", "axes": axes, "settings": {"walk_forward": {"min_trades": 5}}}
+    response = client.post("/api/walk-forward", json=body)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert (data["ticker"], data["engine"], data["scheme"], data["metric"]) == ("AAA", "vectorized", "rolling", "sharpe")
+    assert data["walk_forward"] == {
+        "windows": 5, "in_sample_ratio": 3, "min_trades": 5, "in_sample_bars": 561, "out_of_sample_bars": 187,
+    }  # fmt: skip
+    assert [axis["key"] for axis in data["axes"]] == ["signal.oversold", "exit.target.target_r"]
+    assert data["combinations"] == 8 and data["errors"] == []
+    windows = data["windows"]
+    assert len(windows) == 5 and windows[0]["out_of_sample_start"] == data["out_of_sample_start"]
+    assert windows[-1]["out_of_sample_end"] == data["end"] and windows[1]["in_sample_end"] < windows[1]["out_of_sample_start"]
+    picked = [window for window in windows if window["values"] is not None]
+    assert picked and all(len(window["values"]) == 2 and window["in_sample"]["trades"] >= 5 for window in picked)
+    assert all(window["traded_from"] >= window["out_of_sample_start"] for window in windows if window["traded_from"])
+    assert data["next"]["in_sample_end"] == data["end"] and data["next"]["qualified"] <= 8
+    assert data["equity"][0]["time"] == data["out_of_sample_start"] and data["equity"][-1]["time"] == data["end"]
+    assert len(data["equity"]) == len(data["unchanged_equity"]) == len(data["buy_hold"])
+    assert data["metrics"]["trades"] == sum(window["out_of_sample"]["trades"] for window in windows if window["out_of_sample"])
+    assert len(data["trades"]) >= data["metrics"]["trades"]
+    assert data["metrics"]["buy_hold_pct"] == data["unchanged"]["buy_hold_pct"]
+
+    anchored = client.post("/api/walk-forward", json={**body, "scheme": "anchored", "metric": "expectancy_r"}).json()
+    assert anchored["scheme"] == "anchored"
+    assert all(window["in_sample_start"] == anchored["start"] for window in anchored["windows"])
+
+
+def test_walk_forward_limits_and_errors(client):
+    limits = client.get("/api/config").json()["walk_forward"]
+    assert limits["max_runs"] == 2000 and limits["schemes"] == ["rolling", "anchored"] and limits["default_scheme"] == "rolling"
+    assert limits["default_metric"] == "sharpe" and "trades" not in limits["metrics"] and "expectancy_r" in limits["metrics"]
+    assert limits["fixed"] == ["account.equity", "backtest.oos_pct"]
+
+    def walk_forward(*axes, **extra):
+        body = {"ticker": "AAA", "signal": "connors_rsi2_long", "axes": list(axes), **extra}
+        return client.post("/api/walk-forward", json=body)
+
+    oversold = {"target": "signal", "name": "oversold", "values": [5, 10]}
+    assert walk_forward({"target": "settings", "owner": "account", "name": "equity", "values": [1e4, 2e4]}).status_code == 400
+    assert walk_forward(oversold, metric="trades").status_code == 400
+    assert walk_forward(oversold, scheme="expanding").status_code == 422
+    assert walk_forward(oversold, settings={"walk_forward": {"windows": 25}}).status_code == 400
+    too_short = walk_forward(oversold, settings={"walk_forward": {"windows": 20, "in_sample_ratio": 10}})
+    assert too_short.status_code == 400 and "too few for 20 windows" in too_short.json()["detail"]
 
 
 def test_static_ui_with_spa_fallback(watchlists, tmp_path):
