@@ -10,7 +10,7 @@ import { Button } from "./ui";
 
 /** Pins a run for the Compare page, or unpins it when it is already pinned; `what` names the run on the button. */
 function PinSnapshotButton({ snapshot, what }: { snapshot: RunSnapshot | null; what: string }) {
-  const { runs, pin, remove } = usePinnedRuns();
+  const { runs, loading, pin, remove } = usePinnedRuns();
   const pinned = useMemo(() => {
     if (!snapshot) return undefined;
     const key = runKey(snapshot);
@@ -28,9 +28,11 @@ function PinSnapshotButton({ snapshot, what }: { snapshot: RunSnapshot | null; w
       )}
       {full && <span className="text-xs text-muted">{MAX_RUNS} runs pinned: remove one to pin more</span>}
       {pinned ? (
-        <Button onClick={() => remove(pinned.id)}>Unpin {what}</Button>
+        <Button onClick={() => remove(pinned.id)} disabled={loading}>
+          Unpin {what}
+        </Button>
       ) : (
-        <Button variant="primary" onClick={() => pin(snapshot)} disabled={full}>
+        <Button variant="primary" onClick={() => pin(snapshot)} disabled={full || loading}>
           Pin {what}
         </Button>
       )}

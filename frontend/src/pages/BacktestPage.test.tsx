@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AccountProvider } from "../state/account";
 import { PinnedRunsProvider } from "../state/pinnedRuns";
+import { MemoryRunStore } from "../test/runStore";
 import { ThemeProvider } from "../state/theme";
 import { appliedRule, backtestResult, config, filterRules, signals } from "../test/fixtures";
 import { BacktestPage } from "./BacktestPage";
@@ -20,7 +21,10 @@ const RESPONSES: Record<string, unknown> = {
   "/chart": { ticker: "SPY", candles: [], sma_fast: [], sma_slow: [], events: [] },
 };
 
+let store = new MemoryRunStore();
+
 function renderPage(path: string) {
+  store = new MemoryRunStore();
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);
     const body = Object.entries(RESPONSES).find(([route]) => url.endsWith(route))?.[1] ?? null;
@@ -30,7 +34,7 @@ function renderPage(path: string) {
   render(
     <ThemeProvider>
       <AccountProvider>
-        <PinnedRunsProvider>
+        <PinnedRunsProvider store={store}>
           <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
             <RouterProvider router={router} />
           </QueryClientProvider>
@@ -47,14 +51,16 @@ const backtestBodies = () =>
     .mock.calls.filter(([input]) => String(input).endsWith("/backtest"))
     .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>);
 
-const storedRuns = () => (JSON.parse(localStorage.getItem("tradescan.runs") ?? '{"runs":[]}') as { runs: { form: unknown; engine: string }[] }).runs;
+const storedRuns = () => store.runs();
 
 describe("BacktestPage pinning", () => {
   it("pins the shown run once and unpins it", async () => {
     renderPage("/backtest?ticker=SPY&signal=connors_rsi2_long&sig.connors_rsi2_long.oversold=15");
 
-    await userEvent.click(await screen.findByRole("button", { name: "Pin run" }));
-    expect(storedRuns()).toHaveLength(1);
+    const pin = await screen.findByRole("button", { name: "Pin run" });
+    await waitFor(() => expect(pin).toBeEnabled());
+    await userEvent.click(pin);
+    await waitFor(() => expect(storedRuns()).toHaveLength(1));
     expect(storedRuns()[0]).toMatchObject({
       engine: "vectorized",
       form: { ticker: "SPY", signal: "connors_rsi2_long", engines: ["vectorized"], signalParams: { oversold: 15 } },
@@ -62,7 +68,7 @@ describe("BacktestPage pinning", () => {
     expect(screen.getByRole("link", { name: "Compare 1 pinned →" })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Unpin run" }));
-    expect(storedRuns()).toHaveLength(0);
+    await waitFor(() => expect(storedRuns()).toHaveLength(0));
     expect(screen.getByRole("button", { name: "Pin run" })).toBeInTheDocument();
   });
 });

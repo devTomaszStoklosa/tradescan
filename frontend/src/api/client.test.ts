@@ -40,4 +40,16 @@ describe("api client", () => {
     expect(url).toBe("/api/chart");
     expect(JSON.parse(String(init?.body))).toEqual(body);
   });
+
+  it("patches and deletes a pinned run by its id", async () => {
+    const fetch = respond(200, {});
+    await api.updateRun("a/b", { hidden: true });
+    const [url, init] = fetch.mock.calls[0]!;
+    expect([url, init?.method, JSON.parse(String(init?.body))]).toEqual(["/api/runs/a%2Fb", "PATCH", { hidden: true }]);
+
+    fetch.mockResolvedValue(new Response(null, { status: 204 }));
+    await expect(api.unpinRun("a/b")).resolves.toBeUndefined();
+    const [, removal] = fetch.mock.calls[1]!;
+    expect([removal?.method, removal?.body]).toEqual(["DELETE", undefined]);
+  });
 });

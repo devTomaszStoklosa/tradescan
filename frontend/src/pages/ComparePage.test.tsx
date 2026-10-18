@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +8,7 @@ import { downloadFile } from "../lib/csv";
 import type { PinnedRun } from "../lib/runs";
 import { encodeRuns } from "../lib/runsFile";
 import { PinnedRunsProvider } from "../state/pinnedRuns";
+import { MemoryRunStore } from "../test/runStore";
 import { config, makeMetrics, makeMonteCarlo, makePortfolioPin, makeRun, makePortfolioRun, signals } from "../test/fixtures";
 import { ComparePage } from "./ComparePage";
 
@@ -21,17 +22,18 @@ vi.mock("../components/charts/EquityChart", () => ({
 
 vi.mock("../lib/csv", async (original) => ({ ...(await original<typeof import("../lib/csv")>()), downloadFile: vi.fn() }));
 
-const STORAGE_KEY = "tradescan.runs";
+/** Where versions before server-side runs kept the pinned runs. */
+const BROWSER_KEY = "tradescan.runs";
 
 const base = makeRun(1, {}, { name: "baseline" });
 const wideStop = makeRun(2, { config: { ...base.config, atr_mult: 3 }, metrics: makeMetrics({ total_return_pct: 20, trades: 7 }) }, { name: "wide stop" });
 const portfolio = makePortfolioPin(3, {}, { name: "top 5" });
 
-function pin(runs: PinnedRun[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(encodeRuns(runs)));
-}
+let store = new MemoryRunStore();
 
-const stored = (): { runs: { name: string; hidden: boolean }[] } => JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
+function pin(runs: PinnedRun[]) {
+  store = new MemoryRunStore(runs);
+}
 
 function renderPage() {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
@@ -41,7 +43,7 @@ function renderPage() {
   });
   const router = createMemoryRouter([{ path: "/compare", element: <ComparePage /> }], { initialEntries: ["/compare"] });
   render(
-    <PinnedRunsProvider>
+    <PinnedRunsProvider store={store}>
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
         <RouterProvider router={router} />
       </QueryClientProvider>
@@ -58,11 +60,14 @@ const snapshotOf = (engine: string) => {
 };
 
 describe("ComparePage", () => {
-  beforeEach(() => vi.mocked(downloadFile).mockClear());
+  beforeEach(() => {
+    vi.mocked(downloadFile).mockClear();
+    store = new MemoryRunStore();
+  });
 
-  it("explains how to pin when nothing is pinned", () => {
+  it("explains how to pin when nothing is pinned", async () => {
     renderPage();
-    expect(screen.getByText("No pinned runs yet")).toBeInTheDocument();
+    expect(await screen.findByText("No pinned runs yet")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export JSON" })).toBeDisabled();
   });
 
@@ -70,7 +75,7 @@ describe("ComparePage", () => {
     pin([base, wideStop]);
     renderPage();
 
-    const parameters = table("Parameters of the pinned runs");
+    const parameters = await screen.findByRole("table", { name: "Parameters of the pinned runs" });
     expect(await within(parameters).findByText("Stop distance")).toBeInTheDocument();
     expect(within(parameters).getAllByRole("row")).toHaveLength(2);
     expect(within(parameters).queryByText("Ticker")).not.toBeInTheDocument();
@@ -93,7 +98,7 @@ describe("ComparePage", () => {
     pin([base, wideStop, old]);
     renderPage();
 
-    const check = table("Out-of-sample check of the pinned runs");
+    const check = await screen.findByRole("table", { name: "Out-of-sample check of the pinned runs" });
     const baseline = within(check).getByRole("row", { name: /baseline/ });
     const few = " (fewer than 20 trades)"; // read out instead of the asterisk
     expect(within(baseline).getAllByRole("cell").map((cell) => cell.textContent)).toEqual([
@@ -122,6 +127,7 @@ describe("ComparePage", () => {
     pin([base, few, old]);
     renderPage();
 
+    await screen.findByRole("table", { name: "Monte Carlo of the pinned runs' trades" });
     const simulations = () => table("Monte Carlo of the pinned runs' trades");
     const cells = (name: RegExp) => within(within(simulations()).getByRole("row", { name })).getAllByRole("cell").map((cell) => cell.textContent);
     expect(screen.getByRole("radio", { name: "Bootstrapped" })).toBeChecked();
@@ -136,41 +142,44 @@ describe("ComparePage", () => {
     expect(within(table("Parameters of the pinned runs")).getByText("Monte Carlo · Ruin level")).toBeInTheDocument();
   });
 
-  it("hides, renames and removes runs and keeps the change in storage", async () => {
+  it("hides, renames and removes runs and keeps the change on the server", async () => {
     pin([base, wideStop]);
     renderPage();
-    const second = screen.getByRole("article", { name: "Run 2" });
+    const second = await screen.findByRole("article", { name: "Run 2" });
 
     await userEvent.click(within(second).getByRole("button", { name: "Hide" }));
     expect(screen.getByRole("img", { name: /Return of the pinned runs/ })).toHaveTextContent(/^#1 baseline$/);
     expect(screen.getByText("Show at least two runs to see what differs.")).toBeInTheDocument();
-    expect(stored().runs[1]?.hidden).toBe(true);
+    await waitFor(() => expect(store.runs()[1]?.hidden).toBe(true));
 
     const name = within(screen.getByRole("article", { name: "Run 1" })).getByRole("textbox", { name: "Name of run 1" });
     await userEvent.clear(name);
     await userEvent.type(name, "RSI2 default{Enter}");
-    expect(stored().runs[0]?.name).toBe("RSI2 default");
+    await waitFor(() => expect(store.runs()[0]?.name).toBe("RSI2 default"));
 
     await userEvent.click(within(second).getByRole("button", { name: "Remove" }));
     expect(screen.queryByRole("article", { name: "Run 2" })).not.toBeInTheDocument();
-    expect(stored().runs).toHaveLength(1);
+    await waitFor(() => expect(store.runs()).toHaveLength(1));
   });
 
   it("removes all runs only after confirmation", async () => {
     pin([base, wideStop]);
     renderPage();
     const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    await screen.findByRole("article", { name: "Run 2" });
 
     await userEvent.click(screen.getByRole("button", { name: "Remove all" }));
     expect(screen.getAllByRole("article")).toHaveLength(2);
     await userEvent.click(screen.getByRole("button", { name: "Remove all" }));
     expect(confirm).toHaveBeenCalledWith("Remove all 2 pinned runs? Export them first if you want a backup.");
     expect(screen.getByText("No pinned runs yet")).toBeInTheDocument();
+    await waitFor(() => expect(store.records).toEqual([]));
   });
 
   it("exports the runs and imports them back without duplicates", async () => {
     pin([base]);
     renderPage();
+    await screen.findByRole("article", { name: "Run 1" });
 
     await userEvent.click(screen.getByRole("button", { name: "Export JSON" }));
     const [filename, content, type] = vi.mocked(downloadFile).mock.calls[0] ?? [];
@@ -182,13 +191,14 @@ describe("ComparePage", () => {
     await userEvent.upload(screen.getByLabelText("Runs file to import"), new File([file], "runs.json", { type: "application/json" }));
     expect(await screen.findByText("Imported 1 run. 1 run already pinned.")).toBeInTheDocument();
     expect(screen.getAllByRole("article")).toHaveLength(2);
+    expect(store.runs().map((run) => run.name)).toEqual(["baseline", "wide stop"]);
   });
 
   it("compares a portfolio run with a backtest run, with its stats in the chosen period", async () => {
     pin([base, portfolio]);
     renderPage();
 
-    const card = screen.getByRole("article", { name: "Run 3" });
+    const card = await screen.findByRole("article", { name: "Run 3" });
     expect(card).toHaveTextContent("us_large");
     expect(card).toHaveTextContent("portfolio of 2 tickers · vectorized · 2016-01-04 → 2026-10-13");
     expect(within(card).getByRole("link", { name: "Open in Portfolio" })).toHaveAttribute(
@@ -217,7 +227,7 @@ describe("ComparePage", () => {
   it("shows no portfolio stats without a shown portfolio run", async () => {
     pin([base, wideStop, portfolio]);
     renderPage();
-    expect(screen.getByRole("heading", { name: "Portfolio stats" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Portfolio stats" })).toBeInTheDocument();
     await userEvent.click(within(screen.getByRole("article", { name: "Run 3" })).getByRole("button", { name: "Hide" }));
     expect(screen.queryByRole("heading", { name: "Portfolio stats" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Show all" }));
@@ -229,6 +239,7 @@ describe("ComparePage", () => {
     const cerebro = makePortfolioPin(4, snapshotOf("cerebro"), { name: "top 5 cerebro" });
     pin([base, portfolio, cerebro]);
     renderPage();
+    await screen.findByRole("article", { name: "Run 4" });
     await userEvent.click(screen.getByRole("button", { name: "Export JSON" }));
     const content = vi.mocked(downloadFile).mock.calls[0]?.[1] ?? "";
     expect(JSON.parse(content)).toEqual(encodeRuns([base, portfolio, cerebro]));
@@ -238,18 +249,63 @@ describe("ComparePage", () => {
     await userEvent.upload(screen.getByLabelText("Runs file to import"), new File([content], "runs.json", { type: "application/json" }));
     expect(await screen.findByText("Imported 3 runs.")).toBeInTheDocument();
     expect(within(screen.getByRole("article", { name: "Run 4" })).getByRole("link", { name: "Open in Portfolio" })).toBeInTheDocument();
-    expect(stored().runs.map((run) => run.name)).toEqual(["baseline", "top 5", "top 5 cerebro"]);
+    expect(store.runs().map((run) => run.name)).toEqual(["baseline", "top 5", "top 5 cerebro"]);
   });
 
   it("reports an invalid import file", async () => {
     renderPage();
+    await screen.findByText("No pinned runs yet");
     await userEvent.upload(screen.getByLabelText("Runs file to import"), new File(["{"], "runs.json", { type: "application/json" }));
     expect(await screen.findByText("Import failed: The file is not valid JSON")).toBeInTheDocument();
   });
 
-  it("reports saved runs it cannot read", () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, runs: [{ id: 1 }] }));
+  it("reports runs left in this browser that it cannot read, and keeps them", async () => {
+    localStorage.setItem(BROWSER_KEY, JSON.stringify({ version: 1, runs: [{ id: 1 }] }));
     renderPage();
-    expect(screen.getByRole("alert")).toHaveTextContent('Pinned runs saved in this browser could not be read (Run 1 has an invalid "id").');
+    expect(await screen.findByRole("alert")).toHaveTextContent('Pinned runs saved in this browser could not be read (Run 1 has an invalid "id").');
+    expect(localStorage.getItem(BROWSER_KEY)).not.toBeNull();
+  });
+
+  it("moves the runs left in this browser to the server once", async () => {
+    pin([base]);
+    localStorage.setItem(BROWSER_KEY, JSON.stringify(encodeRuns([base, wideStop])));
+    renderPage();
+    expect(await screen.findByText("Moved 1 pinned run from this browser to the server. 1 run already there.")).toBeInTheDocument();
+    expect(screen.getAllByRole("article")).toHaveLength(2);
+    expect(store.runs().map((run) => run.name)).toEqual(["baseline", "wide stop"]);
+    expect(localStorage.getItem(BROWSER_KEY)).toBeNull();
+  });
+
+  it("keeps the runs that did not fit on the server in this browser", async () => {
+    const runs = Array.from({ length: 8 }, (_, index) => makeRun(index + 1, { config: { ...base.config, atr_mult: index + 1 } }, { name: `run ${index + 1}` }));
+    pin(runs.slice(0, 7));
+    const another = makeRun(2, { config: { ...base.config, atr_mult: 10 } });
+    localStorage.setItem(BROWSER_KEY, JSON.stringify(encodeRuns([runs[7]!, another])));
+    renderPage();
+    expect(
+      await screen.findByText(
+        "Moved 1 pinned run from this browser to the server. 1 run did not fit (the limit is 8): remove some runs and reload the page to move the rest.",
+      ),
+    ).toBeInTheDocument();
+    expect(store.records).toHaveLength(8);
+    expect(localStorage.getItem(BROWSER_KEY)).not.toBeNull();
+  });
+
+  it("shows why a change was not saved and what the server has", async () => {
+    pin([base, wideStop]);
+    renderPage();
+    const second = await screen.findByRole("article", { name: "Run 2" });
+    vi.spyOn(store, "remove").mockRejectedValueOnce(new Error("Cannot reach the tradescan server"));
+    await userEvent.click(within(second).getByRole("button", { name: "Remove" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The change was not saved (Cannot reach the tradescan server).");
+    expect(await screen.findByRole("article", { name: "Run 2" })).toBeInTheDocument();
+  });
+
+  it("reports runs the server cannot give", async () => {
+    vi.spyOn(store, "load").mockRejectedValue(new Error("Cannot reach the tradescan server"));
+    renderPage();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Pinned runs could not be read from the server (Cannot reach the tradescan server).");
+    expect(screen.getByText("No pinned runs yet")).toBeInTheDocument();
   });
 });
+
