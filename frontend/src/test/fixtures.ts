@@ -18,6 +18,7 @@ import type {
   ScanOut,
   SignalOut,
   SweepOut,
+  WalkForwardOut,
   WatchlistBacktestOut,
   WatchlistOut,
 } from "../api/client";
@@ -252,6 +253,15 @@ export const config: ConfigOut = {
         spec("absolute_lookback", "Absolute momentum", 252, [0, 1000, 1], "int", { unit: "bars" }),
       ],
     },
+    {
+      name: "walk_forward",
+      label: "Walk-forward",
+      params: [
+        spec("windows", "Windows", 5, [2, 20, 1], "int"),
+        spec("in_sample_ratio", "In-sample length", 3, [1, 10, 0.5], "float", { unit: "× out-of-sample" }),
+        spec("min_trades", "Min in-sample trades", 10, [0, 500, 1], "int"),
+      ],
+    },
   ],
   families: ["trend", "momentum", "breakout", "mean_reversion", "volume", "pattern"],
   engines: ["vectorized", "cerebro"],
@@ -275,6 +285,14 @@ export const config: ConfigOut = {
     sections: ["account", "risk", "backtest", "pyramid"],
     fixed: ["backtest.oos_pct"],
     min_period_bars: 60,
+  },
+  walk_forward: {
+    max_runs: 2000,
+    schemes: ["rolling", "anchored"],
+    default_scheme: "rolling",
+    metrics: ["total_return_pct", "cagr_pct", "sharpe", "sortino", "max_drawdown_pct", "win_rate_pct", "profit_factor", "expectancy_r", "sqn"],
+    default_metric: "sharpe",
+    fixed: ["account.equity", "backtest.oos_pct"],
   },
 };
 
@@ -546,6 +564,99 @@ export const sweepResult: SweepOut = {
     sweepCell([10, 3], [1.4, 0.3], [30, 8]),
     sweepCell([15, 2], [0.7, 0.4]),
     { values: [15, 3], in_sample: null, out_of_sample: null, error: "connors_rsi2_long: test failure" },
+  ],
+};
+
+/**
+ * A walk-forward of the RSI2 setup over oversold 5/10/15 by target 2R/3R in three rolling windows: the first one's last
+ * trade runs into the second window, which starts late, and no combination qualifies in the third.
+ */
+export const walkForwardResult: WalkForwardOut = {
+  ticker: "SPY",
+  signal: "connors_rsi2_long",
+  direction: "long",
+  description: backtestResult.description,
+  params: backtestResult.params,
+  start: backtestResult.start,
+  end: backtestResult.end,
+  config: backtestResult.config,
+  entry: backtestResult.entry,
+  exits: backtestResult.exits,
+  filters: backtestResult.filters,
+  benchmark: backtestResult.benchmark,
+  engine: "vectorized",
+  scheme: "rolling",
+  metric: "sharpe",
+  walk_forward: { windows: 3, in_sample_ratio: 3, min_trades: 10, in_sample_bars: 1008, out_of_sample_bars: 336 },
+  axes: sweepResult.axes,
+  combinations: 6,
+  errors: [{ values: [15, 3], error: "connors_rsi2_long: test failure" }],
+  out_of_sample_start: "2022-06-01",
+  windows: [
+    {
+      in_sample_start: "2018-06-01",
+      in_sample_end: "2022-05-31",
+      values: [10, 2],
+      qualified: 5,
+      in_sample: makeMetrics({ sharpe: 1.2, trades: 30 }),
+      out_of_sample_start: "2022-06-01",
+      out_of_sample_end: "2023-09-29",
+      traded_from: "2022-06-01",
+      traded_to: "2023-10-12",
+      out_of_sample: makeMetrics({ sharpe: 0.5, trades: 12, total_return_pct: 3.2 }),
+    },
+    {
+      in_sample_start: "2019-09-30",
+      in_sample_end: "2023-09-29",
+      values: [15, 2],
+      qualified: 4,
+      in_sample: makeMetrics({ sharpe: 0.9, trades: 15 }),
+      out_of_sample_start: "2023-10-02",
+      out_of_sample_end: "2025-01-31",
+      traded_from: "2023-10-12",
+      traded_to: "2025-02-03",
+      out_of_sample: makeMetrics({ sharpe: -0.3, trades: 9, total_return_pct: -1.4 }),
+    },
+    {
+      in_sample_start: "2021-02-01",
+      in_sample_end: "2025-01-31",
+      values: null,
+      qualified: 0,
+      in_sample: null,
+      out_of_sample_start: "2025-02-03",
+      out_of_sample_end: "2026-10-13",
+      traded_from: "2025-02-03",
+      traded_to: "2026-10-13",
+      out_of_sample: makeMetrics({ sharpe: null, trades: 0, total_return_pct: 0 }),
+    },
+  ],
+  next: {
+    in_sample_start: "2022-06-01",
+    in_sample_end: "2026-10-13",
+    values: [10, 3],
+    qualified: 5,
+    in_sample: makeMetrics({ sharpe: 1.05, trades: 28 }),
+  },
+  metrics: makeMetrics({ total_return_pct: 1.8, cagr_pct: 0.4, sharpe: 0.21, trades: 21, buy_hold_pct: 48.2 }),
+  unchanged: makeMetrics({ total_return_pct: 4.5, cagr_pct: 1.0, sharpe: 0.35, trades: 25, buy_hold_pct: 48.2 }),
+  efficiency: 0.12,
+  equity: [
+    { time: "2022-06-01", value: 100000 },
+    { time: "2026-10-13", value: 101800 },
+  ],
+  unchanged_equity: [
+    { time: "2022-06-01", value: 100000 },
+    { time: "2026-10-13", value: 104500 },
+  ],
+  buy_hold: [
+    { time: "2022-06-01", value: 100000 },
+    { time: "2026-10-13", value: 148200 },
+  ],
+  trades: [
+    {
+      direction: "long", signal_date: "2023-09-28", entry_date: "2023-09-29", exit_date: "2023-10-12",
+      entry_price: 428, exit_price: 434, size: 50, pnl: 270, r_multiple: 0.6, exit_reason: "time", adds: [],
+    },
   ],
 };
 

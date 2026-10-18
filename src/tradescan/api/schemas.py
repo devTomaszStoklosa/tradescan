@@ -603,8 +603,8 @@ class WalkForwardWindowOut(WindowPickOut):
         "position of the window before was still open; null when the window had no part of its own"
     )
     traded_to: str | None = Field(
-        description="The bar where the next window took over: later than out_of_sample_end while a position of this "
-        "window was still open; null when the window had no part of its own"
+        description="The bar where the next window took over: the next window's first bar, or later while a position of "
+        "this window was still open; the last bar for the last window; null when the window had no part of its own"
     )
     out_of_sample: MetricsOut | None = Field(description="Of the window's own part of the stitched curve; null without one")
 

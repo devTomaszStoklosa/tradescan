@@ -1,7 +1,8 @@
 /**
  * The fields of a backtest setup: ticker, signal and its parameters, entry filters, trade rules, pyramiding and costs. Shared by
- * Backtest, Sweep, Watchlist and Portfolio; a setup without a `ticker` (one run on a whole watchlist) gets no ticker field, and the
- * portfolio backtest, which does not pyramid, no pyramiding fields.
+ * Backtest, Sweep, Walk-forward, Watchlist and Portfolio; a setup without a `ticker` (one run on a whole watchlist) gets no ticker
+ * field, the portfolio backtest, which does not pyramid, no pyramiding fields, and the walk-forward, whose windows split the
+ * history, no out-of-sample share.
  */
 import { useMemo } from "react";
 
@@ -38,6 +39,8 @@ function SignalSelect({ value, onChange, signals }: { value: string; onChange: (
   );
 }
 
+const OOS_SHARE = ["oos_pct"];
+
 export function BacktestSetupFields<T extends BacktestRules & { ticker?: string }>({
   draft,
   onChange,
@@ -45,6 +48,7 @@ export function BacktestSetupFields<T extends BacktestRules & { ticker?: string 
   signals,
   defaultBenchmark = config.benchmark,
   pyramiding = true,
+  outOfSample = true,
 }: {
   draft: T;
   onChange: (next: T) => void;
@@ -54,6 +58,8 @@ export function BacktestSetupFields<T extends BacktestRules & { ticker?: string 
   defaultBenchmark?: string;
   /** Whether the engine adds units to a winning position, so the form offers the pyramiding fields. */
   pyramiding?: boolean;
+  /** Whether the run reports an out-of-sample period of `backtest.oos_pct`, so the form offers it. */
+  outOfSample?: boolean;
 }) {
   const set = <K extends keyof T>(key: K, value: T[K]) => onChange({ ...draft, [key]: value });
   const selected = signals.find((signal) => signal.name === draft.signal);
@@ -130,8 +136,8 @@ export function BacktestSetupFields<T extends BacktestRules & { ticker?: string 
         </div>
         {costs && (
           <div className="space-y-2">
-            <GroupHeading>Costs, metrics and out-of-sample split</GroupHeading>
-            <SectionFields section={costs} overrides={draft.settings} onChange={setSettings} />
+            <GroupHeading>{outOfSample ? "Costs, metrics and out-of-sample split" : "Costs and metrics"}</GroupHeading>
+            <SectionFields section={costs} overrides={draft.settings} onChange={setSettings} exclude={outOfSample ? [] : OOS_SHARE} />
           </div>
         )}
       </section>

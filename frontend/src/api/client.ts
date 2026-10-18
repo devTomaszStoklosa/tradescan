@@ -65,9 +65,14 @@ export type TargetsOut = Schemas["TargetsOut"];
 export type TickerContributionOut = Schemas["TickerContributionOut"];
 export type TickerRunOut = Schemas["TickerRunOut"];
 export type TradeOut = Schemas["TradeOut"];
+export type WalkForwardIn = Schemas["WalkForwardIn"];
+export type WalkForwardOut = Schemas["WalkForwardOut"];
+export type WalkForwardWindowOut = Schemas["WalkForwardWindowOut"];
 export type WatchlistBacktestIn = Schemas["WatchlistBacktestIn"];
 export type WatchlistBacktestOut = Schemas["WatchlistBacktestOut"];
 export type WatchlistOut = Schemas["WatchlistOut"];
+export type WindowPickOut = Schemas["WindowPickOut"];
+export type WindowScheme = Schemas["WindowScheme"];
 
 export class ApiError extends Error {
   readonly status: number;
@@ -126,6 +131,7 @@ export const api = {
   edge: (body: EdgeIn) => post<EdgeOut>("/edge", body),
   backtest: (body: BacktestIn) => post<BacktestOut>("/backtest", body),
   sweep: (body: SweepIn) => post<SweepOut>("/sweep", body),
+  walkForward: (body: WalkForwardIn) => post<WalkForwardOut>("/walk-forward", body),
   watchlistBacktest: (body: WatchlistBacktestIn) => post<WatchlistBacktestOut>("/watchlist-backtest", body),
   portfolioBacktest: (body: PortfolioIn) => post<PortfolioOut>("/portfolio-backtest", body),
   rotationBacktest: (body: RotationIn) => post<RotationOut>("/rotation-backtest", body),

@@ -8,6 +8,7 @@ const LINKS = [
   { to: "/", label: "Scanner", end: true },
   { to: "/backtest", label: "Backtest", end: false },
   { to: "/sweep", label: "Sweep", end: false },
+  { to: "/walk-forward", label: "Walk-forward", end: false },
   { to: "/watchlist", label: "Watchlist", end: false },
   { to: "/portfolio", label: "Portfolio", end: false },
   { to: "/rotation", label: "Rotation", end: false },

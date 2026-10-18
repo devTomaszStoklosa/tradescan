@@ -18,6 +18,7 @@ const router = createBrowserRouter([
       { path: "backtest", lazy: async () => ({ Component: (await import("./pages/BacktestPage")).BacktestPage }) },
       { path: "edge", lazy: async () => ({ Component: (await import("./pages/EdgePage")).EdgePage }) },
       { path: "sweep", lazy: async () => ({ Component: (await import("./pages/SweepPage")).SweepPage }) },
+      { path: "walk-forward", lazy: async () => ({ Component: (await import("./pages/WalkForwardPage")).WalkForwardPage }) },
       { path: "watchlist", lazy: async () => ({ Component: (await import("./pages/WatchlistPage")).WatchlistPage }) },
       { path: "portfolio", lazy: async () => ({ Component: (await import("./pages/PortfolioPage")).PortfolioPage }) },
       { path: "rotation", lazy: async () => ({ Component: (await import("./pages/RotationPage")).RotationPage }) },
