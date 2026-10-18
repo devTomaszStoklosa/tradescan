@@ -40,7 +40,7 @@ URL, pinned runs, Compare and the sweep pick them up.
 | R1 | Momentum rotation | done ([#41], [PR #42]) | | F3 |
 | T2 | Pyramiding | done ([#48], [PR #49]) | | F1 |
 | O4 | Walk-forward analysis | done ([#52], [PR #53]) | | O1 |
-| O6 | Trade journal and server-side run storage | done ([#55]) | | C1 |
+| O6 | Trade journal and server-side run storage | done ([#55], [PR #56]) | | C1 |
 
 Sizes: S is a few rule or signal classes, M touches the engines, API or UI, L is a new engine or page.
 
@@ -84,3 +84,4 @@ None: every item above is done.
 [#52]: https://github.com/devTomaszStoklosa/tradescan/issues/52
 [PR #53]: https://github.com/devTomaszStoklosa/tradescan/pull/53
 [#55]: https://github.com/devTomaszStoklosa/tradescan/issues/55
+[PR #56]: https://github.com/devTomaszStoklosa/tradescan/pull/56
