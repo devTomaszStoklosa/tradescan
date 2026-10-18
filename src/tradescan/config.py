@@ -44,7 +44,7 @@ class AccountSettings:
     risk_pct: float = param(1.0, minimum=0.01, maximum=100.0, step=0.1, label="Risk per trade", unit="%")
     max_position_pct: float = param(
         25.0, minimum=0.1, maximum=100.0, step=1.0, label="Max position", unit="% of equity",
-        help="Caps a position's value, whatever the stop distance",
+        help="Caps a position's value, whatever the stop distance; with pyramiding, each unit's",
     )
     lot_size: float = param(
         1.0, minimum=1e-8, maximum=1e6, step=0.0001, label="Lot size", help="1 for stocks, e.g. 0.0001 for crypto"
@@ -158,6 +158,20 @@ class BacktestSettings:
 
 
 @dataclass(frozen=True)
+class PyramidSettings:
+    label: ClassVar[str] = "Pyramiding"
+    max_units: int = param(
+        1, minimum=1, maximum=10, step=1, label="Max units",
+        help="The first entry plus the adds, each the size of the first; 1 turns pyramiding off",
+    )
+    add_every_atr: float = param(
+        0.5, minimum=0.1, maximum=10.0, step=0.1, label="Add every", unit="ATR",
+        help="Another unit once price moves this far in the trade's favour from the last unit's fill, "
+        "in ATRs of the signal bar",
+    )
+
+
+@dataclass(frozen=True)
 class MonteCarloSettings:
     label: ClassVar[str] = "Monte Carlo"
     simulations: int = param(
@@ -204,6 +218,7 @@ class Settings:
     trend: TrendSettings = field(default_factory=TrendSettings)
     regime: RegimeSettings = field(default_factory=RegimeSettings)
     backtest: BacktestSettings = field(default_factory=BacktestSettings)
+    pyramid: PyramidSettings = field(default_factory=PyramidSettings)
     monte_carlo: MonteCarloSettings = field(default_factory=MonteCarloSettings)
     portfolio: PortfolioSettings = field(default_factory=PortfolioSettings)
     rotation: RotationSettings = field(default_factory=RotationSettings)

@@ -12,7 +12,7 @@ import { GroupHeading, RuleChoiceFields } from "../components/TradeRuleFields";
 import { UniversePicker } from "../components/UniverseFilters";
 import { Button, EmptyState, ErrorBox, Field, Input, Loading, Notice, PageHeader, Panel, Segmented, Select, StatTile } from "../components/ui";
 import { defaultWatchlist, LARGE_UNIVERSE, PERIODS, ROTATION_SECTION, universeSize } from "../lib/choices";
-import { downloadCsv } from "../lib/csv";
+import { downloadCsv, tradeRow } from "../lib/csv";
 import { DASH, fmtNumber, fmtPct, fmtSigned, fmtSize, tone } from "../lib/format";
 import {
   hasRotationProblems,
@@ -322,7 +322,7 @@ function RotationView({ result }: { result: RotationOut }) {
       </section>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">{result.trades.length} holdings</h2>
-        <Button onClick={() => downloadCsv(`${file}.csv`, result.trades.map((trade) => ({ ...trade })))} disabled={!result.trades.length}>
+        <Button onClick={() => downloadCsv(`${file}.csv`, result.trades.map(tradeRow))} disabled={!result.trades.length}>
           Export CSV
         </Button>
       </div>

@@ -65,6 +65,10 @@ bars_per_year = 252
 oos_pct = 30.0           # last % of the history reported as out-of-sample (left out of tuning)
 # Entry and exit rules (target, time exit, ...) and their parameters are chosen per backtest.
 
+[pyramid]
+max_units = 1            # the first entry plus the adds of a single-ticker backtest; 1 turns pyramiding off
+add_every_atr = 0.5      # another unit once price moves this many ATRs (of the signal bar) from the last fill
+
 [monte_carlo]
 simulations = 1000       # resampled sequences of a backtest's closed trades, per method
 ruin_drawdown_pct = 50.0 # a drawdown from the peak at least this deep counts as ruin

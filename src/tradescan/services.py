@@ -152,7 +152,7 @@ def build_risk_planner(settings: Settings) -> RiskPlanner:
 
 
 def build_backtest_config(settings: Settings) -> BacktestConfig:
-    account, backtest, risk = settings.account, settings.backtest, settings.risk
+    account, backtest, risk, pyramid = settings.account, settings.backtest, settings.risk, settings.pyramid
     return BacktestConfig(
         initial_equity=account.equity,
         risk_pct=account.risk_pct,
@@ -164,6 +164,8 @@ def build_backtest_config(settings: Settings) -> BacktestConfig:
         slippage_pct=backtest.slippage_pct,
         bars_per_year=backtest.bars_per_year,
         oos_pct=backtest.oos_pct,
+        max_units=pyramid.max_units,
+        add_every_atr=pyramid.add_every_atr,
     )
 
 
@@ -598,7 +600,7 @@ class SweepReport:
 
 
 # Settings sections a backtest reads. The out-of-sample share defines the split itself, so it is fixed.
-SWEEP_SECTIONS = ("account", "risk", "backtest")
+SWEEP_SECTIONS = ("account", "risk", "backtest", "pyramid")
 NOT_SWEEPABLE = {("backtest", "oos_pct")}
 
 
@@ -896,6 +898,10 @@ class PortfolioUseCase:
         benchmark = _benchmark(request.setup.benchmark, universe, self._settings)
         setup = replace(request.setup, benchmark=benchmark)
         base = resolve_backtest(setup, self._settings, self._registry, self._rules)
+        if base.config.max_units > 1:
+            raise ValueError(
+                f"The portfolio backtest does not pyramid: set pyramid.max_units to 1 (it is {base.config.max_units})"
+            )
         choice = request.priority or RuleChoice(DEFAULT_PRIORITY)
         priority = self._priorities.create(choice.name, choice.params)
         self._registry.check_params(request.score_signal_params)

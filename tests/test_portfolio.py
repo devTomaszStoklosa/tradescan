@@ -102,7 +102,7 @@ def _run(engine, frames, portfolio, rules=BRACKET, priority=ClosePriority(), con
 
 
 def _plan(size=100.0, reference=50.0) -> EntryPlan:
-    return EntryPlan(OrderType.MARKET, math.nan, reference, reference - 2.0, 2.0, size, 1)
+    return EntryPlan(OrderType.MARKET, math.nan, reference, reference - 2.0, 2.0, size, 1, 1.0)
 
 
 def test_rank_puts_the_highest_score_first_then_the_watchlist_order_and_missing_scores_last():

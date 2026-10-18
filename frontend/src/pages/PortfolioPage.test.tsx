@@ -53,6 +53,7 @@ describe("PortfolioPage", () => {
     const router = renderPage("/portfolio");
     await screen.findByRole("button", { name: "Run portfolio" });
     expect(screen.queryByLabelText("Ticker")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Max units")).not.toBeInTheDocument(); // the portfolio backtest does not pyramid
     expect(screen.getByRole("combobox", { name: "Universe" })).toHaveValue("us_large");
     expect(screen.getByRole("combobox", { name: "Priority when more signals fire than fit" })).toHaveValue("relative_strength");
     expect(screen.getByRole("button", { name: "Run portfolio" })).toBeDisabled();

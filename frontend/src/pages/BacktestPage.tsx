@@ -13,7 +13,7 @@ import { SectionFields } from "../components/ParamFields";
 import { PinRunButton } from "../components/PinRunButton";
 import { Button, DirectionBadge, EmptyState, ErrorBox, Field, Loading, PageHeader, Panel, Segmented, ToggleChip } from "../components/ui";
 import { BACKTEST_PAGE_SECTIONS, MONTE_CARLO_SECTION } from "../lib/choices";
-import { downloadCsv } from "../lib/csv";
+import { downloadCsv, tradeRow } from "../lib/csv";
 import { fmtNumber } from "../lib/format";
 import { backtestBody, readBacktestForm, writeBacktestForm, type BacktestForm } from "../lib/params";
 import { hasSetupProblems, resetSetup, setupChanges } from "../lib/setup";
@@ -114,6 +114,7 @@ function BacktestView({ result, form, config }: { result: BacktestOut; form: Bac
     const long = result.direction === "long";
     return run.trades.flatMap((trade): ChartMarker[] => [
       { time: trade.entry_date, position: long ? "belowBar" : "aboveBar", shape: long ? "arrowUp" : "arrowDown", tone: "accent" },
+      ...trade.adds.map((fill): ChartMarker => ({ time: fill.date, position: long ? "belowBar" : "aboveBar", shape: long ? "arrowUp" : "arrowDown", tone: "accent", text: "+" })),
       { time: trade.exit_date, position: long ? "aboveBar" : "belowBar", shape: "circle", tone: trade.pnl >= 0 ? "up" : "down" },
     ]);
   }, [run, result.direction]);
@@ -145,7 +146,8 @@ function BacktestView({ result, form, config }: { result: BacktestOut; form: Bac
           </p>
         )}
         <p className="text-muted">
-          Entry: {result.entry.description} · initial stop {fmtNumber(used.atr_mult, 2)} × ATR({used.atr_period}) · exits: {exits}
+          Entry: {result.entry.description} · initial stop {fmtNumber(used.atr_mult, 2)} × ATR({used.atr_period})
+          {used.max_units > 1 && ` · pyramiding up to ${used.max_units} units ${fmtNumber(used.add_every_atr, 2)} ATR apart`} · exits: {exits}
         </p>
         <Link to={`/sweep?${writeSweepForm(newSweepForm(form), config).toString()}`} className="inline-block text-accent hover:underline">
           Sweep parameters of this setup →
@@ -184,7 +186,7 @@ function BacktestView({ result, form, config }: { result: BacktestOut; form: Bac
           {run.trades.length} trades ({run.engine})
         </h2>
         <Button
-          onClick={() => downloadCsv(`tradescan-${result.ticker}-${result.signal}-${run.engine}.csv`, run.trades.map((trade) => ({ ...trade })))}
+          onClick={() => downloadCsv(`tradescan-${result.ticker}-${result.signal}-${run.engine}.csv`, run.trades.map(tradeRow))}
           disabled={!run.trades.length}
         >
           Export CSV

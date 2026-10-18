@@ -1,7 +1,8 @@
 """Fast backtest on numpy arrays.
 
 Signals, rule levels and the daily P&L of each trade are vectorized. Only the order fills loop over the
-bars of a trade, because whether an order fills, and which one first, depends on the bar-by-bar path.
+bars of a trade, because whether an order fills, and which one first, depends on the bar-by-bar path. With
+pyramiding, every unit of a position is booked from its own fill to the position's exit.
 """
 
 from __future__ import annotations
@@ -11,9 +12,10 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from tradescan.backtest.base import BacktestConfig, BacktestResult, ExitReason, Trade
+from tradescan.backtest.base import BacktestConfig, BacktestResult, ExitReason, Fill, Trade
 from tradescan.backtest.entries import OrderType
 from tradescan.backtest.exits import ExitTracker, OpenTrade
+from tradescan.backtest.pyramid import Pyramiding, Units
 from tradescan.backtest.rules import Bars
 from tradescan.backtest.trade_rules import EntryPlan, TradeRules
 from tradescan.signals.base import Signal
@@ -77,6 +79,7 @@ class VectorizedEngine:
         sign = signal.direction.sign
         fills = FillModel(config.slippage_pct / 100.0)
         commission = config.commission_pct / 100.0
+        pyramid = Pyramiding.of(config)
 
         daily_pnl = np.zeros(len(bars))
         trades: list[Trade] = []
@@ -95,9 +98,15 @@ class VectorizedEngine:
 
             entry_index, entry_price = entry
             trade = OpenTrade(signal.direction, entry_index, entry_price, plan.reference, plan.stop, plan.risk)
-            exit_ = find_exit(bars, prepared.track(trade), entry_index, fills, sign)
-            path, pnl = pnl_path(bars.close, entry_index, entry_price, exit_, plan.size, sign, commission)
-            daily_pnl[entry_index : exit_.index + 1] += path
+            units = pyramid.start(trade, plan.atr) if pyramid.enabled else None
+            tracker = prepared.track(trade, (units,) if units is not None else ())
+            exit_ = find_exit(bars, tracker, entry_index, fills, sign, units)
+            unit_fills = [(entry_index, entry_price), *(units.adds if units is not None else ())]
+            pnl = 0.0
+            for unit_index, unit_price in unit_fills:
+                path, unit_pnl = pnl_path(bars.close, unit_index, unit_price, exit_, plan.size, sign, commission)
+                daily_pnl[unit_index : exit_.index + 1] += path
+                pnl += unit_pnl
             equity += pnl
             trades.append(
                 Trade(
@@ -105,12 +114,13 @@ class VectorizedEngine:
                     signal_date=df.index[signal_index],
                     entry_date=df.index[entry_index],
                     exit_date=df.index[exit_.index],
-                    entry_price=entry_price,
+                    entry_price=sum(price for _, price in unit_fills) / len(unit_fills),  # the units are equal in size
                     exit_price=exit_.price,
-                    size=plan.size,
+                    size=plan.size * len(unit_fills),
                     pnl=pnl,
                     r_multiple=pnl / (plan.size * plan.risk),
                     exit_reason=exit_.reason,
+                    adds=tuple(Fill(df.index[index], price) for index, price in unit_fills[1:]),
                 )
             )
             next_free = exit_.index if exit_.reason != ExitReason.OPEN else len(bars)
@@ -129,12 +139,16 @@ def find_entry(bars: Bars, signal_index: int, plan: EntryPlan, fills: FillModel,
     return None
 
 
-def find_exit(bars: Bars, tracker: ExitTracker, entry_index: int, fills: FillModel, sign: float) -> TradeExit:
+def find_exit(
+    bars: Bars, tracker: ExitTracker, entry_index: int, fills: FillModel, sign: float, units: Units | None = None
+) -> TradeExit:
     """Executes the orders the tracker names at each close on the next bar, the way backtrader's broker does:
-    an exit at the open first, then the stop, then the target."""
+    an exit at the open first, then the stop, then the target. With `units`, the stop order for the next unit
+    comes last, so it fills only on a bar where the position does not exit; its fills are reported to `units`."""
     side = -sign
     for index in range(entry_index, len(bars) - 1):
         orders = tracker.orders(index)
+        add = units.add_level() if units is not None else None
         bar = index + 1
         open_, high, low = bars.open[bar], bars.high[bar], bars.low[bar]
         if orders.at_open is not None:
@@ -143,6 +157,8 @@ def find_exit(bars: Bars, tracker: ExitTracker, entry_index: int, fills: FillMod
             return TradeExit(bar, price, orders.stop_reason)
         if orders.target is not None and (price := fills.limit(side, orders.target, open_, high, low)) is not None:
             return TradeExit(bar, price, orders.target_reason)
+        if add is not None and units is not None and (price := fills.stop(sign, add, open_, high, low)) is not None:
+            units.add(bar, price)
     return TradeExit(len(bars) - 1, float(bars.close[-1]), ExitReason.OPEN)
 
 

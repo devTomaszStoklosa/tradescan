@@ -181,3 +181,48 @@ describe("BacktestPage trade rules", () => {
     }
   });
 });
+
+describe("BacktestPage pyramiding", () => {
+  it("sends the pyramiding settings and shows the units of each position", async () => {
+    const trade = {
+      direction: "long" as const, signal_date: "2024-03-01", entry_date: "2024-03-04", exit_date: "2024-03-15", entry_price: 102,
+      exit_price: 110, size: 300, pnl: 2400, r_multiple: 2.4, exit_reason: "trailing",
+      adds: [{ date: "2024-03-06", price: 102 }, { date: "2024-03-08", price: 104 }],
+    };
+    RESPONSES["/backtest"] = {
+      ...backtestResult,
+      config: { ...backtestResult.config, max_units: 3, add_every_atr: 1 },
+      runs: backtestResult.runs.map((run) => ({ ...run, trades: [trade] })),
+    };
+    try {
+      renderPage("/backtest?ticker=SPY&signal=connors_rsi2_long&set.pyramid.max_units=3&set.pyramid.add_every_atr=1");
+      expect(await screen.findByText(/pyramiding up to 3 units 1.00 ATR apart/)).toBeInTheDocument();
+      expect(backtestBodies().at(-1)).toMatchObject({ settings: { pyramid: { max_units: 3, add_every_atr: 1 } } });
+      expect(screen.getByLabelText("Max units")).toHaveValue(3);
+      expect(screen.getByLabelText("Add every (ATR)")).toHaveValue(1);
+
+      const table = screen.getByRole("table", { name: "Trades" });
+      expect(within(table).getByRole("columnheader", { name: /Units/ })).toBeInTheDocument();
+      expect(within(table).getByTitle("added 2024-03-06 at 102.00; added 2024-03-08 at 104.00")).toHaveTextContent("3");
+    } finally {
+      RESPONSES["/backtest"] = backtestResult;
+    }
+  });
+
+  it("leaves the units column out while no position was pyramided", async () => {
+    RESPONSES["/backtest"] = { ...backtestResult, runs: backtestResult.runs.map((run) => ({ ...run, trades: [{ ...backtestTrade, adds: [] }] })) };
+    try {
+      renderPage("/backtest?ticker=SPY&signal=connors_rsi2_long");
+      const table = await screen.findByRole("table", { name: "Trades" });
+      expect(within(table).queryByRole("columnheader", { name: /Units/ })).not.toBeInTheDocument();
+      expect(screen.queryByText(/pyramiding up to/)).not.toBeInTheDocument();
+    } finally {
+      RESPONSES["/backtest"] = backtestResult;
+    }
+  });
+});
+
+const backtestTrade = {
+  direction: "long" as const, signal_date: "2024-03-01", entry_date: "2024-03-04", exit_date: "2024-03-08", entry_price: 170,
+  exit_price: 178, size: 100, pnl: 780, r_multiple: 1.6, exit_reason: "target",
+};

@@ -220,6 +220,14 @@ export const config: ConfigOut = {
       ],
     },
     {
+      name: "pyramid",
+      label: "Pyramiding",
+      params: [
+        spec("max_units", "Max units", 1, [1, 10, 1], "int"),
+        spec("add_every_atr", "Add every", 0.5, [0.1, 10, 0.1], "float", { unit: "ATR" }),
+      ],
+    },
+    {
       name: "monte_carlo",
       label: "Monte Carlo",
       params: [
@@ -264,7 +272,7 @@ export const config: ConfigOut = {
     min_values: 2,
     max_values: 50,
     max_combinations: 200,
-    sections: ["account", "risk", "backtest"],
+    sections: ["account", "risk", "backtest", "pyramid"],
     fixed: ["backtest.oos_pct"],
     min_period_bars: 60,
   },
@@ -424,6 +432,8 @@ export const backtestResult: BacktestOut = {
     slippage_pct: 0.05,
     bars_per_year: 252,
     oos_pct: 30,
+    max_units: 1,
+    add_every_atr: 0.5,
   },
   entry: appliedRule(entryRules[0]!),
   exits: exitRules.map((rule) => appliedRule(rule)),
@@ -638,11 +648,11 @@ export function makePortfolioRun(engine: string, overrides: Partial<PortfolioRun
     trades: [
       {
         ticker: "AAPL", direction: "long", signal_date: "2024-03-01", entry_date: "2024-03-04", exit_date: "2024-03-08",
-        entry_price: 170, exit_price: 178, size: 100, pnl: 780, r_multiple: 1.6, exit_reason: "target",
+        entry_price: 170, exit_price: 178, size: 100, pnl: 780, r_multiple: 1.6, exit_reason: "target", adds: [],
       },
       {
         ticker: "MSFT", direction: "long", signal_date: "2024-03-01", entry_date: "2024-03-04", exit_date: "2024-03-06",
-        entry_price: 400, exit_price: 390, size: 40, pnl: -430, r_multiple: -1.05, exit_reason: "stop",
+        entry_price: 400, exit_price: 390, size: 40, pnl: -430, r_multiple: -1.05, exit_reason: "stop", adds: [],
       },
     ],
     tickers: [
@@ -746,11 +756,11 @@ export const rotationResult: RotationOut = {
   trades: [
     {
       ticker: "GLD", direction: "long", signal_date: "2024-02-29", entry_date: "2024-03-01", exit_date: "2024-11-01",
-      entry_price: 190.5, exit_price: 250.2, size: 160, pnl: 9400, r_multiple: null, exit_reason: "rebalance",
+      entry_price: 190.5, exit_price: 250.2, size: 160, pnl: 9400, r_multiple: null, exit_reason: "rebalance", adds: [],
     },
     {
       ticker: "XLE", direction: "long", signal_date: "2026-08-31", entry_date: "2026-09-01", exit_date: "2026-10-16",
-      entry_price: 88.1, exit_price: 95.4, size: 400, pnl: 2900, r_multiple: null, exit_reason: "open",
+      entry_price: 88.1, exit_price: 95.4, size: 400, pnl: 2900, r_multiple: null, exit_reason: "open", adds: [],
     },
   ],
   tickers: [

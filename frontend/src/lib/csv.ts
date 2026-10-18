@@ -1,4 +1,11 @@
+import type { TradeOut } from "../api/client";
+
 export type CsvRow = Record<string, string | number | boolean | null | undefined>;
+
+/** A trade as a row, like the CLI's export: its number of units, and its adds as "date price" pairs. */
+export function tradeRow<T extends TradeOut>({ adds, ...trade }: T): CsvRow {
+  return { ...trade, units: 1 + adds.length, adds: adds.map((fill) => `${fill.date} ${fill.price}`).join("; ") };
+}
 
 function escape(value: CsvRow[string]): string {
   if (value === null || value === undefined) return "";

@@ -16,7 +16,7 @@ import { GroupHeading, RuleChoiceFields } from "../components/TradeRuleFields";
 import { UniversePicker } from "../components/UniverseFilters";
 import { Button, DirectionBadge, EmptyState, ErrorBox, Field, Loading, Notice, PageHeader, Panel, Segmented, StatTile, ToggleChip } from "../components/ui";
 import { defaultWatchlist, LARGE_UNIVERSE, PORTFOLIO_SECTION, universeSize } from "../lib/choices";
-import { downloadCsv } from "../lib/csv";
+import { downloadCsv, tradeRow } from "../lib/csv";
 import { DASH, fmtNumber, fmtPct, fmtSigned, tone } from "../lib/format";
 import { pickSections } from "../lib/overrides";
 import {
@@ -95,6 +95,7 @@ function PortfolioFormPanel({
           config={config}
           signals={signals}
           defaultBenchmark={watchlistBenchmark ?? config.benchmark}
+          pyramiding={false}
         />
         <section className="space-y-3">
           <h2 className="text-sm font-semibold">Portfolio</h2>
@@ -368,7 +369,7 @@ function PortfolioView({ result, form, config }: { result: PortfolioOut; form: P
           {run.trades.length} trades ({run.engine})
         </h2>
         <Button
-          onClick={() => downloadCsv(`tradescan-portfolio-${result.universe}-${result.signal}-${run.engine}.csv`, run.trades.map((trade) => ({ ...trade })))}
+          onClick={() => downloadCsv(`tradescan-portfolio-${result.universe}-${result.signal}-${run.engine}.csv`, run.trades.map(tradeRow))}
           disabled={!run.trades.length}
         >
           Export CSV

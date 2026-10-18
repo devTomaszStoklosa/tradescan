@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { config } from "../test/fixtures";
-import { toCsv } from "./csv";
+import { toCsv, tradeRow } from "./csv";
 import { DASH, fmtPct, fmtPrice, fmtSigned, fmtSize, tone } from "./format";
 import { backtestBody, edgeBody, readBacktestForm, readScanForm, scanBody, writeBacktestForm, writeScanForm } from "./params";
 import { compareValues } from "./useSortable";
@@ -29,6 +29,16 @@ describe("format", () => {
 describe("csv", () => {
   it("quotes fields that need it", () => {
     expect(toCsv([{ a: "x,y", b: 'say "hi"', c: null }])).toBe('a,b,c\n"x,y","say ""hi""",');
+  });
+
+  it("writes a trade's units and adds as columns", () => {
+    const trade = {
+      direction: "long" as const, signal_date: "2024-03-01", entry_date: "2024-03-04", exit_date: "2024-03-15", entry_price: 102,
+      exit_price: 110, size: 300, pnl: 2400, r_multiple: 2.4, exit_reason: "trailing",
+      adds: [{ date: "2024-03-06", price: 102 }, { date: "2024-03-08", price: 104 }],
+    };
+    expect(tradeRow(trade)).toMatchObject({ entry_price: 102, units: 3, adds: "2024-03-06 102; 2024-03-08 104" });
+    expect(tradeRow({ ...trade, adds: [] })).toMatchObject({ units: 1, adds: "" });
   });
 });
 

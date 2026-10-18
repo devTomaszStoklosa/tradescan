@@ -6,7 +6,7 @@
  * axes: `ax1=signal.oversold&ax1v=5:20:1`. An axis key is `target[.owner].name`, as the API reports it.
  */
 import type { ConfigOut, MetricsOut, ParamSpecOut, SignalOut, SweepAxisIn, SweepCellOut, SweepIn, SweepTarget } from "../api/client";
-import { BACKTEST_FIELDS, BACKTEST_SECTIONS, MONTE_CARLO_SECTION } from "./choices";
+import { BACKTEST_FIELDS, MONTE_CARLO_SECTION, SETUP_SECTIONS } from "./choices";
 import { metricValue, type MetricKey } from "./compare";
 import { withOwner, withValue, type Values } from "./overrides";
 import { readBacktestSetup, setupBody, writeBacktestSetup, type BacktestSetup } from "./params";
@@ -61,7 +61,8 @@ function paramsOf(target: SweepTarget, owner: string | null, group: string, spec
 
 /**
  * Every single-number parameter of the setup the Backtest form offers: the signal's, the active filters',
- * the entry rule's, the active exits', the stop's and the costs'. The out-of-sample share is left out: it defines the split.
+ * the entry rule's, the active exits', the stop's, the costs' and the pyramiding's. The out-of-sample share is left out: it defines
+ * the split.
  */
 export function sweepParams(setup: BacktestSetup, config: ConfigOut, signals: SignalOut[]): SweepParam[] {
   const result: SweepParam[] = [];
@@ -78,7 +79,7 @@ export function sweepParams(setup: BacktestSetup, config: ConfigOut, signals: Si
     if (exit) result.push(...paramsOf("exit", exit.name, `Exit: ${exit.label}`, exit.params, setup.exitParams[exit.name]));
   }
   const fields: Record<string, readonly string[]> = BACKTEST_FIELDS;
-  for (const name of BACKTEST_SECTIONS) {
+  for (const name of SETUP_SECTIONS) {
     const section = config.sections.find((item) => item.name === name);
     if (!section || !config.sweep.sections.includes(name)) continue;
     const specs = section.params.filter(
