@@ -27,7 +27,7 @@ from tradescan.backtest.oos import MIN_PERIOD_BARS, SignalBetween, SignalFrom
 from tradescan.backtest.sweep import SweepCase
 from tradescan.backtest.vectorized import VectorizedEngine
 
-# Each combination runs once per in-sample window: 2000 backtests of 10 years of daily bars take about 20 s on four cores.
+# Each combination runs once per in-sample window: 2000 backtests of 10 years of daily bars take 10-20 s on four cores.
 MAX_RUNS = 2000
 
 # Metrics a walk-forward can pick by, the highest first. The trade count and the exposure do not get better

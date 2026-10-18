@@ -15,6 +15,8 @@ Trading signal scanner for daily bars: **vectorized pandas signals on yfinance d
 - market regime: benchmark vs. SMA200, breadth, new highs/lows
 - two backtest engines that produce identical trades (pandas for speed, Cerebro as reference)
 - an out-of-sample check on every backtest, and parameter sweeps shown as in-sample and out-of-sample heatmaps
+- walk-forward analysis: re-tune one or two parameters on rolling in-sample windows, trade each pick on the
+  window after it, and join the out-of-sample windows into one equity curve
 - a Monte Carlo of every backtest's trades: how deep the drawdown and how long the losing streak could have
   been, and the chance of ruin at the run's risk per trade
 - one setup on every ticker of a watchlist: each ticker's metrics, all trades pooled, and how the results spread
@@ -60,6 +62,12 @@ the built UI. The screens:
 - **Sweep**: the same setup as Backtest over a range of one or two of its parameters (signal, filters,
   entry, exits, stop, pyramiding or costs), as two heatmaps of a metric you pick: in-sample and out-of-sample. Click a
   cell for its metrics, the average of its neighbours, and a link that opens it on the Backtest page.
+- **Walk-forward**: the same setup and swept parameters as Sweep, re-tuned on every in-sample window and
+  traded on the window after it; the window scheme (rolling or anchored), the selection metric, the number
+  of windows, their in-sample length and the trades a pick needs are editable. Key metrics of the stitched
+  out-of-sample curve against the unchanged setup and buy & hold, the walk-forward efficiency, the curves on
+  one chart with the window starts, every window with its pick and the bars it traded, the setting to trade
+  next with a link that opens it on the Backtest page, and the out-of-sample trades.
 - **Watchlist**: the same setup as Backtest on every ticker of a watchlist (or your own tickers): the
   spread of a metric you pick across the tickers (worst, quartiles, median, best and the share above
   break-even) in-sample and out-of-sample, every ticker's trades pooled in R, and a sortable table of
@@ -136,6 +144,7 @@ tradescan backtest QQQ donchian_breakout --entry stop --exits failed_breakout,no
 tradescan backtest AAPL donchian_breakout --filters trend,market,volume --benchmark QQQ
 tradescan backtest SPY connors_rsi2_long --oos 20
 tradescan sweep SPY connors_rsi2_long --axis signal.oversold=4:16:2 --axis exit.target.target_r=1,2,3 --metric expectancy_r
+tradescan walk-forward SPY connors_rsi2_long --axis signal.oversold=5:25:2.5 --axis exit.target.target_r=1:3:0.5 --windows 5
 tradescan watchlist-backtest connors_rsi2_long -w etf --filters market --metric expectancy_r
 tradescan portfolio-backtest donchian_breakout -w sp500 --filters trend --max-positions 10 --priority momentum
 tradescan rotation-backtest -w etf --holdings 3 --weighting inverse_volatility --safe-asset TLT
@@ -150,6 +159,7 @@ tradescan update-universes
 | `edge` | For each signal, pooled across the watchlist: events, win rate, average and edge vs. baseline at several horizons. |
 | `backtest` | One signal on one ticker with the pandas engine, Cerebro, or `both` side by side, plus its in-sample and out-of-sample metrics. `--filters` picks the entry filters (none by default) and `--benchmark` the benchmark the market filter compares, `--entry` the entry rule, `--exits` the exit rules (`none` keeps only the stop), `--max-units` and `--add-every-atr` the pyramiding, `--oos` the out-of-sample share. |
 | `sweep` | The `backtest` setup over one or two `--axis` parameters (`target[.owner].name=FROM:TO:STEP` or `=V1,V2,...`), as in-sample and out-of-sample grids of `--metric`; `--export` saves every combination. |
+| `walk-forward` | The `backtest` setup with one or two `--axis` parameters as in `sweep`, re-tuned on `--windows` in-sample windows `--in-sample-ratio` times as long as the out-of-sample windows after them (`--scheme rolling` or `anchored`), each window picking the highest in-sample `--metric` with at least `--min-trades` trades: every window with its pick, the stitched out-of-sample metrics next to the unchanged setup, the walk-forward efficiency and the next setting; `--export` saves every window with both periods' metrics. |
 | `watchlist-backtest` | The `backtest` setup (without the ticker) on every ticker of `-w`/`-t` with the vectorized engine: the best `--top` tickers by `--metric` with their in-sample and out-of-sample values, the spread of `--metric` across tickers and all trades pooled; `--export` saves every ticker with every period's metrics. |
 | `portfolio-backtest` | The `backtest` setup (without the ticker and without pyramiding) on every ticker of `-w`/`-t` with one shared equity: `--max-positions` and `--max-exposure` (% of equity) cap it, `--priority` ranks the signals when more fire than fit (`score` reads `[scoring]`, `[trend]` and `[scan] fresh_bars` from the settings file), `--engine` picks the engine (or `both`). Prints every engine's metrics and portfolio stats for the full history and both periods and the `--top` tickers by P&L; `--export` saves every engine's trades. |
 | `rotation-backtest` | A momentum rotation over every ticker of `-w`/`-t`: `--rank` ranks them (default `momentum`), `--holdings` picks the top N, `--rebalance` is `weekly` or `monthly` (default), `--weighting` is `equal` (default) or `inverse_volatility`, `--absolute-lookback` sets the absolute momentum check (0 turns it off) and `--safe-asset` takes the slots of the picks that fail it (default cash). Prints the metrics and rotation stats for the full run and both periods, what a rebalance at the last close would pick and the `--top` tickers by P&L; `--export` saves the trades. |
@@ -278,8 +288,8 @@ favour adds units, Turtle style:
   price); the trades table shows the units and the chart marks every add.
 
 Both engines pyramid the same way. Neither refuses a fill for lack of cash (Cerebro's broker is set up as
-in the portfolio backtest), so several units can be worth more than the equity. Sweeps and watchlist
-backtests pyramid too; the portfolio backtest and the rotation do not, and a portfolio backtest with
+in the portfolio backtest), so several units can be worth more than the equity. Sweeps, walk-forwards and
+watchlist backtests pyramid too; the portfolio backtest and the rotation do not, and a portfolio backtest with
 `max_units` above 1 is refused.
 
 Metrics: total return, CAGR, Sharpe, Sortino, max drawdown, win rate, profit factor, expectancy in R,
@@ -310,8 +320,8 @@ trades, and the chance of ruin: the share of simulations whose drawdown from the
 `monte_carlo.ruin_drawdown_pct` (default 50%). `monte_carlo.simulations` (default 1000 per method) and
 `monte_carlo.seed` (the same seed repeats the same simulations) are settable too. The model leaves out
 the cap on position value and any trade still open on the last bar, so its numbers differ from the
-backtest's own. A run needs at least two closed trades; sweeps and watchlist backtests run no Monte
-Carlo. The API reports it as `monte_carlo` on every run of `/api/backtest`.
+backtest's own. A run needs at least two closed trades; sweeps, walk-forwards and watchlist backtests run
+no Monte Carlo. The API reports it as `monte_carlo` on every run of `/api/backtest`.
 
 **Sweeps.** A sweep runs one setup for every combination of one or two parameters' values (at most 200
 combinations, 2–50 values per parameter), each on both periods, with the pandas engine on all CPU cores.
@@ -320,6 +330,40 @@ rules or the `account`, `risk`, `backtest` and `pyramid` settings can be swept; 
 since it defines the split. A combination that breaks a rule between parameters (for example a fast
 average that is not shorter than the slow one) is shown as failed and the others still run. On 10 years
 of daily bars a sweep of 200 combinations takes a few seconds.
+
+**Walk-forward.** A walk-forward re-tunes one setup over and over and trades each setting only on history
+it was not tuned on. It takes the same one or two swept parameters as a sweep and runs on the pandas engine
+on all CPU cores:
+
+- **windows:** the history is cut into `walk_forward.windows` out-of-sample windows of equal length (default
+  5) that end on the last bar. Each one follows an in-sample window `walk_forward.in_sample_ratio` times as
+  long (default 3): `rolling` in-sample windows keep that length and slide along, `anchored` ones start on
+  the first bar and grow. Every window needs at least 60 bars, and the bars before the first in-sample
+  window (fewer than the windows plus the ratio) only warm indicators up. 10 years of daily bars with the
+  defaults give windows of about 315 bars after in-sample windows of about 945;
+- **picks:** every combination runs on every in-sample window, the way the in-sample period of a backtest
+  runs: the engine gets the bars up to the window's end, the signal fires from its start, and the metrics
+  start there. The window picks the combination with the highest selection metric (default Sharpe; any
+  metric but the trade count, the exposure and buy & hold) among those with at least
+  `walk_forward.min_trades` closed trades (default 10). Ties go to the first combination in grid order. A
+  window where no combination qualifies holds cash;
+- **stitching:** each window's pick trades its out-of-sample window with the equity the window before
+  ended with, its signal firing only within the window. A position still open at the end of a window runs
+  to its own exit under that window's setting, and the next window trades from the bar of that exit on, so
+  a window can start late, or never trade when a position runs past its end. The windows join into one
+  equity curve; only the last window can end with an open position;
+- **reported:** the metrics of the stitched curve, next to the unchanged setup (the setup with the values as
+  set, traded on the same bars from the first out-of-sample bar on) and buy & hold; the walk-forward
+  efficiency, the stitched out-of-sample CAGR over the average in-sample CAGR of the picks (Pardo; it is
+  left out when that average is not above 0); each window's dates, pick, in-sample and out-of-sample value
+  of the metric, trades and return, and the bars its pick traded; the out-of-sample trades; and the next
+  setting, picked on the in-sample window that ends on the last bar.
+
+The out-of-sample share has no effect in a walk-forward, and the account equity cannot be swept, since each
+window starts with the equity the one before it ended with. Every combination runs once per in-sample
+window, the next one included, and a walk-forward runs at most 2000 backtests: on 10 years of daily bars
+that takes 10–20 s. Picks that change from window to window, or an efficiency far below 1, mean the best
+in-sample setting does not carry forward: the in-sample peaks were luck.
 
 **Watchlist backtests.** One setup runs on every ticker of a watchlist, with the pandas engine on all CPU
 cores. Each ticker is split on its own bars as a backtest of it alone would be, so a ticker's row is that

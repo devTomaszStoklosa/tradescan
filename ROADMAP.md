@@ -39,7 +39,7 @@ URL, pinned runs, Compare and the sweep pick them up.
 | F3 | Portfolio backtest | done ([#30], [PR #31]) | | |
 | R1 | Momentum rotation | done ([#41], [PR #42]) | | F3 |
 | T2 | Pyramiding | done ([#48], [PR #49]) | | F1 |
-| O4 | Walk-forward analysis | planned | M/L | O1 |
+| O4 | Walk-forward analysis | done ([#52]) | | O1 |
 | O6 | Trade journal and server-side run storage | planned | M | C1 |
 
 Sizes: S is a few rule or signal classes, M touches the engines, API or UI, L is a new engine or page.
@@ -50,10 +50,6 @@ are weak. M1 is small. O2 and O3 show whether a result is robust before the larg
 which rotation (R1) needs. Pyramiding (T2), walk-forward analysis (O4) and the trade journal (O6) follow.
 
 ## Open items
-
-**O4 · Walk-forward analysis.** Rolling windows: sweep on each in-sample window, trade the best setting on
-the following out-of-sample window, and stitch the out-of-sample windows into one equity curve. Builds on
-the O1 sweep.
 
 **O6 · Trade journal and server-side run storage.** Keep pinned runs and real trades in SQLite on the
 server instead of only in the browser, with notes per trade and the backtest that suggested it.
@@ -86,3 +82,4 @@ server instead of only in the browser, with notes per trade and the backtest tha
 [PR #42]: https://github.com/devTomaszStoklosa/tradescan/pull/42
 [#48]: https://github.com/devTomaszStoklosa/tradescan/issues/48
 [PR #49]: https://github.com/devTomaszStoklosa/tradescan/pull/49
+[#52]: https://github.com/devTomaszStoklosa/tradescan/issues/52
