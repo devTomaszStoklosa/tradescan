@@ -83,3 +83,9 @@ max_exposure_pct = 100.0 # gross value of positions and waiting orders as % of e
 holdings = 5             # tickers a momentum rotation holds after each rebalance
 absolute_lookback = 252  # a pick whose return over this many bars is at or below 0 goes to the safe asset or cash; 0: off
 # The ranking and weighting rules, the rebalance frequency and the safe asset are chosen per run.
+
+[walk_forward]
+windows = 5              # out-of-sample windows, each traded with the best setting of the in-sample window before it
+in_sample_ratio = 3.0    # each in-sample window is this many times as long as an out-of-sample window
+min_trades = 10          # closed trades a setting needs in an in-sample window to be picked
+# The swept parameters, the window scheme (rolling or anchored) and the selection metric are chosen per run.

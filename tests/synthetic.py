@@ -72,7 +72,7 @@ class FixedSignal(Signal):
 
     def condition(self, df: pd.DataFrame) -> pd.Series:
         flags = np.zeros(len(df), dtype=bool)
-        flags[list(self.positions)] = True
+        flags[[position for position in self.positions if position < len(df)]] = True  # bars cut off never fire
         return pd.Series(flags, index=df.index)
 
 

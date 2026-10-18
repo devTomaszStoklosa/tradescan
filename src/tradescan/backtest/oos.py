@@ -83,6 +83,19 @@ class SignalFrom(Signal):
         return self._signal.describe()
 
 
+class SignalBetween(SignalFrom):
+    """`signal` with only its events from bar `start` up to bar `end` (exclusive): one walk-forward window's."""
+
+    def __init__(self, signal: Signal, start: int, end: int) -> None:
+        super().__init__(signal, start)
+        self._end = end
+
+    def events(self, df: pd.DataFrame) -> pd.Series:
+        events = super().events(df)
+        events.iloc[self._end :] = False
+        return events
+
+
 class SignalSince(SignalFrom):
     """`signal` with its events before the date `start` removed, for tickers whose bars start on different dates."""
 

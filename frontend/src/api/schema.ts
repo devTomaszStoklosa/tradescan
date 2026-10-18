@@ -157,6 +157,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/walk-forward": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Walk Forward */
+        post: operations["walk_forward_api_walk_forward_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/watchlist-backtest": {
         parameters: {
             query?: never;
@@ -434,6 +451,19 @@ export interface components {
             /** Events */
             events: components["schemas"]["ChartEventOut"][];
         };
+        /** CombinationErrorOut */
+        CombinationErrorOut: {
+            /**
+             * Values
+             * @description One value per axis, in axis order
+             */
+            values: number[];
+            /**
+             * Error
+             * @description Why this combination could not run, e.g. a rule between two parameters
+             */
+            error: string;
+        };
         /** ConfigOut */
         ConfigOut: {
             /** Version */
@@ -493,6 +523,7 @@ export interface components {
              */
             rebalances: components["schemas"]["Rebalance"][];
             sweep: components["schemas"]["SweepLimitsOut"];
+            walk_forward: components["schemas"]["WalkForwardLimitsOut"];
         };
         /**
          * Direction
@@ -1902,6 +1933,247 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /**
+         * WalkForwardIn
+         * @description `settings.walk_forward` sets the windows, the in-sample length and the trades a pick needs;
+         *     `settings.backtest.oos_pct` has no effect, since the windows split the history.
+         */
+        WalkForwardIn: {
+            /** Signal */
+            signal: string;
+            /**
+             * Params
+             * @description The signal's parameters, e.g. {"period": 30}
+             */
+            params?: {
+                [key: string]: number | number[];
+            };
+            /**
+             * Settings
+             * @description Per-run overrides by settings section, e.g. {"risk": {"atr_mult": 3}}; backtest.oos_pct sets the out-of-sample share
+             */
+            settings?: {
+                [key: string]: {
+                    [key: string]: number | number[] | {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /** @description Entry rule; omit for the default entry */
+            entry?: components["schemas"]["RuleIn"] | null;
+            /**
+             * Exits
+             * @description Exit rules on top of the initial stop; omit for the default exits, [] for the stop only
+             */
+            exits?: components["schemas"]["RuleIn"][] | null;
+            /**
+             * Filters
+             * @description Entry filters; a signal trades only when every one allows it
+             */
+            filters?: components["schemas"]["RuleIn"][];
+            /**
+             * Benchmark
+             * @description Benchmark the market filter compares; omit for the configured benchmark
+             */
+            benchmark?: string | null;
+            /** Period */
+            period?: string | null;
+            /** Ticker */
+            ticker: string;
+            /**
+             * Axes
+             * @description One or two parameters; the first changes slowest
+             */
+            axes: components["schemas"]["SweepAxisIn"][];
+            /**
+             * @description rolling: in-sample windows of fixed length that slide along; anchored: in-sample windows from the first bar
+             * @default rolling
+             */
+            scheme: components["schemas"]["WindowScheme"];
+            /**
+             * Metric
+             * @description Each in-sample window picks the combination with the highest value of this metric; /api/config lists them
+             * @default sharpe
+             */
+            metric: string;
+        };
+        /** WalkForwardLimitsOut */
+        WalkForwardLimitsOut: {
+            /**
+             * Max Runs
+             * @description Combinations times in-sample windows (the next one included) a walk-forward runs at most
+             */
+            max_runs: number;
+            /** Schemes */
+            schemes: components["schemas"]["WindowScheme"][];
+            default_scheme: components["schemas"]["WindowScheme"];
+            /**
+             * Metrics
+             * @description Metrics an in-sample window can pick by, the highest first
+             */
+            metrics: string[];
+            /** Default Metric */
+            default_metric: string;
+            /**
+             * Fixed
+             * @description section.name of settings a walk-forward cannot sweep
+             */
+            fixed: string[];
+        };
+        /** WalkForwardOut */
+        WalkForwardOut: {
+            /** Signal */
+            signal: string;
+            direction: components["schemas"]["Direction"];
+            /**
+             * Description
+             * @description The signal's rule with this run's parameters
+             */
+            description: string;
+            /**
+             * Params
+             * @description The signal's parameters used in this run
+             */
+            params: {
+                [key: string]: number | number[];
+            };
+            config: components["schemas"]["BacktestConfigOut"];
+            entry: components["schemas"]["AppliedRuleOut"];
+            /**
+             * Exits
+             * @description Exit rules on top of the initial stop, in the order given
+             */
+            exits: components["schemas"]["AppliedRuleOut"][];
+            /**
+             * Filters
+             * @description Entry filters, in the order given
+             */
+            filters: components["schemas"]["AppliedRuleOut"][];
+            /**
+             * Benchmark
+             * @description The benchmark the filters compared; null when no filter reads one
+             */
+            benchmark: string | null;
+            /** Ticker */
+            ticker: string;
+            /** Start */
+            start: string;
+            /** End */
+            end: string;
+            /**
+             * Engine
+             * @description Walk-forwards run on this engine
+             */
+            engine: string;
+            scheme: components["schemas"]["WindowScheme"];
+            /**
+             * Metric
+             * @description The metric each in-sample window picked by
+             */
+            metric: string;
+            walk_forward: components["schemas"]["WalkForwardSettingsOut"];
+            /** Axes */
+            axes: components["schemas"]["SweepAxisOut"][];
+            /**
+             * Combinations
+             * @description Combinations of the axes' values, including those that could not run
+             */
+            combinations: number;
+            /**
+             * Errors
+             * @description The combinations that could not run
+             */
+            errors: components["schemas"]["CombinationErrorOut"][];
+            /**
+             * Out Of Sample Start
+             * @description The first bar of the stitched curve
+             */
+            out_of_sample_start: string;
+            /** Windows */
+            windows: components["schemas"]["WalkForwardWindowOut"][];
+            /** @description The pick of the in-sample window that ends on the last bar: the setting to trade next */
+            next: components["schemas"]["WindowPickOut"];
+            /** @description Of the stitched out-of-sample curve */
+            metrics: components["schemas"]["MetricsOut"];
+            /** @description The setup as given, traded over the same bars */
+            unchanged: components["schemas"]["MetricsOut"];
+            /**
+             * Efficiency
+             * @description Stitched out-of-sample CAGR over the average in-sample CAGR of the picks; null when that average is not above 0
+             */
+            efficiency: number | null;
+            /**
+             * Equity
+             * @description The stitched out-of-sample curve
+             */
+            equity: components["schemas"]["Point"][];
+            /** Unchanged Equity */
+            unchanged_equity: components["schemas"]["Point"][];
+            /**
+             * Buy Hold
+             * @description Buy & hold from the first out-of-sample bar, scaled to the initial equity
+             */
+            buy_hold: components["schemas"]["Point"][];
+            /**
+             * Trades
+             * @description Every out-of-sample trade, window after window
+             */
+            trades: components["schemas"]["TradeOut"][];
+        };
+        /** WalkForwardSettingsOut */
+        WalkForwardSettingsOut: {
+            /** Windows */
+            windows: number;
+            /** In Sample Ratio */
+            in_sample_ratio: number;
+            /** Min Trades */
+            min_trades: number;
+            /**
+             * In Sample Bars
+             * @description Bars of each in-sample window; with the anchored scheme of the first one
+             */
+            in_sample_bars: number;
+            /**
+             * Out Of Sample Bars
+             * @description Bars of each out-of-sample window
+             */
+            out_of_sample_bars: number;
+        };
+        /** WalkForwardWindowOut */
+        WalkForwardWindowOut: {
+            /** In Sample Start */
+            in_sample_start: string;
+            /** In Sample End */
+            in_sample_end: string;
+            /**
+             * Values
+             * @description The picked combination, one value per axis; null when none qualified
+             */
+            values: number[] | null;
+            /**
+             * Qualified
+             * @description Combinations with a value and enough in-sample trades to be picked
+             */
+            qualified: number;
+            /** @description The pick's metrics on the in-sample window */
+            in_sample: components["schemas"]["MetricsOut"] | null;
+            /** Out Of Sample Start */
+            out_of_sample_start: string;
+            /** Out Of Sample End */
+            out_of_sample_end: string;
+            /**
+             * Traded From
+             * @description First bar of the window's own part of the stitched curve: later than out_of_sample_start while a position of the window before was still open; null when the window had no part of its own
+             */
+            traded_from: string | null;
+            /**
+             * Traded To
+             * @description The bar where the next window took over: the next window's first bar, or later while a position of this window was still open; the last bar for the last window; null when the window had no part of its own
+             */
+            traded_to: string | null;
+            /** @description Of the window's own part of the stitched curve; null without one */
+            out_of_sample: components["schemas"]["MetricsOut"] | null;
+        };
         /** WatchlistBacktestIn */
         WatchlistBacktestIn: {
             /** Signal */
@@ -2020,6 +2292,30 @@ export interface components {
             /** Benchmark */
             benchmark: string | null;
         };
+        /** WindowPickOut */
+        WindowPickOut: {
+            /** In Sample Start */
+            in_sample_start: string;
+            /** In Sample End */
+            in_sample_end: string;
+            /**
+             * Values
+             * @description The picked combination, one value per axis; null when none qualified
+             */
+            values: number[] | null;
+            /**
+             * Qualified
+             * @description Combinations with a value and enough in-sample trades to be picked
+             */
+            qualified: number;
+            /** @description The pick's metrics on the in-sample window */
+            in_sample: components["schemas"]["MetricsOut"] | null;
+        };
+        /**
+         * WindowScheme
+         * @enum {string}
+         */
+        WindowScheme: "rolling" | "anchored";
     };
     responses: never;
     parameters: never;
@@ -2263,6 +2559,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SweepOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    walk_forward_api_walk_forward_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WalkForwardIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WalkForwardOut"];
                 };
             };
             /** @description Validation Error */

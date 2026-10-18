@@ -18,6 +18,7 @@ from tradescan.backtest.priority import DEFAULT_PRIORITY, priority_rules
 from tradescan.backtest.rotation import DEFAULT_RANKING, Rebalance, ranking_rules
 from tradescan.backtest.sweep import MAX_VALUES, SweepAxis, SweepTarget
 from tradescan.backtest.trade_rules import RuleChoice, default_catalog
+from tradescan.backtest.walk_forward import DEFAULT_SELECTION_METRIC, SELECTION_METRICS, WindowScheme
 from tradescan.backtest.weighting import DEFAULT_WEIGHTING, weight_rules
 from tradescan.config import Settings, load_settings
 from tradescan.data.provider import DataProvider
@@ -42,6 +43,10 @@ from tradescan.report.tables import (
     sweep_to_frame,
     targets_frame,
     trades_to_frame,
+    walk_forward_export_frame,
+    walk_forward_metrics_frame,
+    walk_forward_pick,
+    walk_forward_windows_frame,
     watchlist_export_frame,
     watchlist_rows_frame,
 )
@@ -53,8 +58,10 @@ from tradescan.services import (
     RotationRequest,
     ScanRequest,
     SignalFilter,
+    SWEEP_SECTIONS,
     SweepRequest,
     UseCases,
+    WalkForwardRequest,
     WatchlistBacktestRequest,
     build_scorer,
     build_use_cases,
@@ -73,6 +80,13 @@ ENGINE_CHOICES = [*default_engines(), "both"]
 EXIT_FLAGS = {"target_r": ("target", "target_r"), "max_hold": ("time", "max_hold_bars")}
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 METRIC_CHOICES = [item.name for item in fields(Metrics)]
+AXIS_HELP = (
+    "parameter and values: target[.owner].name=FROM:TO:STEP or =V1,V2,... with target signal, entry, exit "
+    "(owner: the exit rule), filter (owner: the entry filter) or settings "
+    f"(owner: {', '.join(SWEEP_SECTIONS[:-1])} or {SWEEP_SECTIONS[-1]}), "
+    "e.g. signal.oversold=5:20:5, exit.target.target_r=1,1.5,2 or filter.trend.period=100:200:50; "
+    "give it twice for a grid"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -346,6 +360,57 @@ def cmd_sweep(args: argparse.Namespace, settings: Settings, report: ConsoleRepor
     if errors:
         report.warning(f"{len(errors)} combination(s) could not run, e.g. {errors[0].error}")
     _export(report, sweep_cells_frame(result), args.export)
+    return 0
+
+
+def cmd_walk_forward(args: argparse.Namespace, settings: Settings, report: ConsoleReport) -> int:
+    if args.oos is not None:
+        raise ValueError(
+            "--oos sets a backtest's out-of-sample share; a walk-forward's windows split the history "
+            "(--windows, --in-sample-ratio)"
+        )
+    _loading(report, 1, args.period or settings.backtest.period)
+    setup = _backtest_request(args, args.ticker, ())
+    windows = _overrides(
+        {"walk_forward": {"windows": args.windows, "in_sample_ratio": args.in_sample_ratio, "min_trades": args.min_trades}}
+    )
+    request = WalkForwardRequest(
+        setup=replace(setup, settings={**setup.settings, **windows}),
+        axes=tuple(_axis(text) for text in args.axis),
+        scheme=WindowScheme(args.scheme),
+        metric=args.metric,
+    )
+    result = _use_cases(settings, args).walk_forward.run(request)
+    signal, plan, walk = result.base.signal, result.plan, result.settings
+    first, index = plan.windows[0], result.close.index
+    names = " x ".join(f"{item.axis.name} ({item.spec.label})" for item in result.parameters)
+    longer = " or more" if plan.scheme is WindowScheme.ANCHORED else ""
+    report.note(
+        f"{len(result.combinations)} combinations of {names} on {result.ticker} {signal.name} ({signal.direction.value}), "
+        f"vectorized engine: {walk.windows} {plan.scheme.value} windows of {first.out_of_sample.bars} bars, "
+        f"each after an in-sample window of {first.in_sample.bars} bars{longer}"
+    )
+    report.frame(
+        walk_forward_windows_frame(result),
+        title="Windows",
+        caption=f"Each window trades its in-sample window's highest {result.metric} with at least {walk.min_trades} "
+        "trades; a position open at a window's end runs to its exit, and the next window trades from there",
+    )
+    efficiency = "-" if math.isnan(result.efficiency) else f"{result.efficiency:.2f}"
+    report.frame(
+        walk_forward_metrics_frame(result),
+        title=f"Stitched out-of-sample {index[plan.start].date()} to {index[-1].date()}",
+        caption=f"Walk-forward efficiency {efficiency} (stitched CAGR / average in-sample CAGR of the picks); "
+        "the unchanged setup trades the same bars with the values as given",
+        show_index=True,
+    )
+    report.note(f"Next setting: {walk_forward_pick(result, result.next_pick)}")
+    errors = [item for item in result.combinations if item.error]
+    if errors:
+        report.warning(f"{len(errors)} combination(s) could not run, e.g. {errors[0].error}")
+    trades = trades_to_frame(result.stitched.trades)
+    report.frame(trades.tail(args.trades), title=f"Last {args.trades} out-of-sample trades")
+    _export(report, walk_forward_export_frame(result), args.export)
     return 0
 
 
@@ -673,18 +738,36 @@ def build_parser() -> argparse.ArgumentParser:
     sweep = commands.add_parser("sweep", help="backtest one or two parameters over a range, in-sample and out-of-sample")
     sweep.add_argument("ticker")
     _add_backtest_setup_args(sweep)
-    sweep.add_argument(
-        "--axis",
-        action="append",
-        required=True,
-        help="parameter and values: target[.owner].name=FROM:TO:STEP or =V1,V2,... with target signal, entry, exit "
-        "(owner: the exit rule), filter (owner: the entry filter) or settings (owner: account, risk or backtest), "
-        "e.g. signal.oversold=5:20:5, exit.target.target_r=1,1.5,2 or filter.trend.period=100:200:50; "
-        "give it twice for a grid",
-    )
+    sweep.add_argument("--axis", action="append", required=True, help=AXIS_HELP)
     sweep.add_argument("--metric", choices=METRIC_CHOICES, default="sharpe", help="metric shown in the grids")
     sweep.add_argument("--export", help="save every combination with both periods' metrics to .csv or .json")
     sweep.set_defaults(handler=cmd_sweep)
+
+    walk_forward = commands.add_parser(
+        "walk-forward", help="re-tune one or two parameters on rolling in-sample windows and trade each pick on the next window"
+    )
+    walk_forward.add_argument("ticker")
+    _add_backtest_setup_args(walk_forward)
+    walk_forward.add_argument("--axis", action="append", required=True, help=AXIS_HELP)
+    walk_forward.add_argument("--windows", type=int, help="out-of-sample windows (2-20, default 5)")
+    walk_forward.add_argument(
+        "--in-sample-ratio",
+        type=float,
+        help="each in-sample window is this many times as long as an out-of-sample one (default 3)",
+    )
+    walk_forward.add_argument(
+        "--scheme",
+        choices=[scheme.value for scheme in WindowScheme],
+        default=WindowScheme.ROLLING.value,
+        help="rolling: in-sample windows of fixed length; anchored: in-sample windows from the first bar",
+    )
+    walk_forward.add_argument("--min-trades", type=int, help="closed in-sample trades a setting needs to be picked (default 10)")
+    walk_forward.add_argument(
+        "--metric", choices=SELECTION_METRICS, default=DEFAULT_SELECTION_METRIC, help="metric each in-sample window picks by"
+    )
+    walk_forward.add_argument("--trades", type=int, default=10, help="recent out-of-sample trades to show")
+    walk_forward.add_argument("--export", help="save every window with its pick and both periods' metrics to .csv or .json")
+    walk_forward.set_defaults(handler=cmd_walk_forward)
 
     watchlist_backtest = commands.add_parser(
         "watchlist-backtest", help="backtest one setup on every ticker of a watchlist, in-sample and out-of-sample"

@@ -8,13 +8,13 @@ from tradescan import __version__
 from tradescan.api import schemas
 from tradescan.api.context import ApiContext
 from tradescan.api.mappers import filter_rule_out, priority_rule_out, rule_out, section_out
-from tradescan.backtest import sweep
+from tradescan.backtest import sweep, walk_forward
 from tradescan.backtest.oos import MIN_PERIOD_BARS
 from tradescan.backtest.priority import DEFAULT_PRIORITY
 from tradescan.backtest.rotation import DEFAULT_RANKING, Rebalance
 from tradescan.backtest.weighting import DEFAULT_WEIGHTING
 from tradescan.config import adjustable_sections
-from tradescan.services import NOT_SWEEPABLE, SWEEP_SECTIONS
+from tradescan.services import NOT_SWEEPABLE, NOT_WALKABLE, SWEEP_SECTIONS
 from tradescan.signals.base import Family
 
 
@@ -57,6 +57,14 @@ def build_router(context: ApiContext) -> APIRouter:
                 sections=list(SWEEP_SECTIONS),
                 fixed=sorted(f"{section}.{name}" for section, name in NOT_SWEEPABLE),
                 min_period_bars=MIN_PERIOD_BARS,
+            ),
+            walk_forward=schemas.WalkForwardLimitsOut(
+                max_runs=walk_forward.MAX_RUNS,
+                schemes=list(walk_forward.WindowScheme),
+                default_scheme=walk_forward.WindowScheme.ROLLING,
+                metrics=list(walk_forward.SELECTION_METRICS),
+                default_metric=walk_forward.DEFAULT_SELECTION_METRIC,
+                fixed=sorted(f"{section}.{name}" for section, name in NOT_WALKABLE),
             ),
         )
 

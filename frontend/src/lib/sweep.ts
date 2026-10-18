@@ -61,10 +61,10 @@ function paramsOf(target: SweepTarget, owner: string | null, group: string, spec
 
 /**
  * Every single-number parameter of the setup the Backtest form offers: the signal's, the active filters',
- * the entry rule's, the active exits', the stop's, the costs' and the pyramiding's. The out-of-sample share is left out: it defines
- * the split.
+ * the entry rule's, the active exits', the stop's, the costs' and the pyramiding's. The settings in `fixed` are left out: for a
+ * sweep the out-of-sample share, which defines the split.
  */
-export function sweepParams(setup: BacktestSetup, config: ConfigOut, signals: SignalOut[]): SweepParam[] {
+export function sweepParams(setup: BacktestSetup, config: ConfigOut, signals: SignalOut[], fixed: readonly string[] = config.sweep.fixed): SweepParam[] {
   const result: SweepParam[] = [];
   const signal = signals.find((item) => item.name === setup.signal);
   if (signal) result.push(...paramsOf("signal", null, `Signal: ${signal.name}`, signal.params, setup.signalParams));
@@ -83,7 +83,7 @@ export function sweepParams(setup: BacktestSetup, config: ConfigOut, signals: Si
     const section = config.sections.find((item) => item.name === name);
     if (!section || !config.sweep.sections.includes(name)) continue;
     const specs = section.params.filter(
-      (spec) => (!fields[name] || fields[name].includes(spec.name)) && !config.sweep.fixed.includes(`${name}.${spec.name}`),
+      (spec) => (!fields[name] || fields[name].includes(spec.name)) && !fixed.includes(`${name}.${spec.name}`),
     );
     result.push(...paramsOf("settings", name, section.label, specs, setup.settings[name]));
   }

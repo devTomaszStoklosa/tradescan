@@ -25,6 +25,7 @@ from tradescan.api.routes import (
     scan,
     signals,
     sweep,
+    walk_forward,
     watchlist_backtest,
     watchlists,
 )
@@ -34,7 +35,10 @@ from tradescan.parallel import TaskRunner
 from tradescan.services import EngineFactory, PortfolioEngineFactory, build_scorer, build_use_cases
 from tradescan.signals.registry import SignalRegistry, default_registry
 
-ROUTERS = (meta, signals, watchlists, scan, market, edge, backtest, sweep, watchlist_backtest, portfolio, rotation, chart)
+ROUTERS = (
+    meta, signals, watchlists, scan, market, edge, backtest, sweep, walk_forward, watchlist_backtest, portfolio, rotation,
+    chart,
+)  # fmt: skip
 
 
 class SpaStaticFiles(StaticFiles):

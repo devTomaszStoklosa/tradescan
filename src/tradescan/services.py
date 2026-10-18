@@ -6,7 +6,8 @@ argparse, HTTP or rendering. `build_use_cases` wires them from settings and a da
 Requests carry per-run overrides: `settings` ({section: {parameter: value}}) and signal parameters
 ({signal name: {parameter: value}}); a backtest also names its entry filters, entry rule and exit rules
 with their parameters. All are validated against the declared ranges, and the configured settings are never modified.
-A sweep reruns one backtest setup over a grid of one or two of those parameters, a watchlist backtest
+A sweep reruns one backtest setup over a grid of one or two of those parameters, a walk-forward re-tunes it
+on rolling windows and trades each pick on the window after it, a watchlist backtest
 runs it on every ticker of a watchlist, and a portfolio backtest on every ticker of a watchlist with one
 shared equity. A rotation holds the strongest tickers of a watchlist, rebalanced on a calendar.
 """
@@ -17,6 +18,7 @@ import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
+from typing import TypeVar
 
 import pandas as pd
 
@@ -24,7 +26,7 @@ from tradescan.backtest.base import BacktestConfig, BacktestEngine, BacktestResu
 from tradescan.backtest.edge import EdgeSampler, EdgeStats, combine_samples
 from tradescan.backtest.metrics import Metrics, compute_metrics
 from tradescan.backtest.monte_carlo import MonteCarlo, MonteCarloConfig, closed_r_multiples, simulate
-from tradescan.backtest.oos import MIN_PERIOD_BARS, PeriodMetrics, Split, run_periods, split_history
+from tradescan.backtest.oos import MIN_PERIOD_BARS, PeriodMetrics, SignalFrom, Split, run_periods, split_history
 from tradescan.backtest.allocation import PortfolioConfig
 from tradescan.backtest.pooled import BREAK_EVEN, PooledTrades, Spread, pool_trades, spread
 from tradescan.backtest.portfolio import (
@@ -52,8 +54,26 @@ from tradescan.backtest.sweep import SweepAxis, SweepCase, SweepJob, SweepTarget
 from tradescan.backtest.tickers import Period, PeriodRun, TickerJob, TickerRun
 from tradescan.backtest.trade_rules import RuleCatalog, RuleChoice, TradeRules, default_catalog
 from tradescan.backtest.vectorized import VectorizedEngine
+from tradescan.backtest.walk_forward import (
+    DEFAULT_SELECTION_METRIC,
+    MAX_RUNS,
+    SELECTION_METRICS,
+    InSampleJob,
+    Segment,
+    Span,
+    StitchedRun,
+    Window,
+    WindowPlan,
+    WindowScheme,
+    efficiency,
+    pick,
+    plan_windows,
+    qualifies,
+    segment_metrics,
+    stitch,
+)
 from tradescan.backtest.weighting import DEFAULT_WEIGHTING, WeightRule, weight_rules
-from tradescan.config import Settings
+from tradescan.config import Settings, WalkForwardSettings
 from tradescan.context import ContextBuilder
 from tradescan.data.cache import CachedProvider
 from tradescan.data.provider import DataProvider
@@ -68,6 +88,8 @@ from tradescan.scoring import Scorer
 from tradescan.signals.base import Direction, Family, Signal
 from tradescan.signals.registry import SignalRegistry, default_registry
 from tradescan.watchlist import Watchlist
+
+T = TypeVar("T")
 
 EngineFactory = Callable[[], BacktestEngine]
 PortfolioEngineFactory = Callable[[], PortfolioEngine]
@@ -599,76 +621,123 @@ class SweepReport:
     cells: list[SweepCell]
 
 
-# Settings sections a backtest reads. The out-of-sample share defines the split itself, so it is fixed.
+# Settings sections a backtest reads, and the settings a sweep cannot vary with the reason why.
 SWEEP_SECTIONS = ("account", "risk", "backtest", "pyramid")
-NOT_SWEEPABLE = {("backtest", "oos_pct")}
+NOT_SWEEPABLE = {("backtest", "oos_pct"): "sets the out-of-sample split, so it is the same for every combination"}
 
 
-class SweepUseCase:
+@dataclass(frozen=True)
+class Combination:
+    """One combination of the swept values and its backtest inputs."""
+
+    values: tuple[float, ...]  # one per axis
+    case: SweepCase | None  # None when the combination breaks a rule between parameters
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class SweepGrid:
+    """A setup resolved and loaded, with every combination of its swept values."""
+
+    ticker: str
+    base: ResolvedBacktest
+    base_case: SweepCase  # the setup itself, with the benchmark's closes
+    parameters: tuple[SweptParameter, ...]
+    df: pd.DataFrame
+    combinations: tuple[Combination, ...]  # the first axis changes slowest
+
+    @property
+    def cases(self) -> list[SweepCase]:
+        """The combinations that can run, in grid order."""
+        return [item.case for item in self.combinations if item.case is not None]
+
+    def per_combination(self, results: Sequence[T]) -> list[T | None]:
+        """The results of `cases`, one per combination: None where a combination could not run."""
+        remaining = iter(results)
+        return [next(remaining) if item.case is not None else None for item in self.combinations]
+
+
+class SweepGridBuilder:
+    """Turns a setup and its swept axes into a `SweepGrid`. Shared by the sweep and the walk-forward, which
+    each name the settings they cannot vary."""
+
     def __init__(
-        self,
-        market_data: MarketData,
-        settings: Settings,
-        registry: SignalRegistry,
-        runner: TaskRunner,
-        rules: RuleCatalog = default_catalog,
+        self, market_data: MarketData, settings: Settings, registry: SignalRegistry, rules: RuleCatalog = default_catalog
     ) -> None:
         self._market_data = market_data
         self._settings = settings
         self._registry = registry
-        self._runner = runner
         self._rules = rules
 
-    def run(self, request: SweepRequest) -> SweepReport:
-        check_axes(request.axes)
-        setup = self._named_rules(request.setup)
+    def build(
+        self, setup: BacktestRequest, axes: Sequence[SweepAxis], fixed: Mapping[tuple[str, str], str]
+    ) -> SweepGrid:
+        """`fixed` maps (section, name) of the settings that cannot be swept to why not."""
+        check_axes(axes)
+        setup = self._named_rules(setup)
         base = resolve_backtest(setup, self._settings, self._registry, self._rules)
-        parameters = tuple(self._check(axis, base) for axis in request.axes)
-        axes = tuple(parameter.axis for parameter in parameters)
+        parameters = tuple(self._check(axis, base, fixed) for axis in axes)
+        checked = tuple(parameter.axis for parameter in parameters)
 
         ticker = setup.ticker.upper()
         period = setup.period or base.settings.backtest.period
         df, base_rules = _load_setup(self._market_data, ticker, base, period, setup.interval)
-        split = split_history(df.index, base.config.oos_pct)
-        if split is None:
-            raise ValueError(
-                f"{ticker} has {len(df)} bars: too few to split at {base.config.oos_pct:g}% "
-                f"with at least {MIN_PERIOD_BARS} bars in each period. Use a longer history."
-            )
-
-        cells: list[SweepCell] = []
-        cases: list[tuple[int, SweepCase]] = []
-        for values in grid(axes):
+        combinations: list[Combination] = []
+        for values in grid(checked):
             combination = setup
-            for axis, value in zip(axes, values):
+            for axis, value in zip(checked, values):
                 combination = _APPLY[axis.target](combination, axis, value)
             try:
                 resolved = resolve_backtest(combination, self._settings, self._registry, self._rules)
             except ValueError as error:
-                cells.append(SweepCell(values, None, str(error)))
+                combinations.append(Combination(values, None, str(error)))
                 continue
             rules = resolved.rules.with_benchmark(base_rules.benchmark_close)  # no axis changes the benchmark
-            cases.append((len(cells), SweepCase(resolved.signal, rules, resolved.config)))
-            cells.append(SweepCell(values, None))
-        results = self._runner.map(SweepJob(ticker, df, split.index), [case for _, case in cases])
-        for (position, _), periods in zip(cases, results):
-            cells[position] = replace(cells[position], periods=periods)
-        return SweepReport(ticker=ticker, base=base, parameters=parameters, close=df["close"], split=split, cells=cells)
+            combinations.append(Combination(values, SweepCase(resolved.signal, rules, resolved.config)))
+        return SweepGrid(
+            ticker=ticker,
+            base=base,
+            base_case=SweepCase(base.signal, base_rules, base.config),
+            parameters=parameters,
+            df=df,
+            combinations=tuple(combinations),
+        )
 
     def _named_rules(self, setup: BacktestRequest) -> BacktestRequest:
         """The setup with its entry and exits named, so axes can refer to the default rules too."""
         exits = setup.exits if setup.exits is not None else tuple(RuleChoice(name) for name in self._rules.default_exits)
         return replace(setup, entry=setup.entry or RuleChoice(self._rules.default_entry), exits=exits)
 
-    def _check(self, axis: SweepAxis, base: ResolvedBacktest) -> SweptParameter:
+    def _check(self, axis: SweepAxis, base: ResolvedBacktest, fixed: Mapping[tuple[str, str], str]) -> SweptParameter:
         """The axis with its values checked against the declaration of the parameter it names."""
-        holder, owner = _holder(axis, base)
+        holder, owner = _holder(axis, base, fixed)
         values = check_values(holder, axis.name, axis.values, owner)
         spec = next(spec for spec in parameters_of(holder) if spec.name == axis.name)
         return SweptParameter(replace(axis, values=values), spec)
 
 
-def _holder(axis: SweepAxis, base: ResolvedBacktest) -> tuple[object, str]:
+class SweepUseCase:
+    def __init__(self, grids: SweepGridBuilder, runner: TaskRunner) -> None:
+        self._grids = grids
+        self._runner = runner
+
+    def run(self, request: SweepRequest) -> SweepReport:
+        sweep = self._grids.build(request.setup, request.axes, NOT_SWEEPABLE)
+        ticker, df, config = sweep.ticker, sweep.df, sweep.base.config
+        split = split_history(df.index, config.oos_pct)
+        if split is None:
+            raise ValueError(
+                f"{ticker} has {len(df)} bars: too few to split at {config.oos_pct:g}% "
+                f"with at least {MIN_PERIOD_BARS} bars in each period. Use a longer history."
+            )
+        results = sweep.per_combination(self._runner.map(SweepJob(ticker, df, split.index), sweep.cases))
+        cells = [SweepCell(item.values, periods, item.error) for item, periods in zip(sweep.combinations, results)]
+        return SweepReport(
+            ticker=ticker, base=sweep.base, parameters=sweep.parameters, close=df["close"], split=split, cells=cells
+        )
+
+
+def _holder(axis: SweepAxis, base: ResolvedBacktest, fixed: Mapping[tuple[str, str], str]) -> tuple[object, str]:
     """The object that declares the axis's parameter, and its name for messages."""
     if axis.target in (SweepTarget.SIGNAL, SweepTarget.ENTRY) and axis.owner:
         raise ValueError(f"{axis.key}: a {axis.target.value} parameter takes no owner")
@@ -682,8 +751,8 @@ def _holder(axis: SweepAxis, base: ResolvedBacktest) -> tuple[object, str]:
         return _owned_rule(axis, base.rules.filters, "filter")
     if axis.owner not in SWEEP_SECTIONS:
         raise ValueError(f"{axis.key}: sweeps can change the settings in {', '.join(SWEEP_SECTIONS)}")
-    if (axis.owner, axis.name) in NOT_SWEEPABLE:
-        raise ValueError(f"{axis.key} sets the out-of-sample split, so it is the same for every combination")
+    if (axis.owner, axis.name) in fixed:
+        raise ValueError(f"{axis.key} {fixed[(axis.owner, axis.name)]}")
     return getattr(base.settings, axis.owner), axis.owner
 
 
@@ -734,6 +803,138 @@ _APPLY = {
     SweepTarget.FILTER: _set_filter_param,
     SweepTarget.SETTINGS: _set_setting,
 }
+
+
+# ---------------------------------------------------------------------------
+# Walk-forward
+
+
+# The windows split the history and carry the equity from one to the next, so neither can be swept.
+NOT_WALKABLE = {
+    ("backtest", "oos_pct"): "has no effect in a walk-forward, whose windows split the history",
+    ("account", "equity"): "is carried from window to window in a walk-forward",
+}
+
+
+@dataclass(frozen=True)
+class WalkForwardRequest:
+    """`setup` and `axes` as in a sweep; the setup's `walk_forward` settings set the windows, their in-sample
+    length and the trades a pick needs. Its `engines` are ignored: walk-forwards run on the vectorized engine."""
+
+    setup: BacktestRequest
+    axes: tuple[SweepAxis, ...]
+    scheme: WindowScheme = WindowScheme.ROLLING
+    metric: str = DEFAULT_SELECTION_METRIC
+
+
+@dataclass(frozen=True)
+class WindowPick:
+    """What one in-sample window picked."""
+
+    span: Span
+    combination: int | None  # position in the grid; None when no combination qualified
+    in_sample: Metrics | None  # the pick's in-sample metrics
+    qualified: int  # combinations it could pick from
+
+
+@dataclass(frozen=True)
+class WalkForwardWindow:
+    window: Window
+    pick: WindowPick
+    segment: Segment
+    out_of_sample: Metrics | None  # of the bars its setting owned; None when it owned none
+
+
+@dataclass(frozen=True)
+class WalkForwardReport:
+    ticker: str
+    base: ResolvedBacktest
+    parameters: tuple[SweptParameter, ...]
+    combinations: tuple[Combination, ...]
+    settings: WalkForwardSettings
+    plan: WindowPlan
+    metric: str
+    close: pd.Series
+    windows: list[WalkForwardWindow]
+    next_pick: WindowPick  # of the in-sample window that ends on the last bar: the setting to trade next
+    stitched: StitchedRun
+    metrics: Metrics  # of the stitched curve
+    unchanged: BacktestResult  # the setup as given, traded from the first out-of-sample bar on
+    unchanged_metrics: Metrics  # from the first out-of-sample bar on
+    efficiency: float  # NaN when the picks did not gain in-sample on average
+
+
+class WalkForwardUseCase:
+    def __init__(self, grids: SweepGridBuilder, runner: TaskRunner, engine: BacktestEngine | None = None) -> None:
+        self._grids = grids
+        self._runner = runner
+        self._engine = engine or VectorizedEngine()
+
+    def run(self, request: WalkForwardRequest) -> WalkForwardReport:
+        if request.metric not in SELECTION_METRICS:
+            raise ValueError(f"Unknown selection metric '{request.metric}'. Use: {', '.join(SELECTION_METRICS)}")
+        sweep = self._grids.build(request.setup, request.axes, NOT_WALKABLE)
+        ticker, df, base = sweep.ticker, sweep.df, sweep.base
+        settings = base.settings.walk_forward
+        try:
+            plan = plan_windows(len(df), settings.windows, settings.in_sample_ratio, request.scheme)
+        except ValueError as error:
+            raise ValueError(f"{ticker}: {error}. Use a longer history or fewer windows.") from None
+        cases = sweep.cases
+        runs = len(cases) * len(plan.in_samples)
+        if runs > MAX_RUNS:
+            raise ValueError(
+                f"{len(cases)} combinations on {len(plan.in_samples)} in-sample windows (the next one included) are "
+                f"{runs} backtests; a walk-forward runs at most {MAX_RUNS}. Sweep fewer values or use fewer windows."
+            )
+
+        results = sweep.per_combination(self._runner.map(InSampleJob(ticker, df, plan.in_samples), cases))
+        picks = [
+            _pick_window(results, position, span, request.metric, settings.min_trades)
+            for position, span in enumerate(plan.in_samples)
+        ]
+        *window_picks, next_pick = picks
+        picked = [sweep.combinations[item.combination].case if item.combination is not None else None for item in window_picks]
+        stitched = stitch(self._engine, ticker, df, plan, picked, base.config.initial_equity)
+
+        bars_per_year = base.config.bars_per_year
+        close = df["close"].iloc[plan.start :]
+        metrics = compute_metrics(stitched.equity, stitched.trades, close, bars_per_year)
+        unchanged = self._engine.run(ticker, df, SignalFrom(base.signal, plan.start), base.config, sweep.base_case.rules)
+        return WalkForwardReport(
+            ticker=ticker,
+            base=base,
+            parameters=sweep.parameters,
+            combinations=sweep.combinations,
+            settings=settings,
+            plan=plan,
+            metric=request.metric,
+            close=df["close"],
+            windows=[
+                WalkForwardWindow(window, item, segment, segment_metrics(segment, df, bars_per_year))
+                for window, item, segment in zip(plan.windows, window_picks, stitched.segments, strict=True)
+            ],
+            next_pick=next_pick,
+            stitched=stitched,
+            metrics=metrics,
+            unchanged=unchanged,
+            unchanged_metrics=compute_metrics(unchanged.equity.iloc[plan.start :], unchanged.trades, close, bars_per_year),
+            efficiency=efficiency(metrics, [item.in_sample for item in window_picks if item.in_sample is not None]),
+        )
+
+
+def _pick_window(
+    results: Sequence[tuple[Metrics, ...] | None], position: int, span: Span, metric: str, min_trades: int
+) -> WindowPick:
+    """The pick of the in-sample window at `position`, from every combination's results on that window."""
+    window = [result[position] if result is not None else None for result in results]
+    best = pick(window, metric, min_trades)
+    return WindowPick(
+        span=span,
+        combination=best,
+        in_sample=window[best] if best is not None else None,
+        qualified=sum(qualifies(metrics, metric, min_trades) for metrics in window),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1183,6 +1384,7 @@ class UseCases:
     edge: EdgeUseCase
     backtest: BacktestUseCase
     sweep: SweepUseCase
+    walk_forward: WalkForwardUseCase
     watchlist_backtest: WatchlistBacktestUseCase
     portfolio: PortfolioUseCase
     rotation: RotationUseCase
@@ -1202,12 +1404,14 @@ def build_use_cases(
     """`runner` runs per-ticker work and sweeps; pass a `ProcessRunner` to use every core."""
     market_data = MarketData(provider, settings)
     task_runner = runner or SequentialRunner()
+    grids = SweepGridBuilder(market_data, settings, registry, rules)
     return UseCases(
         scan=ScanUseCase(market_data, settings, registry, task_runner),
         market=MarketUseCase(market_data, settings, registry),
         edge=EdgeUseCase(market_data, settings, registry, task_runner),
         backtest=BacktestUseCase(market_data, settings, registry, engines or default_engines(), rules),
-        sweep=SweepUseCase(market_data, settings, registry, task_runner, rules),
+        sweep=SweepUseCase(grids, task_runner),
+        walk_forward=WalkForwardUseCase(grids, task_runner),
         watchlist_backtest=WatchlistBacktestUseCase(market_data, settings, registry, task_runner, rules),
         portfolio=PortfolioUseCase(market_data, settings, registry, portfolio_engines or default_portfolio_engines(), rules),
         rotation=RotationUseCase(market_data, settings, rotation_engine),

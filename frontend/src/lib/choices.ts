@@ -31,6 +31,10 @@ export const PORTFOLIO_PAGE_SECTIONS = [...BACKTEST_SECTIONS, PORTFOLIO_SECTION]
 export const ROTATION_SECTION = "rotation";
 /** Settings the Rotation page reads: the rotation's, and the costs and out-of-sample share of `backtest`. */
 export const ROTATION_PAGE_SECTIONS = [ROTATION_SECTION, "backtest"] as const;
+/** Settings of a walk-forward: the windows, their in-sample length and the trades a pick needs. */
+export const WALK_FORWARD_SECTION = "walk_forward";
+/** Settings the Walk-forward page reads: the single-ticker setup's and the walk-forward's. */
+export const WALK_FORWARD_PAGE_SECTIONS = [...SETUP_SECTIONS, WALK_FORWARD_SECTION] as const;
 /** Settings of the scanner's score, which a priority rule that `needs_scan` reads too. */
 export const SCORE_SECTIONS: readonly string[] = ["scoring", "trend", "scan"];
 /** Of those sections, the parameters the score reads, where it reads only some. */

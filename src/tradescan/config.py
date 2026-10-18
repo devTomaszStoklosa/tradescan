@@ -209,6 +209,23 @@ class RotationSettings:
 
 
 @dataclass(frozen=True)
+class WalkForwardSettings:
+    label: ClassVar[str] = "Walk-forward"
+    windows: int = param(
+        5, minimum=2, maximum=20, step=1, label="Windows",
+        help="Out-of-sample windows, each traded with the best setting of the in-sample window before it",
+    )
+    in_sample_ratio: float = param(
+        3.0, minimum=1.0, maximum=10.0, step=0.5, label="In-sample length", unit="× out-of-sample",
+        help="How many times longer each in-sample window is than an out-of-sample window",
+    )
+    min_trades: int = param(
+        10, minimum=0, maximum=500, step=1, label="Min in-sample trades",
+        help="A setting needs this many closed trades in an in-sample window to be picked",
+    )
+
+
+@dataclass(frozen=True)
 class Settings:
     data: DataSettings = field(default_factory=DataSettings)
     account: AccountSettings = field(default_factory=AccountSettings)
@@ -222,6 +239,7 @@ class Settings:
     monte_carlo: MonteCarloSettings = field(default_factory=MonteCarloSettings)
     portfolio: PortfolioSettings = field(default_factory=PortfolioSettings)
     rotation: RotationSettings = field(default_factory=RotationSettings)
+    walk_forward: WalkForwardSettings = field(default_factory=WalkForwardSettings)
 
     def with_overrides(self, overrides: GroupOverrides | None) -> Settings:
         """These settings with validated overrides for one run, e.g. {"risk": {"atr_mult": 3}}."""

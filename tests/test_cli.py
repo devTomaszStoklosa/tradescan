@@ -107,6 +107,29 @@ def test_sweep_exports_every_combination(provider, tmp_path, capsys):
     assert {"is_sharpe", "oos_expectancy_r", "error"} <= set(cells.columns)
 
 
+def test_walk_forward_prints_every_window_and_exports_them(provider, tmp_path, capsys):
+    target = tmp_path / "windows.csv"
+    code = cli.main([
+        "walk-forward", "AAA", "connors_rsi2_long", "--axis", "signal.oversold=5:20:5", "--axis", "exit.target.target_r=1.5,2.5",
+        "--windows", "4", "--in-sample-ratio", "2", "--min-trades", "5", "--metric", "expectancy_r", "--export", str(target),
+    ])  # fmt: skip
+    assert code == 0
+    output = " ".join(capsys.readouterr().out.split())  # without the console's line breaks
+    assert "8 combinations" in output and "4 rolling windows of 250 bars, each after an in-sample window of 500 bars" in output
+    assert "highest expectancy_r with at least 5 trades" in output and "Walk-forward efficiency" in output
+    assert "unchanged setup" in output and "Next setting: " in output
+    windows = pd.read_csv(target)
+    assert list(windows["window"]) == [1, 2, 3, 4]
+    assert {"is_start", "oos_end", "traded_from", "signal.oversold", "exit.target.target_r", "is_sharpe", "oos_trades"} <= set(
+        windows.columns
+    )
+
+
+def test_walk_forward_refuses_an_out_of_sample_share(provider):
+    assert cli.main(["walk-forward", "AAA", "connors_rsi2_long", "--axis", "signal.oversold=5,10", "--oos", "20"]) == 2
+    assert cli.main(["walk-forward", "AAA", "connors_rsi2_long", "--axis", "settings.account.equity=1e4,2e4"]) == 2
+
+
 def test_watchlist_backtest_ranks_tickers_and_exports_every_period(provider, tmp_path, capsys):
     target = tmp_path / "tickers.csv"
     code = cli.main([
