@@ -662,8 +662,13 @@ def _add_account_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--lot-size", type=float, help="size step, e.g. 0.0001 for crypto")
 
 
-def _add_backtest_setup_args(parser: argparse.ArgumentParser) -> None:
-    """Everything a backtest setup takes apart from the ticker."""
+def _add_backtest_setup_args(
+    parser: argparse.ArgumentParser,
+    *,
+    benchmark_help: str = "benchmark the market filter compares (default: scan.benchmark from the settings)",
+) -> None:
+    """Everything a backtest setup takes apart from the ticker. `benchmark_help` is for the commands that pick
+    the benchmark differently."""
     parser.add_argument("signal", help="signal name, see list-signals")
     _add_data_args(parser)
     _add_account_args(parser)
@@ -678,7 +683,7 @@ def _add_backtest_setup_args(parser: argparse.ArgumentParser) -> None:
         help=f"entry filters a signal has to pass, comma separated ({', '.join(default_catalog.filters.names())}); "
         "default none",
     )
-    parser.add_argument("--benchmark", help="benchmark the market filter compares (default: scan.benchmark from the settings)")
+    parser.add_argument("--benchmark", help=benchmark_help)
     parser.add_argument("--atr-mult", type=float, help="stop distance in ATRs")
     parser.add_argument("--target-r", type=float, help="target as a multiple of the risk (target exit)")
     parser.add_argument("--max-hold", type=int, help="time exit after N bars (time exit)")
@@ -776,7 +781,11 @@ def build_parser() -> argparse.ArgumentParser:
     watchlist_backtest = commands.add_parser(
         "watchlist-backtest", help="backtest one setup on every ticker of a watchlist, in-sample and out-of-sample"
     )
-    _add_backtest_setup_args(watchlist_backtest)
+    _add_backtest_setup_args(
+        watchlist_backtest,
+        benchmark_help="benchmark the market filter compares "
+        "(default: the watchlist's '# benchmark:' line, else scan.benchmark from the settings)",
+    )
     _add_universe_args(watchlist_backtest)
     watchlist_backtest.add_argument(
         "--metric", choices=METRIC_CHOICES, default="expectancy_r", help="metric the tickers are ranked and spread by"
@@ -788,7 +797,11 @@ def build_parser() -> argparse.ArgumentParser:
     portfolio = commands.add_parser(
         "portfolio-backtest", help="backtest one setup on every ticker of a watchlist with one shared equity"
     )
-    _add_backtest_setup_args(portfolio)
+    _add_backtest_setup_args(
+        portfolio,
+        benchmark_help="benchmark for buy & hold and for the market filter "
+        "(default: the watchlist's '# benchmark:' line, else scan.benchmark from the settings)",
+    )
     _add_universe_args(portfolio)
     portfolio.add_argument("--max-positions", type=int, help="open positions plus waiting entry orders (default 10)")
     portfolio.add_argument("--max-exposure", type=float, help="gross exposure cap in %% of equity (default 100)")
