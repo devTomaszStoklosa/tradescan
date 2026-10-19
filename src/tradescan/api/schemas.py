@@ -782,12 +782,25 @@ class PortfolioRunOut(BaseModel):
     tickers: list[TickerContributionOut] = Field(description="Every ticker with data, in watchlist order")
 
 
+class ScanInputsOut(BaseModel):
+    settings: dict[str, dict[str, int | float | list[float] | dict[str, float]]] = Field(
+        description="The scanner's settings the score read, by section as a request's settings name them: "
+        "every scoring and trend parameter and scan.fresh_bars"
+    )
+    signal_params: dict[str, dict[str, float | list[float]]] = Field(
+        description="Parameters of the signals the score counted besides the traded one, by signal name"
+    )
+
+
 class PortfolioOut(BacktestRulesOut):
     universe: str
     start: str
     end: str
     portfolio: PortfolioConfigOut
     priority: AppliedRuleOut
+    scan: ScanInputsOut | None = Field(
+        description="What the priority read of the scanner besides the bars; null when it does not read the scanner"
+    )
     buy_hold_benchmark: str = Field(description="The benchmark buy & hold compares")
     buy_hold: list[Point] = Field(description="The benchmark scaled to the initial equity")
     split: SplitOut | None = Field(description="The split of the shared calendar; null when it is too short")
