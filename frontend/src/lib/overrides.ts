@@ -28,7 +28,12 @@ export function sameValue(left: ParamValue | undefined, right: ParamValue | unde
   if (left === undefined || right === undefined) return left === right;
   if (typeof left === "number" || typeof right === "number") return left === right;
   if (Array.isArray(left) || Array.isArray(right)) {
-    return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((item, index) => item === right[index]);
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((item, index) => item === right[index])
+    );
   }
   const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
   return [...keys].every((key) => left[key] === right[key]);
@@ -118,12 +123,17 @@ export const pickSections = (sections: SettingsSectionOut[], names: readonly str
 
 /** Signals a family/direction filter keeps (no families means all). */
 export const visibleSignals = (signals: SignalOut[], families: readonly string[], direction: string): SignalOut[] =>
-  signals.filter((signal) => (!families.length || families.includes(signal.family)) && (direction === "both" || signal.direction === direction));
+  signals.filter(
+    (signal) =>
+      (!families.length || families.includes(signal.family)) &&
+      (direction === "both" || signal.direction === direction),
+  );
 
 export const sectionSpecs = (sections: SettingsSectionOut[]): SpecIndex =>
   Object.fromEntries(sections.map((section) => [section.name, section.params]));
 
-export const signalSpecs = (signals: SignalOut[]): SpecIndex => Object.fromEntries(signals.map((signal) => [signal.name, signal.params]));
+export const signalSpecs = (signals: SignalOut[]): SpecIndex =>
+  Object.fromEntries(signals.map((signal) => [signal.name, signal.params]));
 
 /** True when any override names an unknown parameter or holds an invalid value. */
 export function hasProblems(overrides: Overrides, specs: SpecIndex): boolean {

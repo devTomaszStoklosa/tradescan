@@ -1,6 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { api, type BacktestIn, type ChartIn, type EdgeIn, type PortfolioIn, type RotationIn, type ScanIn, type SweepIn, type WalkForwardIn, type WatchlistBacktestIn } from "./client";
+import {
+  api,
+  type BacktestIn,
+  type ChartIn,
+  type EdgeIn,
+  type PortfolioIn,
+  type RotationIn,
+  type ScanIn,
+  type SweepIn,
+  type WalkForwardIn,
+  type WatchlistBacktestIn,
+} from "./client";
 
 const FIVE_MINUTES = 5 * 60_000;
 

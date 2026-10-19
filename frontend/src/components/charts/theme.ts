@@ -25,7 +25,14 @@ export function chartPalette() {
 export type Palette = ReturnType<typeof chartPalette>;
 
 export function toneColor(palette: Palette, tone: Tone): string {
-  return { up: palette.up, down: palette.down, accent: palette.accent, muted: palette.muted, fast: palette.fast, slow: palette.slow }[tone];
+  return {
+    up: palette.up,
+    down: palette.down,
+    accent: palette.accent,
+    muted: palette.muted,
+    fast: palette.fast,
+    slow: palette.slow,
+  }[tone];
 }
 
 export function baseOptions(palette: Palette): DeepPartial<ChartOptions> {

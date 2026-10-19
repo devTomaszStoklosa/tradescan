@@ -42,7 +42,12 @@ const columns: Column<HitOut>[] = [
     sortValue: (hit) => hit.ticker,
     render: (hit) => <span className="font-mono font-semibold">{hit.ticker}</span>,
   },
-  { key: "dir", header: "Dir", sortValue: (hit) => hit.direction, render: (hit) => <DirectionBadge direction={hit.direction} /> },
+  {
+    key: "dir",
+    header: "Dir",
+    sortValue: (hit) => hit.direction,
+    render: (hit) => <DirectionBadge direction={hit.direction} />,
+  },
   {
     key: "score",
     header: "Score",
@@ -67,7 +72,13 @@ const columns: Column<HitOut>[] = [
       </span>
     ),
   },
-  { key: "close", header: "Close", align: "right", sortValue: (hit) => hit.close, render: (hit) => fmtPrice(hit.close) },
+  {
+    key: "close",
+    header: "Close",
+    align: "right",
+    sortValue: (hit) => hit.close,
+    render: (hit) => fmtPrice(hit.close),
+  },
   {
     key: "change",
     header: "Chg",
@@ -90,20 +101,38 @@ const columns: Column<HitOut>[] = [
     render: (hit) => fmtNumber(hit.rs_percentile, 0),
   },
   { key: "atr", header: "ATR", align: "right", sortValue: (hit) => hit.atr_pct, render: (hit) => fmtPct(hit.atr_pct) },
-  { key: "stop", header: "Stop", align: "right", render: (hit) => <span className="text-down">{fmtPrice(hit.risk.stop)}</span> },
-  { key: "target", header: "Target", align: "right", render: (hit) => <span className="text-up">{fmtPrice(hit.risk.targets[0])}</span> },
-  { key: "size", header: "Size", align: "right", sortValue: (hit) => hit.risk.size, render: (hit) => fmtSize(hit.risk.size) },
+  {
+    key: "stop",
+    header: "Stop",
+    align: "right",
+    render: (hit) => <span className="text-down">{fmtPrice(hit.risk.stop)}</span>,
+  },
+  {
+    key: "target",
+    header: "Target",
+    align: "right",
+    render: (hit) => <span className="text-up">{fmtPrice(hit.risk.targets[0])}</span>,
+  },
+  {
+    key: "size",
+    header: "Size",
+    align: "right",
+    sortValue: (hit) => hit.risk.size,
+    render: (hit) => fmtSize(hit.risk.size),
+  },
   {
     key: "edge",
     header: "Edge",
-    title: "Most recent signal on this ticker: win rate · average return after the edge horizon, event count, and the average minus the average of all bars.",
+    title:
+      "Most recent signal on this ticker: win rate · average return after the edge horizon, event count, and the average minus the average of all bars.",
     align: "right",
     sortValue: (hit) => hit.edge?.edge,
     render: (hit) =>
       hit.edge && hit.edge.events > 0 ? (
         <span className="inline-flex flex-col items-end leading-tight">
           <span>
-            {fmtNumber(hit.edge.win_rate, 0)}% · <span className={tone(hit.edge.mean_return)}>{fmtPct(hit.edge.mean_return, 2, true)}</span>
+            {fmtNumber(hit.edge.win_rate, 0)}% ·{" "}
+            <span className={tone(hit.edge.mean_return)}>{fmtPct(hit.edge.mean_return, 2, true)}</span>
           </span>
           <span className="text-xs text-muted">
             n={hit.edge.events} · vs base <span className={tone(hit.edge.edge)}>{fmtSigned(hit.edge.edge)}</span>

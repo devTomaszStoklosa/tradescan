@@ -10,13 +10,20 @@ import { WalkForwardPage } from "./WalkForwardPage";
 
 vi.mock("../components/charts/EquityChart", () => ({ EquityChart: () => null }));
 
-const RESPONSES: Record<string, unknown> = { "/config": config, "/signals": signals, "/walk-forward": walkForwardResult };
+const RESPONSES: Record<string, unknown> = {
+  "/config": config,
+  "/signals": signals,
+  "/walk-forward": walkForwardResult,
+};
 
 function renderPage(path: string) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);
     const body = Object.entries(RESPONSES).find(([route]) => url.endsWith(route))?.[1] ?? null;
-    return new Response(JSON.stringify(body), { status: body ? 200 : 404, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify(body), {
+      status: body ? 200 : 404,
+      headers: { "Content-Type": "application/json" },
+    });
   });
   const router = createMemoryRouter(
     [
@@ -41,20 +48,25 @@ const requestBodies = () =>
     .mock.calls.filter(([input]) => String(input).endsWith("/walk-forward"))
     .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>);
 
-const URL = "/walk-forward?ticker=SPY&signal=connors_rsi2_long&ax1=signal.oversold&ax1v=5:15:5&ax2=exit.target.target_r&ax2v=2:3:1";
+const URL =
+  "/walk-forward?ticker=SPY&signal=connors_rsi2_long&ax1=signal.oversold&ax1v=5:15:5&ax2=exit.target.target_r&ax2v=2:3:1";
 
 describe("WalkForwardPage", () => {
   it("sets the windows, the scheme and the metric and runs the walk-forward", async () => {
     const router = renderPage("/walk-forward?ticker=SPY&signal=connors_rsi2_long");
     await userEvent.click(await screen.findByRole("button", { name: "Add a parameter" }));
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Parameter 1" }), "signal.oversold");
-    expect(screen.getByText("9 combinations × 6 in-sample windows = 54 backtests (at most 2000, 200 combinations)")).toBeInTheDocument();
+    expect(
+      screen.getByText("9 combinations × 6 in-sample windows = 54 backtests (at most 2000, 200 combinations)"),
+    ).toBeInTheDocument();
     expect(screen.queryByLabelText(/Out-of-sample share/)).not.toBeInTheDocument();
 
     const windows = screen.getByLabelText(/^Windows/);
     await userEvent.clear(windows);
     await userEvent.type(windows, "8");
-    expect(screen.getByText("9 combinations × 9 in-sample windows = 81 backtests (at most 2000, 200 combinations)")).toBeInTheDocument();
+    expect(
+      screen.getByText("9 combinations × 9 in-sample windows = 81 backtests (at most 2000, 200 combinations)"),
+    ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("radio", { name: "Anchored" }));
     await userEvent.selectOptions(screen.getByRole("combobox", { name: /Pick by/ }), "expectancy_r");
     await userEvent.click(screen.getByRole("button", { name: "Run walk-forward" }));
@@ -73,8 +85,14 @@ describe("WalkForwardPage", () => {
   });
 
   it("blocks a walk-forward over the backtest cap", async () => {
-    renderPage(`${URL.replace("ax1v=5:15:5", "ax1v=1:50:1").replace("ax2v=2:3:1", "ax2v=0.25:1:0.25")}&set.walk_forward.windows=12`);
-    expect(await screen.findByText("200 combinations × 13 in-sample windows = 2600 backtests (at most 2000, 200 combinations)")).toHaveClass("text-down");
+    renderPage(
+      `${URL.replace("ax1v=5:15:5", "ax1v=1:50:1").replace("ax2v=2:3:1", "ax2v=0.25:1:0.25")}&set.walk_forward.windows=12`,
+    );
+    expect(
+      await screen.findByText(
+        "200 combinations × 13 in-sample windows = 2600 backtests (at most 2000, 200 combinations)",
+      ),
+    ).toHaveClass("text-down");
     expect(screen.getByRole("button", { name: "Run walk-forward" })).toBeDisabled();
     expect(requestBodies()).toHaveLength(0);
   });
@@ -87,11 +105,14 @@ describe("WalkForwardPage", () => {
     expect(within(rows[1]!).getByText("Oversold level 10, Distance 2")).toBeInTheDocument();
     expect(within(rows[1]!).getByText("2022-06-01 → 2023-10-12")).toHaveClass("text-warn"); // ran past its window
     expect(within(rows[2]!).getByText("2023-10-12 → 2025-02-03")).toHaveClass("text-warn"); // started late
-    for (const cell of within(rows[3]!).getAllByText("2025-02-03 → 2026-10-13")) expect(cell).not.toHaveClass("text-warn"); // its own bars
+    for (const cell of within(rows[3]!).getAllByText("2025-02-03 → 2026-10-13"))
+      expect(cell).not.toHaveClass("text-warn"); // its own bars
     expect(within(rows[3]!).getByText("none qualified, held cash")).toBeInTheDocument();
     expect(within(rows[3]!).getByText("0 of 6")).toBeInTheDocument();
 
-    expect(screen.getByText("1 combination could not run and were never picked, e.g. connors_rsi2_long: test failure")).toBeInTheDocument();
+    expect(
+      screen.getByText("1 combination could not run and were never picked, e.g. connors_rsi2_long: test failure"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Walk-forward efficiency").nextSibling).toHaveTextContent("0.12");
     expect(screen.getByText("unchanged setup +4.5%")).toBeInTheDocument();
     expect(screen.getByRole("table", { name: /stitched out-of-sample curve/ })).toBeInTheDocument();

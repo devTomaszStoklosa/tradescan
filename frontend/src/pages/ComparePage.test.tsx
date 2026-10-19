@@ -9,7 +9,15 @@ import type { PinnedRun } from "../lib/runs";
 import { encodeRuns } from "../lib/runsFile";
 import { PinnedRunsProvider } from "../state/pinnedRuns";
 import { MemoryRunStore } from "../test/runStore";
-import { config, makeMetrics, makeMonteCarlo, makePortfolioPin, makeRun, makePortfolioRun, signals } from "../test/fixtures";
+import {
+  config,
+  makeMetrics,
+  makeMonteCarlo,
+  makePortfolioPin,
+  makeRun,
+  makePortfolioRun,
+  signals,
+} from "../test/fixtures";
 import { ComparePage } from "./ComparePage";
 
 vi.mock("../components/charts/EquityChart", () => ({
@@ -20,13 +28,20 @@ vi.mock("../components/charts/EquityChart", () => ({
   ),
 }));
 
-vi.mock("../lib/csv", async (original) => ({ ...(await original<typeof import("../lib/csv")>()), downloadFile: vi.fn() }));
+vi.mock("../lib/csv", async (original) => ({
+  ...(await original<typeof import("../lib/csv")>()),
+  downloadFile: vi.fn(),
+}));
 
 /** Where versions before server-side runs kept the pinned runs. */
 const BROWSER_KEY = "tradescan.runs";
 
 const base = makeRun(1, {}, { name: "baseline" });
-const wideStop = makeRun(2, { config: { ...base.config, atr_mult: 3 }, metrics: makeMetrics({ total_return_pct: 20, trades: 7 }) }, { name: "wide stop" });
+const wideStop = makeRun(
+  2,
+  { config: { ...base.config, atr_mult: 3 }, metrics: makeMetrics({ total_return_pct: 20, trades: 7 }) },
+  { name: "wide stop" },
+);
 const portfolio = makePortfolioPin(3, {}, { name: "top 5" });
 
 let store = new MemoryRunStore();
@@ -39,7 +54,10 @@ function renderPage() {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);
     const body = url.endsWith("/config") ? config : url.endsWith("/signals") ? signals : null;
-    return new Response(JSON.stringify(body), { status: body ? 200 : 404, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify(body), {
+      status: body ? 200 : 404,
+      headers: { "Content-Type": "application/json" },
+    });
   });
   const router = createMemoryRouter([{ path: "/compare", element: <ComparePage /> }], { initialEntries: ["/compare"] });
   render(
@@ -55,7 +73,12 @@ const table = (name: string) => screen.getByRole("table", { name });
 
 /** The parts of `portfolio` that differ for another engine's run. */
 const snapshotOf = (engine: string) => {
-  const run = makePortfolioRun(engine, { equity: [{ time: "2016-01-04", value: 100000 }, { time: "2026-10-13", value: 114000 }] });
+  const run = makePortfolioRun(engine, {
+    equity: [
+      { time: "2016-01-04", value: 100000 },
+      { time: "2026-10-13", value: 114000 },
+    ],
+  });
   return { engine, equity: run.equity, form: { ...portfolio.form, engines: [engine] } };
 };
 
@@ -84,9 +107,15 @@ describe("ComparePage", () => {
 
     const totalReturn = within(table("Metrics of the pinned runs")).getByRole("row", { name: /Total return/ });
     expect(within(totalReturn).getAllByRole("cell")[1]).toHaveTextContent("+20.00% (best)");
-    expect(screen.getByRole("img", { name: "Return of the pinned runs since their first bar" })).toHaveTextContent("#1 baseline | #2 wide stop");
-    expect(within(screen.getByRole("article", { name: "Run 2" })).getByText("Only 7 trades: too few to trust the metrics.")).toBeInTheDocument();
-    expect(within(screen.getByRole("article", { name: "Run 1" })).getByRole("link", { name: "Open in Backtest" })).toHaveAttribute(
+    expect(screen.getByRole("img", { name: "Return of the pinned runs since their first bar" })).toHaveTextContent(
+      "#1 baseline | #2 wide stop",
+    );
+    expect(
+      within(screen.getByRole("article", { name: "Run 2" })).getByText("Only 7 trades: too few to trust the metrics."),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("article", { name: "Run 1" })).getByRole("link", { name: "Open in Backtest" }),
+    ).toHaveAttribute(
       "href",
       // The rules are written out, so the run reopens with them even if the server's defaults change.
       "/backtest?ticker=SPY&signal=connors_rsi2_long&eng=vectorized&entry=next_open&exit=target%2Ctime",
@@ -101,7 +130,11 @@ describe("ComparePage", () => {
     const check = await screen.findByRole("table", { name: "Out-of-sample check of the pinned runs" });
     const baseline = within(check).getByRole("row", { name: /baseline/ });
     const few = " (fewer than 20 trades)"; // read out instead of the asterisk
-    expect(within(baseline).getAllByRole("cell").map((cell) => cell.textContent)).toEqual([
+    expect(
+      within(baseline)
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual([
       "2023-07-03 (30%)",
       "1.10",
       `0.20*${few}`,
@@ -112,29 +145,44 @@ describe("ComparePage", () => {
       "30",
       `12*${few}`,
     ]);
-    expect(within(check).getByRole("row", { name: /old pin/ })).toHaveTextContent("No split: pinned before out-of-sample results");
+    expect(within(check).getByRole("row", { name: /old pin/ })).toHaveTextContent(
+      "No split: pinned before out-of-sample results",
+    );
 
     await userEvent.click(screen.getByRole("radio", { name: "Out-of-sample" }));
     const sharpe = within(table("Metrics of the pinned runs, out-of-sample")).getByRole("row", { name: /Sharpe/ });
-    expect(within(sharpe).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["0.20", "0.20", "–"]);
+    expect(
+      within(sharpe)
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual(["0.20", "0.20", "–"]);
     // Runs pinned before out-of-sample results have no share, so the parameter differs.
     expect(within(table("Parameters of the pinned runs")).getByText("Out-of-sample share")).toBeInTheDocument();
   });
 
   it("compares the Monte Carlo of every run, one method at a time", async () => {
-    const few = makeRun(2, { monteCarlo: makeMonteCarlo({ trades: 12, ruin_drawdown_pct: 30 }) }, { name: "few trades" });
+    const few = makeRun(
+      2,
+      { monteCarlo: makeMonteCarlo({ trades: 12, ruin_drawdown_pct: 30 }) },
+      { name: "few trades" },
+    );
     const old = makeRun(3, { monteCarlo: null }, { name: "old pin" });
     pin([base, few, old]);
     renderPage();
 
     await screen.findByRole("table", { name: "Monte Carlo of the pinned runs' trades" });
     const simulations = () => table("Monte Carlo of the pinned runs' trades");
-    const cells = (name: RegExp) => within(within(simulations()).getByRole("row", { name })).getAllByRole("cell").map((cell) => cell.textContent);
+    const cells = (name: RegExp) =>
+      within(within(simulations()).getByRole("row", { name }))
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent);
     expect(screen.getByRole("radio", { name: "Bootstrapped" })).toBeChecked();
     expect(cells(/baseline/)).toEqual(["42", "-7.3%", "+8.8%", "-21.5%", "-9.7%", "10", "6.5", "0.4% at 50%"]);
     expect(cells(/few trades/)[0]).toBe("12* (fewer than 20 trades)");
     expect(cells(/few trades/).at(-1)).toBe("0.4% at 30%");
-    expect(within(simulations()).getByRole("row", { name: /old pin/ })).toHaveTextContent("No Monte Carlo: pinned before Monte Carlo results");
+    expect(within(simulations()).getByRole("row", { name: /old pin/ })).toHaveTextContent(
+      "No Monte Carlo: pinned before Monte Carlo results",
+    );
 
     await userEvent.click(screen.getByRole("radio", { name: "Shuffled" }));
     expect(cells(/baseline/)).toEqual(["42", "+9.1%", "+9.1%", "-14.8%", "-8.4%", "9", "6", "0.0% at 50%"]);
@@ -188,7 +236,10 @@ describe("ComparePage", () => {
     expect(JSON.parse(content ?? "")).toEqual(encodeRuns([base]));
 
     const file = JSON.stringify(encodeRuns([base, wideStop]));
-    await userEvent.upload(screen.getByLabelText("Runs file to import"), new File([file], "runs.json", { type: "application/json" }));
+    await userEvent.upload(
+      screen.getByLabelText("Runs file to import"),
+      new File([file], "runs.json", { type: "application/json" }),
+    );
     expect(await screen.findByText("Imported 1 run. 1 run already pinned.")).toBeInTheDocument();
     expect(screen.getAllByRole("article")).toHaveLength(2);
     expect(store.runs().map((run) => run.name)).toEqual(["baseline", "wide stop"]);
@@ -208,20 +259,33 @@ describe("ComparePage", () => {
 
     const parameters = table("Parameters of the pinned runs");
     expect(await within(parameters).findByText("Portfolio · Max positions")).toBeInTheDocument();
-    expect(within(within(parameters).getByRole("row", { name: /^Run/ })).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["Backtest", "Portfolio"]);
+    expect(
+      within(within(parameters).getByRole("row", { name: /^Run/ }))
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual(["Backtest", "Portfolio"]);
     expect(within(parameters).getByRole("row", { name: /^Priority/ })).toHaveTextContent("Momentum");
 
-    const orders = () => within(screen.getByRole("table", { name: /^Portfolio stats of the pinned portfolio runs/ })).getByRole("row", { name: /Entry orders/ });
+    const orders = () =>
+      within(screen.getByRole("table", { name: /^Portfolio stats of the pinned portfolio runs/ })).getByRole("row", {
+        name: /Entry orders/,
+      });
     const stats = screen.getByRole("table", { name: "Portfolio stats of the pinned portfolio runs" });
-    expect(within(stats).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["Portfolio", "#3top 5"]);
+    expect(
+      within(stats)
+        .getAllByRole("columnheader")
+        .map((cell) => cell.textContent),
+    ).toEqual(["Portfolio", "#3top 5"]);
     expect(orders()).toHaveTextContent("Entry orders120");
     await userEvent.click(screen.getByRole("radio", { name: "Out-of-sample" }));
-    expect(screen.getByRole("table", { name: "Portfolio stats of the pinned portfolio runs, out-of-sample" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("table", { name: "Portfolio stats of the pinned portfolio runs, out-of-sample" }),
+    ).toBeInTheDocument();
     expect(orders()).toHaveTextContent("Entry orders38");
 
-    expect(within(table("Monte Carlo of the pinned runs' trades")).getByRole("row", { name: /top 5/ })).toHaveTextContent(
-      "No Monte Carlo: the portfolio backtest does not simulate its trades.",
-    );
+    expect(
+      within(table("Monte Carlo of the pinned runs' trades")).getByRole("row", { name: /top 5/ }),
+    ).toHaveTextContent("No Monte Carlo: the portfolio backtest does not simulate its trades.");
   });
 
   it("shows no portfolio stats without a shown portfolio run", async () => {
@@ -246,23 +310,33 @@ describe("ComparePage", () => {
 
     vi.spyOn(window, "confirm").mockReturnValue(true);
     await userEvent.click(screen.getByRole("button", { name: "Remove all" }));
-    await userEvent.upload(screen.getByLabelText("Runs file to import"), new File([content], "runs.json", { type: "application/json" }));
+    await userEvent.upload(
+      screen.getByLabelText("Runs file to import"),
+      new File([content], "runs.json", { type: "application/json" }),
+    );
     expect(await screen.findByText("Imported 3 runs.")).toBeInTheDocument();
-    expect(within(screen.getByRole("article", { name: "Run 4" })).getByRole("link", { name: "Open in Portfolio" })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("article", { name: "Run 4" })).getByRole("link", { name: "Open in Portfolio" }),
+    ).toBeInTheDocument();
     expect(store.runs().map((run) => run.name)).toEqual(["baseline", "top 5", "top 5 cerebro"]);
   });
 
   it("reports an invalid import file", async () => {
     renderPage();
     await screen.findByText("No pinned runs yet");
-    await userEvent.upload(screen.getByLabelText("Runs file to import"), new File(["{"], "runs.json", { type: "application/json" }));
+    await userEvent.upload(
+      screen.getByLabelText("Runs file to import"),
+      new File(["{"], "runs.json", { type: "application/json" }),
+    );
     expect(await screen.findByText("Import failed: The file is not valid JSON")).toBeInTheDocument();
   });
 
   it("reports runs left in this browser that it cannot read, and keeps them", async () => {
     localStorage.setItem(BROWSER_KEY, JSON.stringify({ version: 1, runs: [{ id: 1 }] }));
     renderPage();
-    expect(await screen.findByRole("alert")).toHaveTextContent('Pinned runs saved in this browser could not be read (Run 1 has an invalid "id").');
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      'Pinned runs saved in this browser could not be read (Run 1 has an invalid "id").',
+    );
     expect(localStorage.getItem(BROWSER_KEY)).not.toBeNull();
   });
 
@@ -270,14 +344,18 @@ describe("ComparePage", () => {
     pin([base]);
     localStorage.setItem(BROWSER_KEY, JSON.stringify(encodeRuns([base, wideStop])));
     renderPage();
-    expect(await screen.findByText("Moved 1 pinned run from this browser to the server. 1 run already there.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Moved 1 pinned run from this browser to the server. 1 run already there."),
+    ).toBeInTheDocument();
     expect(screen.getAllByRole("article")).toHaveLength(2);
     expect(store.runs().map((run) => run.name)).toEqual(["baseline", "wide stop"]);
     expect(localStorage.getItem(BROWSER_KEY)).toBeNull();
   });
 
   it("keeps the runs that did not fit on the server in this browser", async () => {
-    const runs = Array.from({ length: 8 }, (_, index) => makeRun(index + 1, { config: { ...base.config, atr_mult: index + 1 } }, { name: `run ${index + 1}` }));
+    const runs = Array.from({ length: 8 }, (_, index) =>
+      makeRun(index + 1, { config: { ...base.config, atr_mult: index + 1 } }, { name: `run ${index + 1}` }),
+    );
     pin(runs.slice(0, 7));
     const another = makeRun(2, { config: { ...base.config, atr_mult: 10 } });
     localStorage.setItem(BROWSER_KEY, JSON.stringify(encodeRuns([runs[7]!, another])));
@@ -297,15 +375,18 @@ describe("ComparePage", () => {
     const second = await screen.findByRole("article", { name: "Run 2" });
     vi.spyOn(store, "remove").mockRejectedValueOnce(new Error("Cannot reach the tradescan server"));
     await userEvent.click(within(second).getByRole("button", { name: "Remove" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("The change was not saved (Cannot reach the tradescan server).");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The change was not saved (Cannot reach the tradescan server).",
+    );
     expect(await screen.findByRole("article", { name: "Run 2" })).toBeInTheDocument();
   });
 
   it("reports runs the server cannot give", async () => {
     vi.spyOn(store, "load").mockRejectedValue(new Error("Cannot reach the tradescan server"));
     renderPage();
-    expect(await screen.findByRole("alert")).toHaveTextContent("Pinned runs could not be read from the server (Cannot reach the tradescan server).");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Pinned runs could not be read from the server (Cannot reach the tradescan server).",
+    );
     expect(screen.getByText("No pinned runs yet")).toBeInTheDocument();
   });
 });
-

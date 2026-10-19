@@ -28,7 +28,9 @@ export function RegimeBanner({ regime }: { regime: RegimeOut }) {
     <div className="flex flex-wrap items-center gap-x-8 gap-y-3 rounded-xl border border-line bg-panel px-4 py-3">
       <div>
         <div className="text-xs text-muted">Market regime</div>
-        <span className={`mt-0.5 inline-flex rounded-md px-2 py-0.5 text-sm font-semibold uppercase ${STYLES[regime.regime] ?? ""}`}>
+        <span
+          className={`mt-0.5 inline-flex rounded-md px-2 py-0.5 text-sm font-semibold uppercase ${STYLES[regime.regime] ?? ""}`}
+        >
           {regime.regime}
         </span>
       </div>

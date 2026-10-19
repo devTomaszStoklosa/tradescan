@@ -3,7 +3,15 @@ import { describe, expect, it } from "vitest";
 import { config } from "../test/fixtures";
 import { toCsv, tradeRow } from "./csv";
 import { DASH, fmtPct, fmtPrice, fmtSigned, fmtSize, tone } from "./format";
-import { backtestBody, edgeBody, readBacktestForm, readScanForm, scanBody, writeBacktestForm, writeScanForm } from "./params";
+import {
+  backtestBody,
+  edgeBody,
+  readBacktestForm,
+  readScanForm,
+  scanBody,
+  writeBacktestForm,
+  writeScanForm,
+} from "./params";
 import { compareValues } from "./useSortable";
 
 describe("format", () => {
@@ -33,9 +41,20 @@ describe("csv", () => {
 
   it("writes a trade's units and adds as columns", () => {
     const trade = {
-      direction: "long" as const, signal_date: "2024-03-01", entry_date: "2024-03-04", exit_date: "2024-03-15", entry_price: 102,
-      exit_price: 110, size: 300, pnl: 2400, r_multiple: 2.4, exit_reason: "trailing",
-      adds: [{ date: "2024-03-06", price: 102 }, { date: "2024-03-08", price: 104 }],
+      direction: "long" as const,
+      signal_date: "2024-03-01",
+      entry_date: "2024-03-04",
+      exit_date: "2024-03-15",
+      entry_price: 102,
+      exit_price: 110,
+      size: 300,
+      pnl: 2400,
+      r_multiple: 2.4,
+      exit_reason: "trailing",
+      adds: [
+        { date: "2024-03-06", price: 102 },
+        { date: "2024-03-08", price: 104 },
+      ],
     };
     expect(tradeRow(trade)).toMatchObject({ entry_price: 102, units: 3, adds: "2024-03-06 102; 2024-03-08 104" });
     expect(tradeRow({ ...trade, adds: [] })).toMatchObject({ units: 1, adds: "" });
@@ -83,7 +102,15 @@ describe("url params", () => {
   it("returns no request without a universe or with invalid input", () => {
     expect(scanBody(readScanForm(new URLSearchParams()))).toBeNull();
     expect(
-      edgeBody({ universe: { watchlist: "etf", tickers: "" }, direction: "both", families: [], horizons: "x", minEvents: 0, period: "", signalParams: {} }),
+      edgeBody({
+        universe: { watchlist: "etf", tickers: "" },
+        direction: "both",
+        families: [],
+        horizons: "x",
+        minEvents: 0,
+        period: "",
+        signalParams: {},
+      }),
     ).toBeNull();
     expect(backtestBody(readBacktestForm(new URLSearchParams("ticker=spy"), config))).toBeNull();
   });
@@ -95,7 +122,8 @@ describe("url params", () => {
   });
 
   it("builds a backtest request with only the selected signal's parameters", () => {
-    const url = "ticker=spy&signal=golden_cross&eng=vectorized,cerebro&set.risk.atr_mult=2.5&sig.golden_cross.fast=20&sig.death_cross.fast=5";
+    const url =
+      "ticker=spy&signal=golden_cross&eng=vectorized,cerebro&set.risk.atr_mult=2.5&sig.golden_cross.fast=20&sig.death_cross.fast=5";
     const form = readBacktestForm(new URLSearchParams(url), config);
     expect(backtestBody(form)).toEqual({
       ticker: "SPY",
@@ -120,7 +148,11 @@ describe("url params", () => {
   it("keeps entry filters, their parameters and the benchmark in the URL", () => {
     const url = "ticker=SPY&signal=golden_cross&filter=trend,market&fi.trend.period=100&fi.adx.period=5&b=qqq";
     const form = readBacktestForm(new URLSearchParams(url), config);
-    expect(form).toMatchObject({ filters: ["trend", "market"], filterParams: { trend: { period: 100 } }, benchmark: "QQQ" });
+    expect(form).toMatchObject({
+      filters: ["trend", "market"],
+      filterParams: { trend: { period: 100 } },
+      benchmark: "QQQ",
+    });
     expect(backtestBody(form)).toMatchObject({
       filters: [
         { name: "trend", params: { period: 100 } },
@@ -140,15 +172,23 @@ describe("url params", () => {
     const url =
       "ticker=SPY&signal=golden_cross&entry=limit&exit=time&en.limit.offset_atr=1&en.stop.offset_atr=2&ex.time.max_hold_bars=5&ex.target.target_r=3";
     const form = readBacktestForm(new URLSearchParams(url), config);
-    expect(form).toMatchObject({ entry: "limit", entryParams: { offset_atr: 1 }, exits: ["time"], exitParams: { time: { max_hold_bars: 5 } } });
-    expect(backtestBody(form)).toMatchObject({ entry: { name: "limit", params: { offset_atr: 1 } }, exits: [{ name: "time", params: { max_hold_bars: 5 } }] });
+    expect(form).toMatchObject({
+      entry: "limit",
+      entryParams: { offset_atr: 1 },
+      exits: ["time"],
+      exitParams: { time: { max_hold_bars: 5 } },
+    });
+    expect(backtestBody(form)).toMatchObject({
+      entry: { name: "limit", params: { offset_atr: 1 } },
+      exits: [{ name: "time", params: { max_hold_bars: 5 } }],
+    });
     expect(writeBacktestForm(form, config).toString()).toBe(
       "ticker=SPY&signal=golden_cross&eng=vectorized&entry=limit&exit=time&en.limit.offset_atr=1&ex.time.max_hold_bars=5",
     );
     // Without the defaults (a pinned run's link) the rules are always written.
-    expect(writeBacktestForm({ ...form, entry: "next_open", entryParams: {}, exits: ["target", "time"] }).toString()).toContain(
-      "entry=next_open&exit=target%2Ctime",
-    );
+    expect(
+      writeBacktestForm({ ...form, entry: "next_open", entryParams: {}, exits: ["target", "time"] }).toString(),
+    ).toContain("entry=next_open&exit=target%2Ctime");
 
     const none = readBacktestForm(new URLSearchParams("ticker=SPY&signal=golden_cross&exit=none"), config);
     expect(none.exits).toEqual([]);
@@ -157,11 +197,14 @@ describe("url params", () => {
   });
 
   it("reads links from before trade rules, whose target and time exit were settings", () => {
-    const url = "ticker=SPY&signal=golden_cross&set.backtest.target_r=3&set.backtest.commission_pct=0.2&set.backtest.max_hold_bars=10";
+    const url =
+      "ticker=SPY&signal=golden_cross&set.backtest.target_r=3&set.backtest.commission_pct=0.2&set.backtest.max_hold_bars=10";
     const form = readBacktestForm(new URLSearchParams(url), config);
     expect(form.settings).toEqual({ backtest: { commission_pct: 0.2 } });
     expect(form.exitParams).toEqual({ target: { target_r: 3 }, time: { max_hold_bars: 10 } });
     // An exit the link switches off keeps none of its old parameters.
-    expect(readBacktestForm(new URLSearchParams(`${url}&exit=time`), config).exitParams).toEqual({ time: { max_hold_bars: 10 } });
+    expect(readBacktestForm(new URLSearchParams(`${url}&exit=time`), config).exitParams).toEqual({
+      time: { max_hold_bars: 10 },
+    });
   });
 });

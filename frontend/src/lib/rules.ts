@@ -23,7 +23,8 @@ export interface TradeRulesForm {
   filterParams: Overrides;
 }
 
-export const findRule = <T extends RuleOut>(rules: T[], name: string): T | undefined => rules.find((rule) => rule.name === name);
+export const findRule = <T extends RuleOut>(rules: T[], name: string): T | undefined =>
+  rules.find((rule) => rule.name === name);
 
 /** The rule's description with these values; rules use the same templates as signals. */
 export const describeRule = (rule: RuleOut, values: Values | undefined): string => describeSignal(rule, values);
@@ -78,7 +79,8 @@ export function hasRuleProblems(form: TradeRulesForm, specs: RuleSpecs): boolean
   const exits = form.exits.map((name) => findRule(specs.exit_rules, name));
   const filters = form.filters.map((name) => findRule(specs.filter_rules, name));
   if (!entry || exits.some((rule) => !rule) || filters.some((rule) => !rule)) return true;
-  const specsOf = (rules: (RuleOut | undefined)[]) => Object.fromEntries(rules.map((rule) => [rule!.name, rule!.params]));
+  const specsOf = (rules: (RuleOut | undefined)[]) =>
+    Object.fromEntries(rules.map((rule) => [rule!.name, rule!.params]));
   return (
     hasProblems({ [entry.name]: form.entryParams }, { [entry.name]: entry.params }) ||
     hasProblems(form.exitParams, specsOf(exits)) ||
@@ -93,7 +95,10 @@ const LEGACY_EXIT_SETTINGS: Record<string, string> = { target_r: "target", max_h
  * Moves `backtest.target_r` and `backtest.max_hold_bars` from the settings into the target and time exits,
  * so links and pinned runs from before the trade rules keep working.
  */
-export function moveLegacyExitSettings(settings: Overrides, exitParams: Overrides): { settings: Overrides; exitParams: Overrides } {
+export function moveLegacyExitSettings(
+  settings: Overrides,
+  exitParams: Overrides,
+): { settings: Overrides; exitParams: Overrides } {
   const backtest = { ...settings.backtest };
   let params = exitParams;
   for (const [name, rule] of Object.entries(LEGACY_EXIT_SETTINGS)) {

@@ -5,11 +5,28 @@
  * The URL holds the universe (`w=<watchlist>` or `t=<tickers>`), the setup with the Backtest page's keys
  * apart from the ticker, and the metric the tickers are ranked by (`m`).
  */
-import type { ConfigOut, MetricSpreadOut, Period, TickerRunOut, WatchlistBacktestIn, WatchlistBacktestOut } from "../api/client";
+import type {
+  ConfigOut,
+  MetricSpreadOut,
+  Period,
+  TickerRunOut,
+  WatchlistBacktestIn,
+  WatchlistBacktestOut,
+} from "../api/client";
 import { type MetricKey } from "./compare";
 import type { CsvRow } from "./csv";
 import { DASH, fmtNumber, fmtPct, fmtSigned } from "./format";
-import { readBacktestRules, readUniverse, rulesBody, universeBody, writeBacktestForm, writeBacktestSetup, writeUniverse, type BacktestRules, type Universe } from "./params";
+import {
+  readBacktestRules,
+  readUniverse,
+  rulesBody,
+  universeBody,
+  writeBacktestForm,
+  writeBacktestSetup,
+  writeUniverse,
+  type BacktestRules,
+  type Universe,
+} from "./params";
 import type { RuleDefaults } from "./rules";
 
 export const DEFAULT_WATCHLIST_METRIC: MetricKey = "expectancy_r";
@@ -47,7 +64,12 @@ export function watchlistBody(form: WatchlistForm): WatchlistBacktestIn | null {
 }
 
 /** The Backtest page link for one ticker of the result: the same setup with the benchmark the run compared. */
-export function backtestLink(form: WatchlistForm, ticker: string, result: WatchlistBacktestOut, config: ConfigOut): string {
+export function backtestLink(
+  form: WatchlistForm,
+  ticker: string,
+  result: WatchlistBacktestOut,
+  config: ConfigOut,
+): string {
   const { universe: _universe, ...rules } = form;
   const benchmark = result.benchmark ?? rules.benchmark;
   return `/backtest?${writeBacktestForm({ ...rules, ticker, benchmark, engines: [result.engine] }, config).toString()}`;
@@ -76,7 +98,14 @@ export function spreadValue(spread: MetricSpreadOut | undefined, field: SpreadFi
   return spread[field] ?? Infinity;
 }
 
-const PERCENT = new Set<MetricKey>(["total_return_pct", "cagr_pct", "max_drawdown_pct", "win_rate_pct", "exposure_pct", "buy_hold_pct"]);
+const PERCENT = new Set<MetricKey>([
+  "total_return_pct",
+  "cagr_pct",
+  "max_drawdown_pct",
+  "win_rate_pct",
+  "exposure_pct",
+  "buy_hold_pct",
+]);
 const SIGNED = new Set<MetricKey>(["total_return_pct", "cagr_pct", "buy_hold_pct"]);
 
 /** One metric value in that metric's own format. */
@@ -103,7 +132,11 @@ export function rowsToCsv(result: WatchlistBacktestOut): CsvRow[] {
       start: row.start,
       end: row.end,
       oos_start: row.split?.out_of_sample_start ?? "",
-      ...Object.fromEntries(prefixes.flatMap(([period, prefix]) => keys.map((key) => [`${prefix}_${key}`, periodMetrics(row, period)?.[key] ?? null]))),
+      ...Object.fromEntries(
+        prefixes.flatMap(([period, prefix]) =>
+          keys.map((key) => [`${prefix}_${key}`, periodMetrics(row, period)?.[key] ?? null]),
+        ),
+      ),
     };
   });
 }

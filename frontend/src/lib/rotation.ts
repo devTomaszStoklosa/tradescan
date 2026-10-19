@@ -10,7 +10,18 @@
  */
 import type { ConfigOut, Rebalance, RotationIn, RuleIn } from "../api/client";
 import { PERIODS, ROTATION_PAGE_SECTIONS } from "./choices";
-import { countChanges, hasProblems, pickOwners, pickSections, readOverrides, sectionSpecs, SETTINGS_PREFIX, writeOverrides, type Overrides, type Values } from "./overrides";
+import {
+  countChanges,
+  hasProblems,
+  pickOwners,
+  pickSections,
+  readOverrides,
+  sectionSpecs,
+  SETTINGS_PREFIX,
+  writeOverrides,
+  type Overrides,
+  type Values,
+} from "./overrides";
 import { readUniverse, tickerList, universeBody, writeUniverse, type Universe } from "./params";
 import { findRule } from "./rules";
 
@@ -19,7 +30,10 @@ export const WEIGHTING_PREFIX = "wp";
 /** The server's rebalance when a request names none. */
 export const DEFAULT_REBALANCE: Rebalance = "monthly";
 
-export type RotationDefaults = Pick<ConfigOut, "default_ranking" | "ranking_rules" | "default_weighting" | "weight_rules">;
+export type RotationDefaults = Pick<
+  ConfigOut,
+  "default_ranking" | "ranking_rules" | "default_weighting" | "weight_rules"
+>;
 
 export interface RotationForm {
   universe: Universe;

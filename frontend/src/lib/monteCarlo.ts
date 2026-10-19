@@ -31,7 +31,8 @@ export const actualRuin = (monteCarlo: MonteCarloOut): boolean =>
 /** The methods of the given results, each once, in first-seen order. */
 export function methodsOf(results: (MonteCarloOut | null)[]): Pick<MonteCarloMethodOut, "name" | "label">[] {
   const seen = new Map<string, string>();
-  for (const result of results) for (const method of result?.methods ?? []) if (!seen.has(method.name)) seen.set(method.name, method.label);
+  for (const result of results)
+    for (const method of result?.methods ?? []) if (!seen.has(method.name)) seen.set(method.name, method.label);
   return [...seen].map(([name, label]) => ({ name, label }));
 }
 

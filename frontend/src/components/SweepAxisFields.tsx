@@ -11,7 +11,19 @@ import { Button, Field, NumberInput, Select } from "./ui";
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
-function ParamSelect({ value, params, used, onChange, label }: { value: string; params: SweepParam[]; used: string[]; onChange: (key: string) => void; label: string }) {
+function ParamSelect({
+  value,
+  params,
+  used,
+  onChange,
+  label,
+}: {
+  value: string;
+  params: SweepParam[];
+  used: string[];
+  onChange: (key: string) => void;
+  label: string;
+}) {
   const groups = useMemo(() => {
     const byGroup = new Map<string, SweepParam[]>();
     for (const param of params) byGroup.set(param.group, [...(byGroup.get(param.group) ?? []), param]);
@@ -70,13 +82,29 @@ function AxisFields({
         />
       </Field>
       <Field label="From">
-        <NumberInput label={`${name}: from`} value={axis.from} onChange={set("from")} step={String(param?.spec.step ?? "any")} />
+        <NumberInput
+          label={`${name}: from`}
+          value={axis.from}
+          onChange={set("from")}
+          step={String(param?.spec.step ?? "any")}
+        />
       </Field>
       <Field label="To">
-        <NumberInput label={`${name}: to`} value={axis.to} onChange={set("to")} step={String(param?.spec.step ?? "any")} />
+        <NumberInput
+          label={`${name}: to`}
+          value={axis.to}
+          onChange={set("to")}
+          step={String(param?.spec.step ?? "any")}
+        />
       </Field>
       <Field label="Step">
-        <NumberInput label={`${name}: step`} value={axis.step} onChange={set("step")} step={String(param?.spec.step ?? "any")} min={0} />
+        <NumberInput
+          label={`${name}: step`}
+          value={axis.step}
+          onChange={set("step")}
+          step={String(param?.spec.step ?? "any")}
+          min={0}
+        />
       </Field>
       <Button variant="ghost" onClick={onRemove} aria-label={`Remove parameter ${position}`}>
         Remove
@@ -115,7 +143,8 @@ export function SweptParameters({
     <section className="space-y-3">
       <h2 className="text-sm font-semibold">Swept parameters</h2>
       <p className="text-xs text-muted">
-        One or two parameters of the setup above. Ranges start around the setup's value, in the parameter's own steps and limits.
+        One or two parameters of the setup above. Ranges start around the setup's value, in the parameter's own steps
+        and limits.
       </p>
       {axes.map((axis, index) => (
         <AxisFields

@@ -10,8 +10,27 @@
  */
 import type { ConfigOut, PortfolioIn, RuleIn, SettingsSectionOut, SignalOut } from "../api/client";
 import { PORTFOLIO_PAGE_SECTIONS, PORTFOLIO_SECTION, SCORE_FIELDS, SCORE_SECTIONS } from "./choices";
-import { countChanges, hasProblems, pickOwners, readOverrides, signalSpecs, writeOverrides, type Overrides, type Values } from "./overrides";
-import { readBacktestRules, readUniverse, rulesBody, universeBody, writeBacktestForm, writeBacktestSetup, writeUniverse, type BacktestRules, type Universe } from "./params";
+import {
+  countChanges,
+  hasProblems,
+  pickOwners,
+  readOverrides,
+  signalSpecs,
+  writeOverrides,
+  type Overrides,
+  type Values,
+} from "./overrides";
+import {
+  readBacktestRules,
+  readUniverse,
+  rulesBody,
+  universeBody,
+  writeBacktestForm,
+  writeBacktestSetup,
+  writeUniverse,
+  type BacktestRules,
+  type Universe,
+} from "./params";
 import { findRule, type RuleDefaults } from "./rules";
 import { resetSetup } from "./setup";
 import { writeWatchlistForm } from "./watchlistBacktest";
@@ -38,7 +57,8 @@ const engineList = (value: string | null): string[] =>
     .filter(Boolean);
 
 /** True when the priority rule scores like the scanner, so it reads the scanner's settings and signals. */
-const readsScan = (priority: string, config: Pick<ConfigOut, "priority_rules">): boolean => Boolean(findRule(config.priority_rules, priority)?.needs_scan);
+const readsScan = (priority: string, config: Pick<ConfigOut, "priority_rules">): boolean =>
+  Boolean(findRule(config.priority_rules, priority)?.needs_scan);
 
 /** The settings sections the priority rule reads: the scanner's for a rule that scores like the scanner, else none. */
 export const prioritySections = (priority: string, config: Pick<ConfigOut, "priority_rules">): readonly string[] =>
@@ -56,15 +76,17 @@ export const withCountedScoreSignals = (form: PortfolioForm, signals: SignalOut[
   ...form,
   scoreSignalParams: pickOwners(
     form.scoreSignalParams,
-    scoreSignals(form, signals).map((signal) => signal.name).filter((name) => name !== form.signal),
+    scoreSignals(form, signals)
+      .map((signal) => signal.name)
+      .filter((name) => name !== form.signal),
   ),
 });
 
 /** The settings sections the form offers: the setup's, the portfolio's and those its priority rule reads. */
-export const portfolioSections = (form: Pick<PortfolioForm, "priority">, config: Pick<ConfigOut, "priority_rules">): string[] => [
-  ...PORTFOLIO_PAGE_SECTIONS,
-  ...prioritySections(form.priority, config),
-];
+export const portfolioSections = (
+  form: Pick<PortfolioForm, "priority">,
+  config: Pick<ConfigOut, "priority_rules">,
+): string[] => [...PORTFOLIO_PAGE_SECTIONS, ...prioritySections(form.priority, config)];
 
 /** Of the scanner's sections, the parameters the score does not read, by section, for the fields to leave out. */
 export const scoreExclusions = (sections: SettingsSectionOut[]): Record<string, string[]> =>
@@ -76,14 +98,25 @@ export const scoreExclusions = (sections: SettingsSectionOut[]): Record<string, 
   );
 
 /** The scanner's settings, unless the priority rule reads them. */
-function withoutUnreadSettings(settings: Overrides, priority: string, config: Pick<ConfigOut, "priority_rules">): Overrides {
+function withoutUnreadSettings(
+  settings: Overrides,
+  priority: string,
+  config: Pick<ConfigOut, "priority_rules">,
+): Overrides {
   const read = prioritySections(priority, config);
-  return Object.fromEntries(Object.entries(settings).filter(([owner]) => !SCORE_SECTIONS.includes(owner) || read.includes(owner)));
+  return Object.fromEntries(
+    Object.entries(settings).filter(([owner]) => !SCORE_SECTIONS.includes(owner) || read.includes(owner)),
+  );
 }
 
 /** The form with this priority rule and its parameters; the scanner's settings and signal parameters go when the rule
  * does not read them. */
-export const choosePriority = (form: PortfolioForm, priority: string, priorityParams: Values, config: Pick<ConfigOut, "priority_rules">): PortfolioForm => ({
+export const choosePriority = (
+  form: PortfolioForm,
+  priority: string,
+  priorityParams: Values,
+  config: Pick<ConfigOut, "priority_rules">,
+): PortfolioForm => ({
   ...form,
   priority,
   priorityParams,
@@ -134,7 +167,9 @@ export function portfolioBody(form: PortfolioForm): PortfolioIn | null {
 
 /** How many of the priority rule's choices and the score's signal parameters differ from the defaults. */
 export const priorityChanges = (form: PortfolioForm, defaults: PortfolioDefaults): number =>
-  Number(form.priority !== defaults.default_priority) + Object.keys(form.priorityParams).length + countChanges(form.scoreSignalParams);
+  Number(form.priority !== defaults.default_priority) +
+  Object.keys(form.priorityParams).length +
+  countChanges(form.scoreSignalParams);
 
 /** True when the priority rule is unknown or one of its parameters is invalid. */
 export function hasPriorityProblems(form: PortfolioForm, config: Pick<ConfigOut, "priority_rules">): boolean {
@@ -174,7 +209,13 @@ function setupOf(form: PortfolioForm): BacktestRules {
 }
 
 /** The Backtest page link for one ticker of the result, with the benchmark the run's filters compared. */
-export function backtestLink(form: PortfolioForm, ticker: string, engine: string, benchmark: string | null, config: ConfigOut): string {
+export function backtestLink(
+  form: PortfolioForm,
+  ticker: string,
+  engine: string,
+  benchmark: string | null,
+  config: ConfigOut,
+): string {
   const setup = setupOf(form);
   return `/backtest?${writeBacktestForm({ ...setup, ticker, benchmark: benchmark ?? setup.benchmark, engines: [engine] }, config).toString()}`;
 }

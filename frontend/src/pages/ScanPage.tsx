@@ -9,7 +9,18 @@ import { SectionFields } from "../components/ParamFields";
 import { RegimeBanner } from "../components/RegimeBanner";
 import { TickerPanel } from "../components/TickerPanel";
 import { DirectionPicker, FamilyPicker, UniversePicker } from "../components/UniverseFilters";
-import { Button, EmptyState, ErrorBox, Field, Input, Loading, Notice, PageHeader, Panel, Select } from "../components/ui";
+import {
+  Button,
+  EmptyState,
+  ErrorBox,
+  Field,
+  Input,
+  Loading,
+  Notice,
+  PageHeader,
+  Panel,
+  Select,
+} from "../components/ui";
 import { defaultWatchlist, LARGE_UNIVERSE, PERIODS, universeSize } from "../lib/choices";
 import { downloadCsv, type CsvRow } from "../lib/csv";
 import { fmtNumber } from "../lib/format";
@@ -85,11 +96,21 @@ function ScanFormPanel({
   return (
     <form onSubmit={submit} noValidate className="space-y-3">
       <Panel className="space-y-3">
-        <UniversePicker value={draft.universe} onChange={(universe) => setDraft({ ...draft, universe })} watchlists={watchlists} />
+        <UniversePicker
+          value={draft.universe}
+          onChange={(universe) => setDraft({ ...draft, universe })}
+          watchlists={watchlists}
+        />
         <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
           <DirectionPicker value={draft.direction} onChange={(direction) => setDraft({ ...draft, direction })} />
           {scanSection && (
-            <SectionFields section={scanSection} overrides={draft.settings} onChange={setSettings} only={MAIN_FIELDS} className="grid w-60 grid-cols-2 gap-3" />
+            <SectionFields
+              section={scanSection}
+              overrides={draft.settings}
+              onChange={setSettings}
+              only={MAIN_FIELDS}
+              className="grid w-60 grid-cols-2 gap-3"
+            />
           )}
           <div className="w-32">
             <Field label="History">
@@ -105,13 +126,21 @@ function ScanFormPanel({
           </div>
           <div className="w-32">
             <Field label="Benchmark">
-              <Input value={draft.benchmark} placeholder={benchmark} onChange={(event) => setDraft({ ...draft, benchmark: event.target.value.toUpperCase() })} />
+              <Input
+                value={draft.benchmark}
+                placeholder={benchmark}
+                onChange={(event) => setDraft({ ...draft, benchmark: event.target.value.toUpperCase() })}
+              />
             </Field>
           </div>
         </div>
         <div className="flex flex-wrap items-end justify-between gap-x-5 gap-y-3">
           <div className="min-w-0 flex-1">
-            <FamilyPicker value={draft.families} onChange={(value) => setDraft({ ...draft, families: value })} families={config.families} />
+            <FamilyPicker
+              value={draft.families}
+              onChange={(value) => setDraft({ ...draft, families: value })}
+              families={config.families}
+            />
           </div>
           <Button type="submit" variant="primary" disabled={busy || invalid} className="h-9 px-5">
             {busy ? "Scanning…" : "Scan"}
@@ -159,7 +188,10 @@ function ScanResults({
           <Button onClick={onRefresh} disabled={refreshing}>
             {refreshing ? "Refreshing…" : "Refresh"}
           </Button>
-          <Button onClick={() => downloadCsv(`tradescan-${data.universe}.csv`, hitsToCsv(data.hits))} disabled={!data.hits.length}>
+          <Button
+            onClick={() => downloadCsv(`tradescan-${data.universe}.csv`, hitsToCsv(data.hits))}
+            disabled={!data.hits.length}
+          >
             Export CSV
           </Button>
         </div>
@@ -167,9 +199,13 @@ function ScanResults({
       {data.hits.length ? (
         <HitsTable hits={data.hits} onSelect={onSelect} selectedKey={selectedKey} />
       ) : (
-        <EmptyState title="No setups match these filters">Lower the minimum score, widen the freshness window or pick more families.</EmptyState>
+        <EmptyState title="No setups match these filters">
+          Lower the minimum score, widen the freshness window or pick more families.
+        </EmptyState>
       )}
-      <p className="text-xs text-muted">Click a row for the chart, risk plan and the signal's history on that ticker.</p>
+      <p className="text-xs text-muted">
+        Click a row for the chart, risk plan and the signal's history on that ticker.
+      </p>
     </div>
   );
 }
@@ -190,7 +226,8 @@ export function ScanPage() {
 
   const failed = config.error ?? signals.error ?? watchlists.error;
   if (failed) return <ErrorBox error={failed} onRetry={() => window.location.reload()} />;
-  if (!config.data || !signals.data || !watchlists.data) return <Loading message="Connecting to the tradescan server…" />;
+  if (!config.data || !signals.data || !watchlists.data)
+    return <Loading message="Connecting to the tradescan server…" />;
 
   const size = universeSize(form.universe, watchlists.data);
   const loadingMessage =
@@ -200,7 +237,10 @@ export function ScanPage() {
 
   return (
     <>
-      <PageHeader title="Scanner" subtitle="Fresh signals ranked by confluence, with an ATR risk plan and historical edge." />
+      <PageHeader
+        title="Scanner"
+        subtitle="Fresh signals ranked by confluence, with an ATR risk plan and historical edge."
+      />
       <ScanFormPanel
         initial={form}
         watchlists={watchlists.data}
@@ -209,7 +249,11 @@ export function ScanPage() {
         busy={scan.isFetching}
         onSubmit={(next) => setParams(writeScanForm(next))}
       />
-      {!body && <EmptyState title="Pick a universe and press Scan">The scan downloads daily bars, evaluates 38 signals and ranks the setups.</EmptyState>}
+      {!body && (
+        <EmptyState title="Pick a universe and press Scan">
+          The scan downloads daily bars, evaluates 38 signals and ranks the setups.
+        </EmptyState>
+      )}
       {scan.isLoading && <Loading message={loadingMessage} />}
       {scan.isError && <ErrorBox error={scan.error} onRetry={() => scan.refetch()} />}
       {scan.data && (
@@ -222,7 +266,13 @@ export function ScanPage() {
         />
       )}
       {selected && (
-        <TickerPanel hit={selected} settings={form.settings} signalParams={form.signalParams} period={form.period} onClose={() => setSelected(null)} />
+        <TickerPanel
+          hit={selected}
+          settings={form.settings}
+          signalParams={form.signalParams}
+          period={form.period}
+          onClose={() => setSelected(null)}
+        />
       )}
     </>
   );

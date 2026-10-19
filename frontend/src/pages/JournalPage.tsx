@@ -21,8 +21,17 @@ function SummaryTiles({ summary }: { summary: JournalSummaryOut }) {
       <StatTile label="Open trades" value={summary.open_trades} />
       <StatTile label="Closed trades" value={summary.closed_trades} />
       <StatTile label="Win rate" value={fmtPct(summary.win_rate_pct)} sub="profit after fees" />
-      <StatTile label="Average return" value={fmtPct(summary.average_return_pct, 2, true)} valueClass={tone(summary.average_return_pct)} />
-      <StatTile label="Average R" value={fmtR(summary.average_r)} valueClass={tone(summary.average_r)} sub={`${summary.r_trades} with a stop`} />
+      <StatTile
+        label="Average return"
+        value={fmtPct(summary.average_return_pct, 2, true)}
+        valueClass={tone(summary.average_return_pct)}
+      />
+      <StatTile
+        label="Average R"
+        value={fmtR(summary.average_r)}
+        valueClass={tone(summary.average_r)}
+        sub={`${summary.r_trades} with a stop`}
+      />
       <StatTile label="Total R" value={fmtR(summary.total_r)} valueClass={tone(summary.total_r)} />
     </div>
   );
@@ -48,7 +57,8 @@ export function JournalPage() {
 
   const refresh = () => void queryClient.invalidateQueries({ queryKey: JOURNAL_KEY });
   const save = useMutation({
-    mutationFn: ({ id, body }: { id: number | null; body: JournalTradeIn }) => (id === null ? api.logTrade(body) : api.replaceTrade(id, body)),
+    mutationFn: ({ id, body }: { id: number | null; body: JournalTradeIn }) =>
+      id === null ? api.logTrade(body) : api.replaceTrade(id, body),
     onSuccess: () => {
       refresh();
       setEditing(null);
@@ -70,7 +80,8 @@ export function JournalPage() {
     document.getElementById(FORM_ID)?.scrollIntoView?.({ behavior: "smooth" });
   };
   const onDelete = (trade: JournalTradeOut) => {
-    if (window.confirm(`Delete the ${trade.ticker} trade of ${trade.opened}? This cannot be undone.`)) remove.mutate(trade.id);
+    if (window.confirm(`Delete the ${trade.ticker} trade of ${trade.opened}? This cannot be undone.`))
+      remove.mutate(trade.id);
   };
 
   return (
@@ -107,13 +118,16 @@ export function JournalPage() {
             <JournalTable trades={journal.data.trades} onEdit={edit} onDelete={onDelete} />
           ) : (
             <EmptyState title="No trades logged yet">
-              Fill in the form above, or press <strong>Log a trade</strong> on a run pinned in <Link to="/compare" className="text-accent hover:underline">Compare</Link>{" "}
+              Fill in the form above, or press <strong>Log a trade</strong> on a run pinned in{" "}
+              <Link to="/compare" className="text-accent hover:underline">
+                Compare
+              </Link>{" "}
               to keep the backtest that suggested it.
             </EmptyState>
           )}
           <p className="text-xs text-muted">
-            Profit is in each ticker's currency, so the summary adds up returns and R multiples only. R needs the initial stop. The backtest
-            next to a trade is the pinned run as it was when the trade was logged.
+            Profit is in each ticker's currency, so the summary adds up returns and R multiples only. R needs the
+            initial stop. The backtest next to a trade is the pinned run as it was when the trade was logged.
           </p>
         </div>
       )}

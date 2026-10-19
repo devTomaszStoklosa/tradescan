@@ -53,7 +53,12 @@ export function AccountMenu() {
 
   return (
     <div className="relative" ref={panel}>
-      <Button onClick={() => setOpen(!open)} aria-expanded={open} aria-haspopup="dialog" title="Account size and risk per trade">
+      <Button
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        title="Account size and risk per trade"
+      >
         <span className="num">
           {fmtCompact(equity)} · {fmtNumber(riskPct, 1)}%
         </span>
@@ -64,7 +69,9 @@ export function AccountMenu() {
           aria-label="Account settings"
           className="absolute right-0 z-40 mt-2 w-72 max-w-[calc(100vw-2rem)] space-y-3 rounded-xl border border-line bg-panel p-4 shadow-xl"
         >
-          <p className="text-xs text-muted">Used for position sizing in scans and backtests. Empty fields use the server defaults.</p>
+          <p className="text-xs text-muted">
+            Used for position sizing in scans and backtests. Empty fields use the server defaults.
+          </p>
           {FIELDS.map(({ key, param }) => {
             const fieldSpec = spec(param);
             if (!fieldSpec) return null;

@@ -1,14 +1,34 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
-import type { ConfigOut, Period, PeriodSummaryOut, SignalOut, TickerRunOut, WatchlistBacktestOut, WatchlistOut } from "../api/client";
+import type {
+  ConfigOut,
+  Period,
+  PeriodSummaryOut,
+  SignalOut,
+  TickerRunOut,
+  WatchlistBacktestOut,
+  WatchlistOut,
+} from "../api/client";
 import { useConfig, useSignals, useWatchlistBacktest, useWatchlists } from "../api/hooks";
 import { METRICS } from "../components/BacktestResults";
 import { BacktestSetupFields } from "../components/BacktestSetupFields";
 import { DataTable, type Column } from "../components/DataTable";
 import { PERIOD_NOTE } from "../components/OutOfSample";
 import { UniversePicker } from "../components/UniverseFilters";
-import { Button, DirectionBadge, EmptyState, ErrorBox, Field, Loading, Notice, PageHeader, Panel, Select, StatTile } from "../components/ui";
+import {
+  Button,
+  DirectionBadge,
+  EmptyState,
+  ErrorBox,
+  Field,
+  Loading,
+  Notice,
+  PageHeader,
+  Panel,
+  Select,
+  StatTile,
+} from "../components/ui";
 import { defaultWatchlist, LARGE_UNIVERSE, universeSize } from "../lib/choices";
 import { MIN_TRADES, type MetricKey } from "../lib/compare";
 import { downloadCsv } from "../lib/csv";
@@ -31,7 +51,8 @@ import {
 import { useAccount, withAccount } from "../state/account";
 
 const METRIC_KEYS = new Set<string>(METRICS.map((metric) => metric.key));
-const readMetric = (value: string | null): MetricKey => (value && METRIC_KEYS.has(value) ? (value as MetricKey) : DEFAULT_WATCHLIST_METRIC);
+const readMetric = (value: string | null): MetricKey =>
+  value && METRIC_KEYS.has(value) ? (value as MetricKey) : DEFAULT_WATCHLIST_METRIC;
 const metricLabel = (metric: MetricKey) => METRICS.find((item) => item.key === metric)?.label ?? metric;
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
@@ -52,7 +73,9 @@ function WatchlistFormPanel({
   onSubmit: (form: WatchlistForm) => void;
 }) {
   const withUniverse = (form: WatchlistForm): WatchlistForm =>
-    form.universe.watchlist || form.universe.tickers ? form : { ...form, universe: { watchlist: defaultWatchlist(watchlists), tickers: "" } };
+    form.universe.watchlist || form.universe.tickers
+      ? form
+      : { ...form, universe: { watchlist: defaultWatchlist(watchlists), tickers: "" } };
   const [draft, setDraft] = useState(() => withUniverse(initial));
   useEffect(() => setDraft(withUniverse(initial)), [initial, watchlists]);
   const changes = setupChanges(draft, config);
@@ -67,7 +90,11 @@ function WatchlistFormPanel({
   return (
     <Panel>
       <form onSubmit={submit} noValidate className="space-y-4">
-        <UniversePicker value={draft.universe} onChange={(universe) => setDraft({ ...draft, universe })} watchlists={watchlists} />
+        <UniversePicker
+          value={draft.universe}
+          onChange={(universe) => setDraft({ ...draft, universe })}
+          watchlists={watchlists}
+        />
         <BacktestSetupFields
           draft={draft}
           onChange={setDraft}
@@ -76,7 +103,9 @@ function WatchlistFormPanel({
           defaultBenchmark={watchlistBenchmark ?? config.benchmark}
         />
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-muted">Every ticker runs on the vectorized engine, split in-sample and out-of-sample on its own history.</p>
+          <p className="text-xs text-muted">
+            Every ticker runs on the vectorized engine, split in-sample and out-of-sample on its own history.
+          </p>
           <div className="flex items-center gap-2">
             {changes > 0 && (
               <Button variant="ghost" onClick={() => setDraft(resetSetup(draft, config))}>
@@ -102,7 +131,12 @@ function SpreadTable({ result, metric }: { result: WatchlistBacktestOut; metric:
     const right = { align: "right" as const };
     return [
       { key: "period", header: "Period", render: (period) => PERIOD_LABELS[period] },
-      { key: "tickers", header: "Tickers", ...right, render: (period) => String(spreadOf(result, period, metric)?.tickers ?? 0) },
+      {
+        key: "tickers",
+        header: "Tickers",
+        ...right,
+        render: (period) => String(spreadOf(result, period, metric)?.tickers ?? 0),
+      },
       { key: "min", header: "Worst", ...right, render: value("minimum") },
       { key: "p25", header: "25%", ...right, render: value("p25") },
       { key: "median", header: "Median", ...right, render: value("median") },
@@ -116,7 +150,15 @@ function SpreadTable({ result, metric }: { result: WatchlistBacktestOut; metric:
       },
     ];
   }, [result, metric]);
-  return <DataTable rows={PERIODS.map((period) => period.key)} columns={columns} rowKey={(period) => period} caption={`Spread of ${metricLabel(metric)} across tickers`} dense />;
+  return (
+    <DataTable
+      rows={PERIODS.map((period) => period.key)}
+      columns={columns}
+      rowKey={(period) => period}
+      caption={`Spread of ${metricLabel(metric)} across tickers`}
+      dense
+    />
+  );
 }
 
 const POOLED_COLUMNS: Column<PeriodSummaryOut>[] = [
@@ -139,7 +181,17 @@ const POOLED_COLUMNS: Column<PeriodSummaryOut>[] = [
   { key: "sqn", header: "SQN", align: "right", render: (row) => fmtNumber(row.pooled.sqn) },
 ];
 
-function TickerTable({ result, form, metric, config }: { result: WatchlistBacktestOut; form: WatchlistForm; metric: MetricKey; config: ConfigOut }) {
+function TickerTable({
+  result,
+  form,
+  metric,
+  config,
+}: {
+  result: WatchlistBacktestOut;
+  form: WatchlistForm;
+  metric: MetricKey;
+  config: ConfigOut;
+}) {
   const columns = useMemo<Column<TickerRunOut>[]>(() => {
     const label = metricLabel(metric);
     const valueColumn = (period: Period, header: string): Column<TickerRunOut> => ({
@@ -157,7 +209,11 @@ function TickerTable({ result, form, metric, config }: { result: WatchlistBackte
         header: "Ticker",
         sortValue: (row) => row.ticker,
         render: (row) => (
-          <Link to={backtestLink(form, row.ticker, result, config)} className="font-mono font-semibold text-accent hover:underline" title="Open in Backtest">
+          <Link
+            to={backtestLink(form, row.ticker, result, config)}
+            className="font-mono font-semibold text-accent hover:underline"
+            title="Open in Backtest"
+          >
             {row.ticker}
           </Link>
         ),
@@ -168,7 +224,10 @@ function TickerTable({ result, form, metric, config }: { result: WatchlistBackte
         align: "right",
         sortValue: (row) => row.metrics.trades,
         render: (row) => (
-          <span className={fewTrades(row.metrics.trades) ? "text-warn" : ""} title={fewTrades(row.metrics.trades) ? "Too few trades to trust" : undefined}>
+          <span
+            className={fewTrades(row.metrics.trades) ? "text-warn" : ""}
+            title={fewTrades(row.metrics.trades) ? "Too few trades to trust" : undefined}
+          >
             {row.metrics.trades}
           </span>
         ),
@@ -189,7 +248,9 @@ function TickerTable({ result, form, metric, config }: { result: WatchlistBackte
         header: "Total return",
         align: "right",
         sortValue: (row) => row.metrics.total_return_pct,
-        render: (row) => <span className={tone(row.metrics.total_return_pct)}>{fmtPct(row.metrics.total_return_pct, 1, true)}</span>,
+        render: (row) => (
+          <span className={tone(row.metrics.total_return_pct)}>{fmtPct(row.metrics.total_return_pct, 1, true)}</span>
+        ),
       },
       {
         key: "drawdown",
@@ -234,7 +295,10 @@ function WatchlistView({
 }) {
   const label = metricLabel(metric);
   const used = result.config;
-  const periods = Object.fromEntries(result.periods.map((period) => [period.period, period])) as Record<Period, PeriodSummaryOut>;
+  const periods = Object.fromEntries(result.periods.map((period) => [period.period, period])) as Record<
+    Period,
+    PeriodSummaryOut
+  >;
   const median = (period: Period) => formatMetric(metric, spreadValue(spreadOf(result, period, metric), "median"));
   const oosSpread = spreadOf(result, "out_of_sample", metric);
   const few = result.rows.filter((row) => row.metrics.trades < MIN_TRADES).length;
@@ -251,8 +315,9 @@ function WatchlistView({
           <span className="text-muted">{result.description}</span>
         </div>
         <p className="text-muted">
-          {plural(result.rows.length, "ticker")} on the {result.engine} engine · each split at its own last {used.oos_pct}% · risk{" "}
-          {fmtNumber(used.risk_pct, 2)}% · costs {fmtNumber(used.commission_pct, 2)}% + {fmtNumber(used.slippage_pct, 2)}%
+          {plural(result.rows.length, "ticker")} on the {result.engine} engine · each split at its own last{" "}
+          {used.oos_pct}% · risk {fmtNumber(used.risk_pct, 2)}% · costs {fmtNumber(used.commission_pct, 2)}% +{" "}
+          {fmtNumber(used.slippage_pct, 2)}%
         </p>
         {filters && (
           <p className="text-muted">
@@ -261,7 +326,8 @@ function WatchlistView({
           </p>
         )}
         <p className="text-muted">
-          Entry: {result.entry.description} · initial stop {fmtNumber(used.atr_mult, 2)} × ATR({used.atr_period}) · exits: {exits}
+          Entry: {result.entry.description} · initial stop {fmtNumber(used.atr_mult, 2)} × ATR({used.atr_period}) ·
+          exits: {exits}
         </p>
       </div>
       {result.missing.length > 0 && <Notice>No data for: {result.missing.join(", ")}</Notice>}
@@ -277,11 +343,19 @@ function WatchlistView({
         </Field>
       </div>
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <StatTile label={`Median ${label}`} value={`${median("in_sample")} → ${median("out_of_sample")}`} sub="in-sample → out-of-sample, across tickers" />
+        <StatTile
+          label={`Median ${label}`}
+          value={`${median("in_sample")} → ${median("out_of_sample")}`}
+          sub="in-sample → out-of-sample, across tickers"
+        />
         <StatTile
           label="Tickers above break-even out-of-sample"
           value={oosSpread?.above_break_even_pct == null ? DASH : fmtPct(oosSpread.above_break_even_pct, 0)}
-          sub={oosSpread?.above_break_even_pct == null ? `${label} has no break-even` : `of ${plural(oosSpread.tickers, "ticker")} with a value`}
+          sub={
+            oosSpread?.above_break_even_pct == null
+              ? `${label} has no break-even`
+              : `of ${plural(oosSpread.tickers, "ticker")} with a value`
+          }
         />
         <StatTile
           label="Pooled expectancy"
@@ -299,17 +373,29 @@ function WatchlistView({
         <section className="min-w-0 space-y-2">
           <h2 className="text-sm font-semibold">Spread of {label} across tickers</h2>
           <SpreadTable result={result} metric={metric} />
-          <p className="text-xs text-muted">Tickers without a value (no trades) are left out. A setting that only one ticker carries is likely luck.</p>
+          <p className="text-xs text-muted">
+            Tickers without a value (no trades) are left out. A setting that only one ticker carries is likely luck.
+          </p>
         </section>
         <section className="min-w-0 space-y-2">
           <h2 className="text-sm font-semibold">All tickers' trades pooled, in R</h2>
-          <DataTable rows={result.periods} columns={POOLED_COLUMNS} rowKey={(row) => row.period} caption="All tickers' trades pooled, by period" dense />
+          <DataTable
+            rows={result.periods}
+            columns={POOLED_COLUMNS}
+            rowKey={(row) => row.period}
+            caption="All tickers' trades pooled, by period"
+            dense
+          />
           <p className="text-xs text-muted">Pooled in R, since each ticker's equity compounds on its own.</p>
         </section>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">{plural(result.rows.length, "ticker")}</h2>
-        <Button onClick={() => downloadCsv(`tradescan-watchlist-${result.universe}-${result.signal}.csv`, rowsToCsv(result))}>Export CSV</Button>
+        <Button
+          onClick={() => downloadCsv(`tradescan-watchlist-${result.universe}-${result.signal}.csv`, rowsToCsv(result))}
+        >
+          Export CSV
+        </Button>
       </div>
       <TickerTable result={result} form={form} metric={metric} config={config} />
       <p className="text-xs text-muted">
@@ -335,7 +421,8 @@ export function WatchlistPage() {
 
   const failed = config.error ?? signals.error ?? watchlists.error;
   if (failed) return <ErrorBox error={failed} />;
-  if (!config.data || !signals.data || !watchlists.data || !form) return <Loading message="Connecting to the tradescan server…" />;
+  if (!config.data || !signals.data || !watchlists.data || !form)
+    return <Loading message="Connecting to the tradescan server…" />;
   const defaults = config.data;
 
   const withMetric = (next: URLSearchParams, value: MetricKey) => {
@@ -357,7 +444,11 @@ export function WatchlistPage() {
         busy={run.isFetching}
         onSubmit={(next) => setParams(withMetric(writeWatchlistForm(next, defaults), metric))}
       />
-      {!body && <EmptyState title="Choose a watchlist and a signal">Every ticker is backtested on its own and the results are compared.</EmptyState>}
+      {!body && (
+        <EmptyState title="Choose a watchlist and a signal">
+          Every ticker is backtested on its own and the results are compared.
+        </EmptyState>
+      )}
       {run.isLoading && (
         <Loading
           message={

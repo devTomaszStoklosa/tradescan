@@ -19,7 +19,8 @@ function SuggestedByCell({ copy }: { copy: SuggestingRun }) {
     <div className="space-y-0.5">
       <div className="font-medium">{run.name}</div>
       <div className="num text-xs text-muted">
-        {runSubject(run)} · {fmtPct(run.metrics.win_rate_pct, 0)} wins · {fmtSigned(run.metrics.expectancy_r)} R per trade · {run.metrics.trades} trades
+        {runSubject(run)} · {fmtPct(run.metrics.win_rate_pct, 0)} wins · {fmtSigned(run.metrics.expectancy_r)} R per
+        trade · {run.metrics.trades} trades
       </div>
       <Link to={open.to} className="text-xs text-accent hover:underline">
         {open.label}
@@ -39,7 +40,12 @@ export function JournalTable({
 }) {
   const columns = useMemo<Column<JournalTradeOut>[]>(
     () => [
-      { key: "opened", header: "Opened", render: (trade) => <span className="num">{trade.opened}</span>, sortValue: (trade) => trade.opened },
+      {
+        key: "opened",
+        header: "Opened",
+        render: (trade) => <span className="num">{trade.opened}</span>,
+        sortValue: (trade) => trade.opened,
+      },
       {
         key: "ticker",
         header: "Ticker",
@@ -88,11 +94,27 @@ export function JournalTable({
         header: "R",
         title: "Profit after fees in units of the initial risk",
         align: "right",
-        render: (trade) => <span className={tone(trade.r_multiple)}>{trade.r_multiple === null ? DASH : `${fmtSigned(trade.r_multiple)} R`}</span>,
+        render: (trade) => (
+          <span className={tone(trade.r_multiple)}>
+            {trade.r_multiple === null ? DASH : `${fmtSigned(trade.r_multiple)} R`}
+          </span>
+        ),
         sortValue: (trade) => trade.r_multiple,
       },
-      { key: "run", header: "Suggested by", wrap: true, render: (trade) => (trade.run ? <SuggestedByCell copy={trade.run} /> : <span className="text-muted">{DASH}</span>) },
-      { key: "notes", header: "Notes", wrap: true, className: "min-w-48 text-xs", render: (trade) => <span className="whitespace-pre-line">{trade.notes}</span> },
+      {
+        key: "run",
+        header: "Suggested by",
+        wrap: true,
+        render: (trade) =>
+          trade.run ? <SuggestedByCell copy={trade.run} /> : <span className="text-muted">{DASH}</span>,
+      },
+      {
+        key: "notes",
+        header: "Notes",
+        wrap: true,
+        className: "min-w-48 text-xs",
+        render: (trade) => <span className="whitespace-pre-line">{trade.notes}</span>,
+      },
       {
         key: "actions",
         header: <span className="sr-only">Actions</span>,
@@ -101,7 +123,11 @@ export function JournalTable({
             <Button aria-label={`Edit the ${trade.ticker} trade of ${trade.opened}`} onClick={() => onEdit(trade)}>
               Edit
             </Button>
-            <Button variant="ghost" aria-label={`Delete the ${trade.ticker} trade of ${trade.opened}`} onClick={() => onDelete(trade)}>
+            <Button
+              variant="ghost"
+              aria-label={`Delete the ${trade.ticker} trade of ${trade.opened}`}
+              onClick={() => onDelete(trade)}
+            >
               Delete
             </Button>
           </span>
@@ -110,5 +136,13 @@ export function JournalTable({
     ],
     [onEdit, onDelete],
   );
-  return <DataTable rows={trades} columns={columns} rowKey={(trade) => String(trade.id)} caption="Trades in the journal" dense />;
+  return (
+    <DataTable
+      rows={trades}
+      columns={columns}
+      rowKey={(trade) => String(trade.id)}
+      caption="Trades in the journal"
+      dense
+    />
+  );
 }

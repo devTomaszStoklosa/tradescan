@@ -1,7 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { serverRunStore, type RunPatch, type RunStore } from "../lib/runStore";
-import { MAX_RUNS, mergeRuns, sortBySlot, toPinnedRun, type MergeResult, type PinnedRun, type RunSnapshot } from "../lib/runs";
+import {
+  MAX_RUNS,
+  mergeRuns,
+  sortBySlot,
+  toPinnedRun,
+  type MergeResult,
+  type PinnedRun,
+  type RunSnapshot,
+} from "../lib/runs";
 import { decodeRuns, encodeRuns, parseRunsFile } from "../lib/runsFile";
 
 /** Where versions before server-side runs kept the pinned runs, in this browser only. */
@@ -60,14 +68,22 @@ async function moveBrowserRuns(store: RunStore, current: PinnedRun[]): Promise<M
   try {
     saved = decodeRuns(JSON.parse(raw));
   } catch (problem) {
-    return { runs: current, notice: null, error: `Pinned runs saved in this browser could not be read (${reason(problem)}).` };
+    return {
+      runs: current,
+      notice: null,
+      error: `Pinned runs saved in this browser could not be read (${reason(problem)}).`,
+    };
   }
   const result = mergeRuns(current, saved);
   const added = addedRuns(current, result);
   try {
     await addAll(store, added);
   } catch (problem) {
-    return { runs: await store.load(), notice: null, error: `Pinned runs saved in this browser could not be moved to the server (${reason(problem)}).` };
+    return {
+      runs: await store.load(),
+      notice: null,
+      error: `Pinned runs saved in this browser could not be moved to the server (${reason(problem)}).`,
+    };
   }
   if (!added.length && !result.overflow) {
     // Every run is on the server already: an earlier move could not delete the browser's copy.
@@ -77,7 +93,9 @@ async function moveBrowserRuns(store: RunStore, current: PinnedRun[]): Promise<M
   const parts = [`Moved ${plural(added.length, "pinned run")} from this browser to the server.`];
   if (result.duplicates) parts.push(`${plural(result.duplicates, "run")} already there.`);
   if (result.overflow) {
-    parts.push(`${plural(result.overflow, "run")} did not fit (the limit is ${MAX_RUNS}): remove some runs and reload the page to move the rest.`);
+    parts.push(
+      `${plural(result.overflow, "run")} did not fit (the limit is ${MAX_RUNS}): remove some runs and reload the page to move the rest.`,
+    );
   } else {
     removeBrowserRuns();
   }
@@ -169,8 +187,15 @@ export function PinnedRunsProvider({ children, store = serverRunStore }: { child
         const result = mergeRuns(runs, [toPinnedRun(snapshot)]);
         if (result.added) void save(result.runs, () => addAll(store, addedRuns(runs, result)));
       },
-      remove: (id) => void save(runs.filter((run) => run.id !== id), () => store.remove(id)),
-      update: (id, patch) => void save(sortBySlot(runs.map((run) => (run.id === id ? { ...run, ...patch } : run))), () => store.update(id, patch)),
+      remove: (id) =>
+        void save(
+          runs.filter((run) => run.id !== id),
+          () => store.remove(id),
+        ),
+      update: (id, patch) =>
+        void save(sortBySlot(runs.map((run) => (run.id === id ? { ...run, ...patch } : run))), () =>
+          store.update(id, patch),
+        ),
       clear: () => void save([], () => store.clear()),
       importRuns: async (content) => {
         const result = mergeRuns(runs, parseRunsFile(content));

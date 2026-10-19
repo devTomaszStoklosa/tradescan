@@ -11,11 +11,18 @@ import { RotationPage } from "./RotationPage";
 vi.mock("../components/charts/EquityChart", () => ({ EquityChart: () => null }));
 
 function renderPage(path: string) {
-  const responses: Record<string, unknown> = { "/config": config, "/watchlists": watchlists, "/rotation-backtest": rotationResult };
+  const responses: Record<string, unknown> = {
+    "/config": config,
+    "/watchlists": watchlists,
+    "/rotation-backtest": rotationResult,
+  };
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);
     const body = Object.entries(responses).find(([route]) => url.endsWith(route))?.[1] ?? null;
-    return new Response(JSON.stringify(body), { status: body ? 200 : 404, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify(body), {
+      status: body ? 200 : 404,
+      headers: { "Content-Type": "application/json" },
+    });
   });
   const router = createMemoryRouter([{ path: "/rotation", element: <RotationPage /> }], { initialEntries: [path] });
   render(
@@ -40,7 +47,11 @@ describe("RotationPage", () => {
     await screen.findByRole("button", { name: "Run rotation" });
     expect(screen.getByRole("combobox", { name: "Universe" })).toHaveValue("us_large");
     expect(screen.getByRole("combobox", { name: "Ranking (strongest first)" })).toHaveValue("momentum");
-    expect(within(screen.getByRole("combobox", { name: "Ranking (strongest first)" })).queryByRole("option", { name: "Scan score" })).toBeNull();
+    expect(
+      within(screen.getByRole("combobox", { name: "Ranking (strongest first)" })).queryByRole("option", {
+        name: "Scan score",
+      }),
+    ).toBeNull();
     expect(screen.getByRole("radio", { name: "Monthly" })).toBeChecked();
     expect(bodies()).toHaveLength(0); // nothing runs before a universe is in the URL
 
@@ -86,7 +97,11 @@ describe("RotationPage", () => {
     expect(screen.getByText("415% / year")).toBeInTheDocument();
 
     const metrics = screen.getByRole("table", { name: "Rotation metrics by period" });
-    expect(within(metrics).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["Metric", "Full run", "In-sample", "Out-of-sample"]);
+    expect(
+      within(metrics)
+        .getAllByRole("columnheader")
+        .map((cell) => cell.textContent),
+    ).toEqual(["Metric", "Full run", "In-sample", "Out-of-sample"]);
     const stats = screen.getByRole("table", { name: "Rotation stats by period" });
     expect(within(stats).getByText("Rebalances").closest("tr")).toHaveTextContent("Rebalances1087632");
 

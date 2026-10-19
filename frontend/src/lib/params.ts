@@ -83,8 +83,7 @@ const number = (value: string | null): number | null => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-const direction = (value: string | null): DirectionChoice =>
-  value === "long" || value === "short" ? value : "both";
+const direction = (value: string | null): DirectionChoice => (value === "long" || value === "short" ? value : "both");
 
 const families = (value: string | null): Family[] =>
   list(value).filter((item): item is Family => (FAMILIES as readonly string[]).includes(item));
@@ -217,7 +216,10 @@ export function readBacktestRules(params: URLSearchParams, defaults: RuleDefault
   const exitList = params.get("exit");
   const exits = exitList === null ? [...defaults.default_exits] : list(exitList).filter((name) => name !== "none");
   const filters = list(params.get("filter"));
-  const { settings, exitParams } = moveLegacyExitSettings(readOverrides(params, SETTINGS_PREFIX), readOverrides(params, EXIT_PREFIX));
+  const { settings, exitParams } = moveLegacyExitSettings(
+    readOverrides(params, SETTINGS_PREFIX),
+    readOverrides(params, EXIT_PREFIX),
+  );
   return {
     signal,
     period: params.get("p") ?? "",
@@ -239,7 +241,11 @@ export function writeBacktestForm(form: BacktestForm, defaults?: RuleDefaults): 
 }
 
 /** `engines` belong to a backtest only: a sweep always runs on one engine. A setup without a ticker leaves it out. */
-export function writeBacktestSetup(form: BacktestRules & { ticker?: string }, defaults?: RuleDefaults, engines: string[] = []): URLSearchParams {
+export function writeBacktestSetup(
+  form: BacktestRules & { ticker?: string },
+  defaults?: RuleDefaults,
+  engines: string[] = [],
+): URLSearchParams {
   const params = new URLSearchParams();
   setIf(params, "ticker", form.ticker?.trim().toUpperCase());
   setIf(params, "signal", form.signal);

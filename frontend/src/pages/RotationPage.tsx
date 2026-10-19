@@ -10,7 +10,20 @@ import { SectionFields } from "../components/ParamFields";
 import { RotationStatsTable } from "../components/RotationStats";
 import { GroupHeading, RuleChoiceFields } from "../components/TradeRuleFields";
 import { UniversePicker } from "../components/UniverseFilters";
-import { Button, EmptyState, ErrorBox, Field, Input, Loading, Notice, PageHeader, Panel, Segmented, Select, StatTile } from "../components/ui";
+import {
+  Button,
+  EmptyState,
+  ErrorBox,
+  Field,
+  Input,
+  Loading,
+  Notice,
+  PageHeader,
+  Panel,
+  Segmented,
+  Select,
+  StatTile,
+} from "../components/ui";
 import { defaultWatchlist, LARGE_UNIVERSE, PERIODS, ROTATION_SECTION, universeSize } from "../lib/choices";
 import { downloadCsv, tradeRow } from "../lib/csv";
 import { DASH, fmtNumber, fmtPct, fmtSigned, fmtSize, tone } from "../lib/format";
@@ -44,7 +57,9 @@ function RotationFormPanel({
   onSubmit: (form: RotationForm) => void;
 }) {
   const withUniverse = (form: RotationForm): RotationForm =>
-    form.universe.watchlist || form.universe.tickers ? form : { ...form, universe: { watchlist: defaultWatchlist(watchlists), tickers: "" } };
+    form.universe.watchlist || form.universe.tickers
+      ? form
+      : { ...form, universe: { watchlist: defaultWatchlist(watchlists), tickers: "" } };
   const [draft, setDraft] = useState(() => withUniverse(initial));
   useEffect(() => setDraft(withUniverse(initial)), [initial, watchlists]);
   const set = <K extends keyof RotationForm>(key: K, value: RotationForm[K]) => setDraft({ ...draft, [key]: value });
@@ -62,16 +77,29 @@ function RotationFormPanel({
   return (
     <Panel>
       <form onSubmit={submit} noValidate className="space-y-4">
-        <UniversePicker value={draft.universe} onChange={(universe) => set("universe", universe)} watchlists={watchlists} />
+        <UniversePicker
+          value={draft.universe}
+          onChange={(universe) => set("universe", universe)}
+          watchlists={watchlists}
+        />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {/* Not a Field: a label around the buttons would press the first one when its text is clicked. */}
           <div className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted">
             <span>Rebalance</span>
-            <Segmented label="Rebalance" value={draft.rebalance} options={REBALANCES} onChange={(rebalance) => set("rebalance", rebalance)} />
+            <Segmented
+              label="Rebalance"
+              value={draft.rebalance}
+              options={REBALANCES}
+              onChange={(rebalance) => set("rebalance", rebalance)}
+            />
             <span className="font-normal">At the last close of every week or month</span>
           </div>
           <Field label="Safe asset" hint="Takes the slots of picks with negative absolute momentum; empty for cash">
-            <Input value={draft.safeAsset} placeholder="cash, e.g. TLT" onChange={(event) => set("safeAsset", event.target.value.toUpperCase())} />
+            <Input
+              value={draft.safeAsset}
+              placeholder="cash, e.g. TLT"
+              onChange={(event) => set("safeAsset", event.target.value.toUpperCase())}
+            />
           </Field>
           <Field label="Buy & hold benchmark">
             <Input
@@ -104,7 +132,12 @@ function RotationFormPanel({
             {rotation && (
               <div className="space-y-2">
                 <GroupHeading>Holdings and absolute momentum</GroupHeading>
-                <SectionFields section={rotation} overrides={draft.settings} onChange={(settings) => set("settings", settings)} className="grid grid-cols-2 gap-3" />
+                <SectionFields
+                  section={rotation}
+                  overrides={draft.settings}
+                  onChange={(settings) => set("settings", settings)}
+                  className="grid grid-cols-2 gap-3"
+                />
               </div>
             )}
             <RuleChoiceFields
@@ -118,7 +151,11 @@ function RotationFormPanel({
           {costs && (
             <div className="space-y-2">
               <GroupHeading>Costs, metrics and out-of-sample split</GroupHeading>
-              <SectionFields section={costs} overrides={draft.settings} onChange={(settings) => set("settings", settings)} />
+              <SectionFields
+                section={costs}
+                overrides={draft.settings}
+                onChange={(settings) => set("settings", settings)}
+              />
             </div>
           )}
         </section>
@@ -147,15 +184,28 @@ function RotationTiles({ result }: { result: RotationOut }) {
         valueClass={tone(m.total_return_pct)}
         sub={`${result.buy_hold_benchmark} buy & hold ${fmtPct(m.buy_hold_pct, 1, true)}`}
       />
-      <StatTile label="Max drawdown" value={fmtPct(m.max_drawdown_pct, 1)} valueClass="text-down" sub={`CAGR ${fmtPct(m.cagr_pct, 1, true)}`} />
+      <StatTile
+        label="Max drawdown"
+        value={fmtPct(m.max_drawdown_pct, 1)}
+        valueClass="text-down"
+        sub={`CAGR ${fmtPct(m.cagr_pct, 1, true)}`}
+      />
       <StatTile label="Sharpe" value={fmtNumber(m.sharpe)} sub={`Sortino ${fmtNumber(m.sortino)}`} />
-      <StatTile label="Holdings" value={`${fmtNumber(s.average_holdings, 1)} avg`} sub={`${m.trades} closed, win rate ${fmtPct(m.win_rate_pct, 0)}`} />
+      <StatTile
+        label="Holdings"
+        value={`${fmtNumber(s.average_holdings, 1)} avg`}
+        sub={`${m.trades} closed, win rate ${fmtPct(m.win_rate_pct, 0)}`}
+      />
       <StatTile
         label="Defensive"
         value={fmtPct((s.average_safe_pct ?? 0) + (s.average_cash_pct ?? 0), 0)}
         sub={`${fmtPct(s.average_safe_pct, 0)} safe asset, ${fmtPct(s.average_cash_pct, 0)} cash`}
       />
-      <StatTile label="Turnover" value={`${fmtPct(s.turnover_pct, 0)} / year`} sub={`${s.rebalances} rebalances, costs ${fmtNumber(s.commissions, 0)}`} />
+      <StatTile
+        label="Turnover"
+        value={`${fmtPct(s.turnover_pct, 0)} / year`}
+        sub={`${s.rebalances} rebalances, costs ${fmtNumber(s.commissions, 0)}`}
+      />
     </div>
   );
 }
@@ -168,7 +218,10 @@ const PERIOD_KEYS = [
 
 function PeriodsTables({ result }: { result: RotationOut }) {
   const periods = PERIOD_KEYS.map(({ key, label }) => ({ key, label, period: result[key] }));
-  const statColumns = useMemo(() => periods.map(({ key, label, period }) => ({ key, header: label, stats: period?.stats ?? null })), [result]);
+  const statColumns = useMemo(
+    () => periods.map(({ key, label, period }) => ({ key, header: label, stats: period?.stats ?? null })),
+    [result],
+  );
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <MetricsTable
@@ -184,14 +237,23 @@ function TargetsTable({ result }: { result: RotationOut }) {
   const defensive = result.rotation.safe_asset ?? "cash";
   const columns = useMemo<Column<PickOut>[]>(
     () => [
-      { key: "ticker", header: "Ticker", render: (row) => <span className="font-mono font-semibold">{row.ticker}</span> },
+      {
+        key: "ticker",
+        header: "Ticker",
+        render: (row) => <span className="font-mono font-semibold">{row.ticker}</span>,
+      },
       { key: "score", header: "Score", align: "right", render: (row) => fmtNumber(row.score, 3) },
       {
         key: "momentum",
         header: "Absolute momentum",
         title: `Return over ${result.rotation.absolute_lookback} bars`,
         align: "right",
-        render: (row) => (row.momentum_pct === null ? DASH : <span className={tone(row.momentum_pct)}>{fmtPct(row.momentum_pct, 1, true)}</span>),
+        render: (row) =>
+          row.momentum_pct === null ? (
+            DASH
+          ) : (
+            <span className={tone(row.momentum_pct)}>{fmtPct(row.momentum_pct, 1, true)}</span>
+          ),
       },
       { key: "weight", header: "Weight", align: "right", render: (row) => fmtPct(row.weight_pct, 1) },
       {
@@ -213,7 +275,8 @@ function TargetsTable({ result }: { result: RotationOut }) {
       )}
       <p className="text-xs text-muted">
         {result.rotation.safe_asset && `${fmtPct(targets.safe_pct, 1)} in ${result.rotation.safe_asset}, `}
-        {fmtPct(targets.cash_pct, 1)} in cash. The trades still open are what the rotation holds since its last rebalance.
+        {fmtPct(targets.cash_pct, 1)} in cash. The trades still open are what the rotation holds since its last
+        rebalance.
       </p>
     </section>
   );
@@ -222,8 +285,19 @@ function TargetsTable({ result }: { result: RotationOut }) {
 function ContributionTable({ result }: { result: RotationOut }) {
   const columns = useMemo<Column<TickerContributionOut>[]>(
     () => [
-      { key: "ticker", header: "Ticker", sortValue: (row) => row.ticker, render: (row) => <span className="font-mono font-semibold">{row.ticker}</span> },
-      { key: "trades", header: "Trades", align: "right", sortValue: (row) => row.trades, render: (row) => String(row.trades) },
+      {
+        key: "ticker",
+        header: "Ticker",
+        sortValue: (row) => row.ticker,
+        render: (row) => <span className="font-mono font-semibold">{row.ticker}</span>,
+      },
+      {
+        key: "trades",
+        header: "Trades",
+        align: "right",
+        sortValue: (row) => row.trades,
+        render: (row) => String(row.trades),
+      },
       {
         key: "pnl",
         header: "P&L",
@@ -239,7 +313,13 @@ function ContributionTable({ result }: { result: RotationOut }) {
         sortValue: (row) => row.contribution_pct,
         render: (row) => <span className={tone(row.contribution_pct)}>{fmtPct(row.contribution_pct, 2, true)}</span>,
       },
-      { key: "win", header: "Win rate", align: "right", sortValue: (row) => row.win_rate_pct, render: (row) => fmtPct(row.win_rate_pct, 0) },
+      {
+        key: "win",
+        header: "Win rate",
+        align: "right",
+        sortValue: (row) => row.win_rate_pct,
+        render: (row) => fmtPct(row.win_rate_pct, 0),
+      },
     ],
     [],
   );
@@ -259,11 +339,20 @@ function RotationView({ result }: { result: RotationOut }) {
   const equitySeries = useMemo<EquitySeries[]>(
     () => [
       { label: "rotation equity", points: result.equity, colorVar: "--accent" },
-      { label: `${result.buy_hold_benchmark} buy & hold`, points: result.buy_hold, colorVar: "--chart-benchmark", dashed: true, axis: "left" },
+      {
+        label: `${result.buy_hold_benchmark} buy & hold`,
+        points: result.buy_hold,
+        colorVar: "--chart-benchmark",
+        dashed: true,
+        axis: "left",
+      },
     ],
     [result],
   );
-  const holdingSeries = useMemo<EquitySeries[]>(() => [{ label: "holdings", points: result.holdings, colorVar: "--accent" }], [result]);
+  const holdingSeries = useMemo<EquitySeries[]>(
+    () => [{ label: "holdings", points: result.holdings, colorVar: "--accent" }],
+    [result],
+  );
   const splitEvents = useMemo<EquityEvent[]>(
     () => (result.split ? [{ time: result.split.out_of_sample_start, text: "out-of-sample" }] : []),
     [result.split],
@@ -284,13 +373,15 @@ function RotationView({ result }: { result: RotationOut }) {
           </span>
         </div>
         <p className="text-muted">
-          {result.start} → {result.end} (from the first rebalance with a pick) · {result.tickers.length} tickers, one equity · {check}
+          {result.start} → {result.end} (from the first rebalance with a pick) · {result.tickers.length} tickers, one
+          equity · {check}
         </p>
         <p className="text-muted">
           Ranking: {result.ranking.description} · weights: {result.weighting.description}
         </p>
         <p className="text-muted">
-          Costs {fmtNumber(used.commission_pct, 2)}% + {fmtNumber(used.slippage_pct, 2)}% · lot size {fmtSize(used.lot_size)}
+          Costs {fmtNumber(used.commission_pct, 2)}% + {fmtNumber(used.slippage_pct, 2)}% · lot size{" "}
+          {fmtSize(used.lot_size)}
         </p>
       </div>
       {result.missing.length > 0 && <Notice>No data for: {result.missing.join(", ")}</Notice>}
@@ -308,28 +399,46 @@ function RotationView({ result }: { result: RotationOut }) {
         <h2 className="text-sm font-semibold">In-sample and out-of-sample</h2>
         <PeriodsTables result={result} />
         <p className="text-xs text-muted">
-          Each period starts with fresh equity; the out-of-sample run rebalances from the split on, with its lookbacks already warm. Buy & hold is{" "}
-          {result.buy_hold_benchmark}'s; exposure is the share of days with a holding. A holding has no stop, so it has no R multiple.
+          Each period starts with fresh equity; the out-of-sample run rebalances from the split on, with its lookbacks
+          already warm. Buy & hold is {result.buy_hold_benchmark}'s; exposure is the share of days with a holding. A
+          holding has no stop, so it has no R multiple.
         </p>
       </section>
       <section className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">Each ticker's contribution</h2>
-          <Button onClick={() => downloadCsv(`${file}-tickers.csv`, result.tickers.map((row) => ({ ...row })))}>Export CSV</Button>
+          <Button
+            onClick={() =>
+              downloadCsv(
+                `${file}-tickers.csv`,
+                result.tickers.map((row) => ({ ...row })),
+              )
+            }
+          >
+            Export CSV
+          </Button>
         </div>
         <ContributionTable result={result} />
         <p className="text-xs text-muted">Today's index members carry survivorship bias.</p>
       </section>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">{result.trades.length} holdings</h2>
-        <Button onClick={() => downloadCsv(`${file}.csv`, result.trades.map(tradeRow))} disabled={!result.trades.length}>
+        <Button
+          onClick={() => downloadCsv(`${file}.csv`, result.trades.map(tradeRow))}
+          disabled={!result.trades.length}
+        >
           Export CSV
         </Button>
       </div>
       <p className="text-xs text-muted">
-        A holding runs from the buy that opens a position to the sale that empties it; its prices are averages of every add and trim.
+        A holding runs from the buy that opens a position to the sale that empties it; its prices are averages of every
+        add and trim.
       </p>
-      {result.trades.length ? <TradesTable trades={result.trades} /> : <EmptyState title="The rotation never bought anything" />}
+      {result.trades.length ? (
+        <TradesTable trades={result.trades} />
+      ) : (
+        <EmptyState title="The rotation never bought anything" />
+      )}
     </div>
   );
 }
@@ -365,7 +474,9 @@ export function RotationPage() {
         busy={run.isFetching}
         onSubmit={(next) => setParams(writeRotationForm(next, defaults))}
       />
-      {!body && <EmptyState title="Choose a watchlist">The rotation ranks every ticker of it at each rebalance.</EmptyState>}
+      {!body && (
+        <EmptyState title="Choose a watchlist">The rotation ranks every ticker of it at each rebalance.</EmptyState>
+      )}
       {run.isLoading && (
         <Loading
           message={

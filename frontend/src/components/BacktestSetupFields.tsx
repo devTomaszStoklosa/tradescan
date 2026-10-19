@@ -15,7 +15,15 @@ import { FAMILY_LABELS } from "./SignalChip";
 import { EntryFields, ExitFields, FilterFields, GroupHeading } from "./TradeRuleFields";
 import { Field, Input, Select } from "./ui";
 
-function SignalSelect({ value, onChange, signals }: { value: string; onChange: (value: string) => void; signals: SignalOut[] }) {
+function SignalSelect({
+  value,
+  onChange,
+  signals,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  signals: SignalOut[];
+}) {
   const groups = useMemo(() => {
     const byFamily = new Map<string, SignalOut[]>();
     for (const signal of signals) byFamily.set(signal.family, [...(byFamily.get(signal.family) ?? []), signal]);
@@ -70,15 +78,26 @@ export function BacktestSetupFields<T extends BacktestRules & { ticker?: string 
 
   return (
     <>
-      <div className={`grid gap-3 ${draft.ticker === undefined ? "sm:grid-cols-[minmax(0,1fr)_8rem]" : "sm:grid-cols-[10rem_minmax(0,1fr)_8rem]"}`}>
+      <div
+        className={`grid gap-3 ${draft.ticker === undefined ? "sm:grid-cols-[minmax(0,1fr)_8rem]" : "sm:grid-cols-[10rem_minmax(0,1fr)_8rem]"}`}
+      >
         {draft.ticker !== undefined && (
           <Field label="Ticker">
-            <Input value={draft.ticker} placeholder="SPY" required onChange={(event) => set("ticker", event.target.value.toUpperCase() as T["ticker"])} />
+            <Input
+              value={draft.ticker}
+              placeholder="SPY"
+              required
+              onChange={(event) => set("ticker", event.target.value.toUpperCase() as T["ticker"])}
+            />
           </Field>
         )}
         <Field label="Signal" hint={selected ? describeSignal(selected, draft.signalParams) : undefined}>
           {/* Parameters belong to one signal, so switching signals starts from its defaults. */}
-          <SignalSelect value={draft.signal} onChange={(signal) => onChange({ ...draft, signal, signalParams: {} })} signals={signals} />
+          <SignalSelect
+            value={draft.signal}
+            onChange={(signal) => onChange({ ...draft, signal, signalParams: {} })}
+            signals={signals}
+          />
         </Field>
         <Field label="History">
           <Select value={draft.period} onChange={(event) => set("period", event.target.value)}>
@@ -94,7 +113,11 @@ export function BacktestSetupFields<T extends BacktestRules & { ticker?: string 
       {selected && (
         <section className="space-y-2">
           <h2 className="text-sm font-semibold">Signal parameters</h2>
-          <ParamFields specs={selected.params} values={draft.signalParams} onChange={(signalParams) => set("signalParams", signalParams)} />
+          <ParamFields
+            specs={selected.params}
+            values={draft.signalParams}
+            onChange={(signalParams) => set("signalParams", signalParams)}
+          />
         </section>
       )}
       <section className="space-y-3">
@@ -118,7 +141,13 @@ export function BacktestSetupFields<T extends BacktestRules & { ticker?: string 
           {stop && (
             <div className="space-y-2">
               <GroupHeading>Initial stop (sizes every trade)</GroupHeading>
-              <SectionFields section={stop} overrides={draft.settings} onChange={setSettings} only={BACKTEST_FIELDS.risk} className="grid grid-cols-2 gap-3" />
+              <SectionFields
+                section={stop}
+                overrides={draft.settings}
+                onChange={setSettings}
+                only={BACKTEST_FIELDS.risk}
+                className="grid grid-cols-2 gap-3"
+              />
             </div>
           )}
           <ExitFields
@@ -130,14 +159,24 @@ export function BacktestSetupFields<T extends BacktestRules & { ticker?: string 
           {pyramid && (
             <div className="space-y-2">
               <GroupHeading>Pyramiding (adds units, moves the stop with each)</GroupHeading>
-              <SectionFields section={pyramid} overrides={draft.settings} onChange={setSettings} className="grid grid-cols-2 gap-3" />
+              <SectionFields
+                section={pyramid}
+                overrides={draft.settings}
+                onChange={setSettings}
+                className="grid grid-cols-2 gap-3"
+              />
             </div>
           )}
         </div>
         {costs && (
           <div className="space-y-2">
             <GroupHeading>{outOfSample ? "Costs, metrics and out-of-sample split" : "Costs and metrics"}</GroupHeading>
-            <SectionFields section={costs} overrides={draft.settings} onChange={setSettings} exclude={outOfSample ? [] : OOS_SHARE} />
+            <SectionFields
+              section={costs}
+              overrides={draft.settings}
+              onChange={setSettings}
+              exclude={outOfSample ? [] : OOS_SHARE}
+            />
           </div>
         )}
       </section>

@@ -13,7 +13,8 @@
         try {
           choice = JSON.parse(localStorage.getItem("tradescan.theme")) || "system";
         } catch (error) {}
-        var dark = choice === "dark" || (choice === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        var dark =
+          choice === "dark" || (choice === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
         document.documentElement.dataset.theme = dark ? "dark" : "light";
       })();
     </script>

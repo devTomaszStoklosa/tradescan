@@ -151,7 +151,8 @@ export const api = {
   chart: (body: ChartIn) => post<ChartOut>("/chart", body),
   runs: () => request<PinnedRunOut[]>("/runs"),
   pinRun: (body: PinnedRunIn) => post<PinnedRunOut>("/runs", body),
-  updateRun: (id: string, body: PinnedRunPatchIn) => send<PinnedRunOut>("PATCH", `/runs/${encodeURIComponent(id)}`, body),
+  updateRun: (id: string, body: PinnedRunPatchIn) =>
+    send<PinnedRunOut>("PATCH", `/runs/${encodeURIComponent(id)}`, body),
   unpinRun: (id: string) => send<void>("DELETE", `/runs/${encodeURIComponent(id)}`),
   clearRuns: () => send<void>("DELETE", "/runs"),
   journal: () => request<JournalOut>("/journal"),

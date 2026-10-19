@@ -31,7 +31,10 @@ export interface RunsFile {
 export function encodeRun({ equity, ...run }: PinnedRun): StoredRun {
   return {
     ...run,
-    equity: { time: equity.map((point) => point.time), value: equity.map((point) => Math.round(point.value * 100) / 100) },
+    equity: {
+      time: equity.map((point) => point.time),
+      value: equity.map((point) => Math.round(point.value * 100) / 100),
+    },
   } as StoredRun;
 }
 
@@ -46,25 +49,43 @@ export function runRecord(run: PinnedRun): PinnedRunIn {
 }
 
 /** A copy of a pinned run for the journal trade it suggested. */
-export const suggestingRun = (run: PinnedRun): SuggestingRun => ({ format: RUNS_FILE_VERSION, snapshot: { ...encodeRun(run) } });
+export const suggestingRun = (run: PinnedRun): SuggestingRun => ({
+  format: RUNS_FILE_VERSION,
+  snapshot: { ...encodeRun(run) },
+});
 
 // --- Validation: an imported file or edited storage must not break the page ------------------------
 
 type Check = (value: unknown) => boolean;
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 const text: Check = (value) => typeof value === "string";
 const finite: Check = (value) => typeof value === "number" && Number.isFinite(value);
 const flag: Check = (value) => typeof value === "boolean";
-const arrayOf = (check: Check): Check => (value) => Array.isArray(value) && value.every(check);
-const recordOf = (check: Check): Check => (value) => isRecord(value) && Object.values(value).every(check);
-const oneOf = (...checks: Check[]): Check => (value) => checks.some((check) => check(value));
+const arrayOf =
+  (check: Check): Check =>
+  (value) =>
+    Array.isArray(value) && value.every(check);
+const recordOf =
+  (check: Check): Check =>
+  (value) =>
+    isRecord(value) && Object.values(value).every(check);
+const oneOf =
+  (...checks: Check[]): Check =>
+  (value) =>
+    checks.some((check) => check(value));
 
 const paramValue = oneOf(finite, arrayOf(finite), recordOf(finite));
 
-const equity: Check = (value) => isRecord(value) && arrayOf(text)(value.time) && arrayOf(finite)(value.value) && (value.time as unknown[]).length === (value.value as unknown[]).length;
+const equity: Check = (value) =>
+  isRecord(value) &&
+  arrayOf(text)(value.time) &&
+  arrayOf(finite)(value.value) &&
+  (value.time as unknown[]).length === (value.value as unknown[]).length;
 
-const metrics: Check = (value) => recordOf(oneOf(finite, flag, (item) => item === null))(value) && finite((value as Partial<MetricsOut>).trades);
+const metrics: Check = (value) =>
+  recordOf(oneOf(finite, flag, (item) => item === null))(value) && finite((value as Partial<MetricsOut>).trades);
 
 /** The setup both pages' forms share. */
 const setupForm: Check = (value) =>
@@ -103,7 +124,8 @@ const split: Check = (value) =>
 
 const optionalNumber = oneOf(finite, (value) => value === null);
 
-const percentiles: Check = (value) => isRecord(value) && ["p5", "p25", "p50", "p75", "p95"].every((key) => optionalNumber(value[key]));
+const percentiles: Check = (value) =>
+  isRecord(value) && ["p5", "p25", "p50", "p75", "p95"].every((key) => optionalNumber(value[key]));
 
 const monteCarloMethod: Check = (value) =>
   isRecord(value) &&
@@ -125,12 +147,19 @@ const monteCarlo: Check = (value) =>
   arrayOf(monteCarloMethod)(value.methods);
 
 const appliedRule: Check = (value) =>
-  isRecord(value) && text(value.name) && text(value.label) && text(value.description) && recordOf(oneOf(finite, arrayOf(finite)))(value.params);
+  isRecord(value) &&
+  text(value.name) &&
+  text(value.label) &&
+  text(value.description) &&
+  recordOf(oneOf(finite, arrayOf(finite)))(value.params);
 
-const portfolioSettings: Check = (value) => isRecord(value) && finite(value.max_positions) && finite(value.max_exposure_pct);
+const portfolioSettings: Check = (value) =>
+  isRecord(value) && finite(value.max_positions) && finite(value.max_exposure_pct);
 
 const scanInputs: Check = (value) =>
-  isRecord(value) && recordOf(recordOf(paramValue))(value.settings) && recordOf(recordOf(oneOf(finite, arrayOf(finite))))(value.signal_params);
+  isRecord(value) &&
+  recordOf(recordOf(paramValue))(value.settings) &&
+  recordOf(recordOf(oneOf(finite, arrayOf(finite))))(value.signal_params);
 
 const portfolioStats: Check = (value) =>
   isRecord(value) &&
@@ -139,7 +168,8 @@ const portfolioStats: Check = (value) =>
 
 const optionalStats = oneOf((value) => value === null, portfolioStats);
 
-const periodStats: Check = (value) => isRecord(value) && portfolioStats(value.full) && optionalStats(value.in_sample) && optionalStats(value.out_of_sample);
+const periodStats: Check = (value) =>
+  isRecord(value) && portfolioStats(value.full) && optionalStats(value.in_sample) && optionalStats(value.out_of_sample);
 
 const is =
   (expected: string): Check =>
@@ -191,7 +221,8 @@ const KIND_FIELDS: { [K in RunKind]: Record<Exclude<keyof Extract<StoredRun, { k
 
 function decodeRun(value: unknown, index: number): PinnedRun {
   if (!isRecord(value)) throw new Error(`Run ${index + 1} is not an object`);
-  const kind = typeof value.kind === "string" && Object.hasOwn(KIND_FIELDS, value.kind) ? (value.kind as RunKind) : null;
+  const kind =
+    typeof value.kind === "string" && Object.hasOwn(KIND_FIELDS, value.kind) ? (value.kind as RunKind) : null;
   if (!kind) throw new Error(`Run ${index + 1} has an invalid "kind"`);
   const fields: Record<string, Check> = { ...SHARED_FIELDS, ...KIND_FIELDS[kind] };
   for (const [field, check] of Object.entries(fields)) {
@@ -218,16 +249,32 @@ function upgradeV1(value: unknown): unknown {
   const { target_r = 2, max_hold_bars = 20, ...config } = value.config;
   if (!finite(target_r) || !finite(max_hold_bars)) return value;
   const exits = [
-    rule("target", "Profit target", "Limit order {target_r:g}R from the entry reference", { target_r: target_r as number }),
-    rule("time", "Time exit", "Exit at the open {max_hold_bars} bars after the entry bar", { max_hold_bars: max_hold_bars as number }),
+    rule("target", "Profit target", "Limit order {target_r:g}R from the entry reference", {
+      target_r: target_r as number,
+    }),
+    rule("time", "Time exit", "Exit at the open {max_hold_bars} bars after the entry bar", {
+      max_hold_bars: max_hold_bars as number,
+    }),
   ];
   const moved = moveLegacyExitSettings((isRecord(value.form.settings) ? value.form.settings : {}) as Overrides, {});
   return {
     ...value,
     config,
-    entry: rule("next_open", "Next open", "Market order at the next open; stop and target are measured from the signal bar's close", {}),
+    entry: rule(
+      "next_open",
+      "Next open",
+      "Market order at the next open; stop and target are measured from the signal bar's close",
+      {},
+    ),
     exits,
-    form: { ...value.form, settings: moved.settings, entry: "next_open", entryParams: {}, exits: ["target", "time"], exitParams: moved.exitParams },
+    form: {
+      ...value.form,
+      settings: moved.settings,
+      entry: "next_open",
+      entryParams: {},
+      exits: ["target", "time"],
+      exitParams: moved.exitParams,
+    },
   };
 }
 
@@ -253,11 +300,14 @@ const upgradeV5 = (value: unknown): unknown => (isRecord(value) ? { ...value, ki
 // --- Version 6: the score priority counted the signals other than the traded one with their defaults ------
 
 const upgradeV6 = (value: unknown): unknown =>
-  isRecord(value) && value.kind === "portfolio" && isRecord(value.form) ? { ...value, form: { ...value.form, scoreSignalParams: {} } } : value;
+  isRecord(value) && value.kind === "portfolio" && isRecord(value.form)
+    ? { ...value, form: { ...value.form, scoreSignalParams: {} } }
+    : value;
 
 // --- Version 7: portfolio results did not report what the score read of the scanner -----------------
 
-const upgradeV7 = (value: unknown): unknown => (isRecord(value) && value.kind === "portfolio" ? { ...value, scan: null } : value);
+const upgradeV7 = (value: unknown): unknown =>
+  isRecord(value) && value.kind === "portfolio" ? { ...value, scan: null } : value;
 
 const UPGRADES: Record<number, (value: unknown) => unknown> = {
   1: (value) => upgradeV7(upgradeV6(upgradeV5(upgradeV4(upgradeV3(upgradeV2(upgradeV1(value))))))),
@@ -290,7 +340,8 @@ export function decodeRunRecord(record: PinnedRunOut, index = 0): PinnedRun {
 }
 
 /** The run a journal trade keeps; throws an Error naming the first problem. */
-export const decodeSuggestingRun = ({ format, snapshot }: SuggestingRun): PinnedRun => decodeRun(upgradeOf(format)(snapshot), 0);
+export const decodeSuggestingRun = ({ format, snapshot }: SuggestingRun): PinnedRun =>
+  decodeRun(upgradeOf(format)(snapshot), 0);
 
 export function parseRunsFile(content: string): PinnedRun[] {
   let data: unknown;

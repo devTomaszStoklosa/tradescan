@@ -116,7 +116,11 @@ body {
 
 /* A sweep cell: --cell-color mixed into the neutral by --cell-strength (0-1); hatched when it has too few trades. */
 .sweep-cell {
-  background-color: color-mix(in oklab, var(--cell-color, var(--heat-mid)) calc(var(--cell-strength, 0) * 100%), var(--heat-mid));
+  background-color: color-mix(
+    in oklab,
+    var(--cell-color, var(--heat-mid)) calc(var(--cell-strength, 0) * 100%),
+    var(--heat-mid)
+  );
 }
 
 .sweep-cell[data-few] {

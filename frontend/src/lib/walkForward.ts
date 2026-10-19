@@ -66,12 +66,18 @@ export function walkForwardParams(form: SweepForm, config: ConfigOut, signals: S
 /** The out-of-sample windows the form asks for: its `walk_forward.windows` setting, else the configured one. */
 export function windowCount(form: SweepForm, config: ConfigOut): number {
   const value = form.settings[WALK_FORWARD_SECTION]?.windows;
-  const spec = config.sections.find((section) => section.name === WALK_FORWARD_SECTION)?.params.find((item) => item.name === "windows");
+  const spec = config.sections
+    .find((section) => section.name === WALK_FORWARD_SECTION)
+    ?.params.find((item) => item.name === "windows");
   return typeof value === "number" ? value : typeof spec?.default === "number" ? spec.default : 0;
 }
 
 /** Combinations, in-sample windows (the next one included) and the backtests they make; null while an axis is invalid. */
-export function walkForwardRuns(form: SweepForm, params: SweepParam[], config: ConfigOut): { combinations: number; windows: number; runs: number } | null {
+export function walkForwardRuns(
+  form: SweepForm,
+  params: SweepParam[],
+  config: ConfigOut,
+): { combinations: number; windows: number; runs: number } | null {
   const ranges = form.axes.map((axis) => {
     const param = params.find((item) => item.key === axis.key);
     return param ? axisValues(axis, param.spec, config.sweep) : { values: null, problem: "unknown parameter" };
@@ -93,16 +99,32 @@ export function walkForwardBody(form: WalkForwardForm, params: SweepParam[], con
 /** How many settings, rules, the scheme and the selection metric differ from the defaults. */
 export function walkForwardChanges(form: WalkForwardForm, config: ConfigOut): number {
   const limits = config.walk_forward;
-  return setupChanges(form, config) + Number(form.scheme !== limits.default_scheme) + Number(form.metric !== limits.default_metric);
+  return (
+    setupChanges(form, config) +
+    Number(form.scheme !== limits.default_scheme) +
+    Number(form.metric !== limits.default_metric)
+  );
 }
 
 /** The form with every setting, rule, the scheme and the selection metric back at its default; the axes stay. */
 export function resetWalkForward(form: WalkForwardForm, config: ConfigOut): WalkForwardForm {
-  return { ...resetSetup(form, config), scheme: config.walk_forward.default_scheme, metric: config.walk_forward.default_metric };
+  return {
+    ...resetSetup(form, config),
+    scheme: config.walk_forward.default_scheme,
+    metric: config.walk_forward.default_metric,
+  };
 }
 
 /** The Backtest page's URL for the setup with a pick's values; the walk-forward's own settings stay behind. */
-export function backtestLink(form: WalkForwardForm, params: SweepParam[], values: number[], config: ConfigOut): URLSearchParams {
+export function backtestLink(
+  form: WalkForwardForm,
+  params: SweepParam[],
+  values: number[],
+  config: ConfigOut,
+): URLSearchParams {
   const { [WALK_FORWARD_SECTION]: _windows, ...settings } = form.settings;
-  return writeBacktestForm({ ...withCombination({ ...form, settings }, params, values), engines: ["vectorized"] }, config);
+  return writeBacktestForm(
+    { ...withCombination({ ...form, settings }, params, values), engines: ["vectorized"] },
+    config,
+  );
 }

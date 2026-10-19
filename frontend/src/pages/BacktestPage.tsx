@@ -11,7 +11,18 @@ import { MonteCarloPanel } from "../components/MonteCarlo";
 import { PeriodsPanel } from "../components/OutOfSample";
 import { SectionFields } from "../components/ParamFields";
 import { PinRunButton } from "../components/PinRunButton";
-import { Button, DirectionBadge, EmptyState, ErrorBox, Field, Loading, PageHeader, Panel, Segmented, ToggleChip } from "../components/ui";
+import {
+  Button,
+  DirectionBadge,
+  EmptyState,
+  ErrorBox,
+  Field,
+  Loading,
+  PageHeader,
+  Panel,
+  Segmented,
+  ToggleChip,
+} from "../components/ui";
 import { BACKTEST_PAGE_SECTIONS, MONTE_CARLO_SECTION } from "../lib/choices";
 import { downloadCsv, tradeRow } from "../lib/csv";
 import { fmtNumber } from "../lib/format";
@@ -38,7 +49,12 @@ function BacktestFormPanel({
   const [draft, setDraft] = useState(initial);
   useEffect(() => setDraft(initial), [initial]);
   const toggleEngine = (engine: string) =>
-    setDraft({ ...draft, engines: draft.engines.includes(engine) ? draft.engines.filter((item) => item !== engine) : [...draft.engines, engine] });
+    setDraft({
+      ...draft,
+      engines: draft.engines.includes(engine)
+        ? draft.engines.filter((item) => item !== engine)
+        : [...draft.engines, engine],
+    });
   const changes = setupChanges(draft, config);
   const invalid = !draft.engines.length || hasSetupProblems(draft, config, signals, BACKTEST_PAGE_SECTIONS);
   const monteCarlo = config.sections.find((section) => section.name === MONTE_CARLO_SECTION);
@@ -55,14 +71,23 @@ function BacktestFormPanel({
         {monteCarlo && (
           <section className="space-y-2">
             <h2 className="text-sm font-semibold">Monte Carlo of the trades</h2>
-            <SectionFields section={monteCarlo} overrides={draft.settings} onChange={(settings) => setDraft({ ...draft, settings })} />
+            <SectionFields
+              section={monteCarlo}
+              overrides={draft.settings}
+              onChange={(settings) => setDraft({ ...draft, settings })}
+            />
           </section>
         )}
         <div className="flex flex-wrap items-end justify-between gap-3">
           <Field label="Engines">
             <div className="flex gap-1.5 py-1">
               {config.engines.map((engine) => (
-                <ToggleChip key={engine} active={draft.engines.includes(engine)} onClick={() => toggleEngine(engine)} color="var(--accent)">
+                <ToggleChip
+                  key={engine}
+                  active={draft.engines.includes(engine)}
+                  onClick={() => toggleEngine(engine)}
+                  color="var(--accent)"
+                >
                   {engine}
                 </ToggleChip>
               ))}
@@ -113,9 +138,25 @@ function BacktestView({ result, form, config }: { result: BacktestOut; form: Bac
     if (!run) return [];
     const long = result.direction === "long";
     return run.trades.flatMap((trade): ChartMarker[] => [
-      { time: trade.entry_date, position: long ? "belowBar" : "aboveBar", shape: long ? "arrowUp" : "arrowDown", tone: "accent" },
-      ...trade.adds.map((fill): ChartMarker => ({ time: fill.date, position: long ? "belowBar" : "aboveBar", shape: long ? "arrowUp" : "arrowDown", tone: "accent", text: "+" })),
-      { time: trade.exit_date, position: long ? "aboveBar" : "belowBar", shape: "circle", tone: trade.pnl >= 0 ? "up" : "down" },
+      {
+        time: trade.entry_date,
+        position: long ? "belowBar" : "aboveBar",
+        shape: long ? "arrowUp" : "arrowDown",
+        tone: "accent",
+      },
+      ...trade.adds.map((fill): ChartMarker => ({
+        time: fill.date,
+        position: long ? "belowBar" : "aboveBar",
+        shape: long ? "arrowUp" : "arrowDown",
+        tone: "accent",
+        text: "+",
+      })),
+      {
+        time: trade.exit_date,
+        position: long ? "aboveBar" : "belowBar",
+        shape: "circle",
+        tone: trade.pnl >= 0 ? "up" : "down",
+      },
     ]);
   }, [run, result.direction]);
 
@@ -136,8 +177,9 @@ function BacktestView({ result, form, config }: { result: BacktestOut; form: Bac
           </div>
         </div>
         <p className="text-muted">
-          {result.start} → {result.end} · risk {fmtNumber(used.risk_pct, 2)}%, max position {fmtNumber(used.max_position_pct, 0)}% · costs{" "}
-          {fmtNumber(used.commission_pct, 2)}% + {fmtNumber(used.slippage_pct, 2)}%
+          {result.start} → {result.end} · risk {fmtNumber(used.risk_pct, 2)}%, max position{" "}
+          {fmtNumber(used.max_position_pct, 0)}% · costs {fmtNumber(used.commission_pct, 2)}% +{" "}
+          {fmtNumber(used.slippage_pct, 2)}%
         </p>
         {filters && (
           <p className="text-muted">
@@ -147,14 +189,24 @@ function BacktestView({ result, form, config }: { result: BacktestOut; form: Bac
         )}
         <p className="text-muted">
           Entry: {result.entry.description} · initial stop {fmtNumber(used.atr_mult, 2)} × ATR({used.atr_period})
-          {used.max_units > 1 && ` · pyramiding up to ${used.max_units} units ${fmtNumber(used.add_every_atr, 2)} ATR apart`} · exits: {exits}
+          {used.max_units > 1 &&
+            ` · pyramiding up to ${used.max_units} units ${fmtNumber(used.add_every_atr, 2)} ATR apart`}{" "}
+          · exits: {exits}
         </p>
-        <Link to={`/sweep?${writeSweepForm(newSweepForm(form), config).toString()}`} className="inline-block text-accent hover:underline">
+        <Link
+          to={`/sweep?${writeSweepForm(newSweepForm(form), config).toString()}`}
+          className="inline-block text-accent hover:underline"
+        >
           Sweep parameters of this setup →
         </Link>
       </div>
       {result.runs.length > 1 && (
-        <Segmented label="Engine" value={engine} onChange={setEngine} options={result.runs.map((item) => ({ value: item.engine, label: item.engine }))} />
+        <Segmented
+          label="Engine"
+          value={engine}
+          onChange={setEngine}
+          options={result.runs.map((item) => ({ value: item.engine, label: item.engine }))}
+        />
       )}
       <KeyMetrics run={run} />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
@@ -186,13 +238,19 @@ function BacktestView({ result, form, config }: { result: BacktestOut; form: Bac
           {run.trades.length} trades ({run.engine})
         </h2>
         <Button
-          onClick={() => downloadCsv(`tradescan-${result.ticker}-${result.signal}-${run.engine}.csv`, run.trades.map(tradeRow))}
+          onClick={() =>
+            downloadCsv(`tradescan-${result.ticker}-${result.signal}-${run.engine}.csv`, run.trades.map(tradeRow))
+          }
           disabled={!run.trades.length}
         >
           Export CSV
         </Button>
       </div>
-      {run.trades.length ? <TradesTable trades={run.trades} /> : <EmptyState title="The signal never triggered a trade in this period" />}
+      {run.trades.length ? (
+        <TradesTable trades={run.trades} />
+      ) : (
+        <EmptyState title="The signal never triggered a trade in this period" />
+      )}
     </div>
   );
 }
@@ -216,7 +274,10 @@ export function BacktestPage() {
 
   return (
     <>
-      <PageHeader title="Backtest" subtitle="One signal on one ticker with the entry and exit rules you choose. Every parameter is adjustable." />
+      <PageHeader
+        title="Backtest"
+        subtitle="One signal on one ticker with the entry and exit rules you choose. Every parameter is adjustable."
+      />
       <BacktestFormPanel
         initial={form}
         config={config.data}
@@ -225,7 +286,9 @@ export function BacktestPage() {
         onSubmit={(next) => setParams(writeBacktestForm(next, defaults))}
       />
       {!body && (
-        <EmptyState title="Choose a ticker and a signal">Select both engines to check that the pandas engine matches backtrader's Cerebro.</EmptyState>
+        <EmptyState title="Choose a ticker and a signal">
+          Select both engines to check that the pandas engine matches backtrader's Cerebro.
+        </EmptyState>
       )}
       {backtest.isLoading && <Loading message="Downloading history and running the backtest…" />}
       {backtest.isError && <ErrorBox error={backtest.error} onRetry={() => backtest.refetch()} />}

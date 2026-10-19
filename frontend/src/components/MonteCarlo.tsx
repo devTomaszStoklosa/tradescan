@@ -9,7 +9,8 @@ import { Notice } from "./ui";
 
 type Value = number | null | undefined;
 
-const fmtStreak = (value: Value) => (value === null || value === undefined ? DASH : fmtNumber(value, Number.isInteger(value) ? 0 : 1));
+const fmtStreak = (value: Value) =>
+  value === null || value === undefined ? DASH : fmtNumber(value, Number.isInteger(value) ? 0 : 1);
 
 const FORMATS: Record<MonteCarloValue, (value: Value) => string> = {
   final_return_pct: (value) => fmtPct(value, 1, true),
@@ -25,14 +26,16 @@ const VALUES: { key: MonteCarloValue; label: string }[] = [
 
 const LUCK: Luck[] = ["unlucky", "median", "lucky"];
 
-export const LUCK_NOTE = "Unlucky and lucky are the 5th and 95th percentiles: 1 simulation in 20 did worse than unlucky, 1 in 20 better than lucky.";
+export const LUCK_NOTE =
+  "Unlucky and lucky are the 5th and 95th percentiles: 1 simulation in 20 did worse than unlucky, 1 in 20 better than lucky.";
 
 /** How the simulations trade, in one sentence. */
 export const describeModel = (monteCarlo: MonteCarloOut): string =>
   `${monteCarlo.trades} closed trades resampled ${monteCarlo.simulations.toLocaleString("en-US")} times per method (seed ${monteCarlo.seed}); ` +
   `each trade moves equity by ${fmtNumber(monteCarlo.risk_pct, 2)}% × its R, with no cap on position size.`;
 
-const ruinLabel = (monteCarlo: MonteCarloOut) => `Chance of ruin (drawdown ≥ ${fmtNumber(monteCarlo.ruin_drawdown_pct, 0)}%)`;
+const ruinLabel = (monteCarlo: MonteCarloOut) =>
+  `Chance of ruin (drawdown ≥ ${fmtNumber(monteCarlo.ruin_drawdown_pct, 0)}%)`;
 
 const numeric = "num px-3 py-1.5 whitespace-nowrap";
 const cell = `${numeric} text-right`;
@@ -62,7 +65,12 @@ export function MonteCarloPanel({ run }: { run: EngineRunOut }) {
                 This run's order
               </th>
               {methods.map((method) => (
-                <th key={method.name} scope="colgroup" colSpan={LUCK.length} className="border-l border-line px-3 pt-2 text-center font-medium">
+                <th
+                  key={method.name}
+                  scope="colgroup"
+                  colSpan={LUCK.length}
+                  className="border-l border-line px-3 pt-2 text-center font-medium"
+                >
                   {method.label}
                 </th>
               ))}
@@ -70,7 +78,11 @@ export function MonteCarloPanel({ run }: { run: EngineRunOut }) {
             <tr className="border-b border-line text-xs text-muted">
               {methods.flatMap((method) =>
                 LUCK.map((luck, index) => (
-                  <th key={`${method.name}-${luck}`} scope="col" className={`px-3 pb-2 text-right font-normal ${index === 0 ? "border-l border-line" : ""}`}>
+                  <th
+                    key={`${method.name}-${luck}`}
+                    scope="col"
+                    className={`px-3 pb-2 text-right font-normal ${index === 0 ? "border-l border-line" : ""}`}
+                  >
                     {LUCK_LABELS[luck]}
                   </th>
                 )),
@@ -80,13 +92,19 @@ export function MonteCarloPanel({ run }: { run: EngineRunOut }) {
           <tbody>
             {VALUES.map((value) => (
               <tr key={value.key} className="border-b border-line">
-                <th scope="row" className="sticky left-0 bg-panel px-3 py-1.5 text-left font-normal whitespace-nowrap text-muted">
+                <th
+                  scope="row"
+                  className="sticky left-0 bg-panel px-3 py-1.5 text-left font-normal whitespace-nowrap text-muted"
+                >
                   {value.label}
                 </th>
                 <td className={cell}>{FORMATS[value.key](monteCarlo.actual[value.key])}</td>
                 {methods.flatMap((method) =>
                   LUCK.map((luck, index) => (
-                    <td key={`${method.name}-${luck}`} className={`${cell} ${index === 0 ? "border-l border-line" : ""}`}>
+                    <td
+                      key={`${method.name}-${luck}`}
+                      className={`${cell} ${index === 0 ? "border-l border-line" : ""}`}
+                    >
                       {FORMATS[value.key](percentileFor(method[value.key], value.key, luck))}
                     </td>
                   )),
@@ -94,12 +112,19 @@ export function MonteCarloPanel({ run }: { run: EngineRunOut }) {
               </tr>
             ))}
             <tr>
-              <th scope="row" className="sticky left-0 bg-panel px-3 py-1.5 text-left font-normal whitespace-nowrap text-muted">
+              <th
+                scope="row"
+                className="sticky left-0 bg-panel px-3 py-1.5 text-left font-normal whitespace-nowrap text-muted"
+              >
                 {ruinLabel(monteCarlo)}
               </th>
               <td className={cell}>{actualRuin(monteCarlo) ? "reached" : "not reached"}</td>
               {methods.map((method) => (
-                <td key={method.name} colSpan={LUCK.length} className={`${numeric} border-l border-line text-center ${method.ruin_pct > 0 ? "text-down" : ""}`}>
+                <td
+                  key={method.name}
+                  colSpan={LUCK.length}
+                  className={`${numeric} border-l border-line text-center ${method.ruin_pct > 0 ? "text-down" : ""}`}
+                >
                   {fmtPct(method.ruin_pct, 1)}
                 </td>
               ))}
@@ -108,7 +133,8 @@ export function MonteCarloPanel({ run }: { run: EngineRunOut }) {
         </table>
       </div>
       <p className="text-xs text-muted">
-        {LUCK_NOTE} The model leaves out the position cap and any trade still open, so its numbers differ from the backtest's.
+        {LUCK_NOTE} The model leaves out the position cap and any trade still open, so its numbers differ from the
+        backtest's.
       </p>
       {monteCarlo.trades < MIN_TRADES && (
         <p className="text-xs text-warn">Only {monteCarlo.trades} trades: too few for the spread to mean much.</p>
@@ -144,7 +170,8 @@ function MethodValues({ monteCarlo, method }: { monteCarlo: MonteCarloOut; metho
         )),
       )}
       <td className={`${cell} border-l border-line ${method.ruin_pct > 0 ? "text-down" : ""}`}>
-        {fmtPct(method.ruin_pct, 1)} <span className="text-muted">at {fmtNumber(monteCarlo.ruin_drawdown_pct, 0)}%</span>
+        {fmtPct(method.ruin_pct, 1)}{" "}
+        <span className="text-muted">at {fmtNumber(monteCarlo.ruin_drawdown_pct, 0)}%</span>
       </td>
     </>
   );
@@ -173,7 +200,12 @@ export function MonteCarloTable({ runs, method }: { runs: PinnedRun[]; method: s
                 Trades
               </th>
               {COMPARED.map((value) => (
-                <th key={value.key} scope="colgroup" colSpan={value.luck.length} className="border-l border-line px-3 pt-2 text-center font-medium">
+                <th
+                  key={value.key}
+                  scope="colgroup"
+                  colSpan={value.luck.length}
+                  className="border-l border-line px-3 pt-2 text-center font-medium"
+                >
                   {value.label}
                 </th>
               ))}
@@ -184,7 +216,11 @@ export function MonteCarloTable({ runs, method }: { runs: PinnedRun[]; method: s
             <tr className="border-b border-line text-xs text-muted">
               {COMPARED.flatMap((value) =>
                 value.luck.map((luck, index) => (
-                  <th key={`${value.key}-${luck}`} scope="col" className={`px-3 pb-2 text-right font-normal ${index === 0 ? "border-l border-line" : ""}`}>
+                  <th
+                    key={`${value.key}-${luck}`}
+                    scope="col"
+                    className={`px-3 pb-2 text-right font-normal ${index === 0 ? "border-l border-line" : ""}`}
+                  >
                     {LUCK_LABELS[luck]}
                   </th>
                 )),

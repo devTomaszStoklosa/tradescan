@@ -65,7 +65,12 @@ export function TradeFormPanel({
         <h2 className="text-sm font-semibold">{editing ? "Edit trade" : "Log a trade"}</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
           <Field label="Ticker">
-            <Input value={draft.ticker} onChange={(event) => set("ticker", event.target.value)} placeholder="AAPL" autoCapitalize="characters" />
+            <Input
+              value={draft.ticker}
+              onChange={(event) => set("ticker", event.target.value)}
+              placeholder="AAPL"
+              autoCapitalize="characters"
+            />
           </Field>
           <Field label="Direction">
             <Select value={draft.direction} onChange={(event) => set("direction", event.target.value as Direction)}>

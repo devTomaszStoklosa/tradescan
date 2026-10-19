@@ -21,7 +21,8 @@ export class MemoryRunStore implements RunStore {
   load = async () => this.runs();
 
   add = async (run: PinnedRun) => {
-    if (this.records.some((record) => record.id === run.id || record.slot === run.slot)) throw new Error(`Slot ${run.slot} is taken by another pinned run`);
+    if (this.records.some((record) => record.id === run.id || record.slot === run.slot))
+      throw new Error(`Slot ${run.slot} is taken by another pinned run`);
     this.records.push(asJson(run));
   };
 

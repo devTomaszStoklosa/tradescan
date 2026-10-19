@@ -44,14 +44,24 @@ export function KeyMetrics({ run }: { run: EngineRunOut }) {
         valueClass={tone(m.total_return_pct)}
         sub={`buy & hold ${fmtPct(m.buy_hold_pct, 1, true)}`}
       />
-      <StatTile label="Max drawdown" value={fmtPct(m.max_drawdown_pct, 1)} valueClass="text-down" sub={`CAGR ${fmtPct(m.cagr_pct, 1, true)}`} />
+      <StatTile
+        label="Max drawdown"
+        value={fmtPct(m.max_drawdown_pct, 1)}
+        valueClass="text-down"
+        sub={`CAGR ${fmtPct(m.cagr_pct, 1, true)}`}
+      />
       <StatTile label="Win rate" value={fmtPct(m.win_rate_pct, 0)} sub={`${m.trades} trades`} />
       <StatTile
         label="Profit factor"
         value={m.profit_factor_infinite ? "∞" : fmtNumber(m.profit_factor)}
         valueClass={m.profit_factor !== null && m.profit_factor < 1 ? "text-down" : "text-up"}
       />
-      <StatTile label="Expectancy" value={`${fmtSigned(m.expectancy_r)} R`} valueClass={tone(m.expectancy_r)} sub={`SQN ${fmtNumber(m.sqn)}`} />
+      <StatTile
+        label="Expectancy"
+        value={`${fmtSigned(m.expectancy_r)} R`}
+        valueClass={tone(m.expectancy_r)}
+        sub={`SQN ${fmtNumber(m.sqn)}`}
+      />
       <StatTile label="Sharpe" value={fmtNumber(m.sharpe)} sub={`exposure ${fmtPct(m.exposure_pct, 0)}`} />
     </div>
   );
@@ -65,7 +75,10 @@ export function enginesAgree(runs: { metrics: MetricsOut }[]): boolean {
     METRICS.every(({ key }) => {
       const a = first.metrics[key];
       const b = run.metrics[key];
-      return a === b || (typeof a === "number" && typeof b === "number" && Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(a)));
+      return (
+        a === b ||
+        (typeof a === "number" && typeof b === "number" && Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(a)))
+      );
     }),
   );
 }
@@ -78,7 +91,15 @@ export interface MetricsColumn {
 }
 
 /** One column per engine, run or period; with `highlightBest`, the best value of each ranked metric is marked. */
-export function MetricsTable({ columns, caption, highlightBest = false }: { columns: MetricsColumn[]; caption: string; highlightBest?: boolean }) {
+export function MetricsTable({
+  columns,
+  caption,
+  highlightBest = false,
+}: {
+  columns: MetricsColumn[];
+  caption: string;
+  highlightBest?: boolean;
+}) {
   // `relative` keeps the absolutely positioned screen-reader labels inside the scroll area on narrow screens.
   return (
     <div className="relative overflow-x-auto rounded-xl border border-line bg-panel">
@@ -102,11 +123,17 @@ export function MetricsTable({ columns, caption, highlightBest = false }: { colu
             const best = highlightBest && metric.ranked ? bestIndexes(values) : null;
             return (
               <tr key={metric.key} className="border-b border-line last:border-0">
-                <th scope="row" className="sticky left-0 bg-panel px-3 py-1.5 text-left font-normal whitespace-nowrap text-muted">
+                <th
+                  scope="row"
+                  className="sticky left-0 bg-panel px-3 py-1.5 text-left font-normal whitespace-nowrap text-muted"
+                >
                   {metric.label}
                 </th>
                 {columns.map((column, index) => (
-                  <td key={column.key} className={`num px-3 py-1.5 text-right whitespace-nowrap ${best?.has(index) ? "bg-up/10 font-semibold" : ""}`}>
+                  <td
+                    key={column.key}
+                    className={`num px-3 py-1.5 text-right whitespace-nowrap ${best?.has(index) ? "bg-up/10 font-semibold" : ""}`}
+                  >
                     {column.metrics ? metric.format(column.metrics) : DASH}
                     {best?.has(index) && <span className="sr-only"> (best)</span>}
                   </td>
@@ -122,7 +149,11 @@ export function MetricsTable({ columns, caption, highlightBest = false }: { colu
 
 export function MetricsComparison({ result }: { result: BacktestOut }) {
   const agree = enginesAgree(result.runs);
-  const columns = result.runs.map((run) => ({ key: run.engine, header: <span className="capitalize">{run.engine}</span>, metrics: run.metrics }));
+  const columns = result.runs.map((run) => ({
+    key: run.engine,
+    header: <span className="capitalize">{run.engine}</span>,
+    metrics: run.metrics,
+  }));
   return (
     <div className="space-y-2">
       {result.runs.length > 1 && (
@@ -167,7 +198,9 @@ const tradeColumns: Column<TradeOut>[] = [
     key: "reason",
     header: "Exit reason",
     sortValue: (t) => t.exit_reason,
-    render: (t) => <span className={`text-xs font-medium uppercase ${REASON_STYLE[t.exit_reason] ?? ""}`}>{t.exit_reason}</span>,
+    render: (t) => (
+      <span className={`text-xs font-medium uppercase ${REASON_STYLE[t.exit_reason] ?? ""}`}>{t.exit_reason}</span>
+    ),
   },
 ];
 
@@ -177,7 +210,11 @@ const unitsColumn: Column<TradeOut> = {
   header: "Units",
   align: "right",
   sortValue: (t) => t.adds.length,
-  render: (t) => <span title={t.adds.map((fill) => `added ${fill.date} at ${fmtPrice(fill.price)}`).join("; ") || undefined}>{1 + t.adds.length}</span>,
+  render: (t) => (
+    <span title={t.adds.map((fill) => `added ${fill.date} at ${fmtPrice(fill.price)}`).join("; ") || undefined}>
+      {1 + t.adds.length}
+    </span>
+  ),
 };
 
 type TickerTrade = TradeOut & { ticker?: string };
@@ -192,7 +229,9 @@ const tickerColumn: Column<TickerTrade> = {
 /** Trades of one ticker, or of many with a ticker column (a portfolio's); a units column once a position was pyramided. */
 export function TradesTable({ trades }: { trades: TickerTrade[] }) {
   const pyramided = trades.some((trade) => trade.adds.length > 0);
-  const base = pyramided ? tradeColumns.flatMap((column) => (column.key === "size" ? [column, unitsColumn] : [column])) : tradeColumns;
+  const base = pyramided
+    ? tradeColumns.flatMap((column) => (column.key === "size" ? [column, unitsColumn] : [column]))
+    : tradeColumns;
   const columns = trades.some((trade) => trade.ticker !== undefined) ? [tickerColumn, ...base] : base;
   return (
     <DataTable

@@ -27,7 +27,8 @@ export interface TradeForm {
 const pad = (value: number) => String(value).padStart(2, "0");
 
 /** Today in the browser's time zone, as YYYY-MM-DD. */
-export const today = (now = new Date()): string => `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+export const today = (now = new Date()): string =>
+  `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 
 /** A new trade opened today; from a pinned run, with its copy, its direction and the ticker it tested. */
 export function newTradeForm(run?: PinnedRun, now = new Date()): TradeForm {

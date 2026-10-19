@@ -6,7 +6,19 @@ import { useConfig, useEdge, useSignals, useWatchlists } from "../api/hooks";
 import { AdvancedSettings } from "../components/AdvancedSettings";
 import { EdgeTable } from "../components/EdgeTable";
 import { DirectionPicker, FamilyPicker, UniversePicker } from "../components/UniverseFilters";
-import { Button, EmptyState, ErrorBox, Field, Input, Loading, Notice, NumberInput, PageHeader, Panel, Select } from "../components/ui";
+import {
+  Button,
+  EmptyState,
+  ErrorBox,
+  Field,
+  Input,
+  Loading,
+  Notice,
+  NumberInput,
+  PageHeader,
+  Panel,
+  Select,
+} from "../components/ui";
 import { defaultWatchlist, LARGE_UNIVERSE, PERIODS, universeSize } from "../lib/choices";
 import { downloadCsv, type CsvRow } from "../lib/csv";
 import { hasProblems, signalSpecs, visibleSignals } from "../lib/overrides";
@@ -46,7 +58,9 @@ function EdgeFormPanel({
   onSubmit: (form: EdgeForm) => void;
 }) {
   const withUniverse = (form: EdgeForm): EdgeForm =>
-    form.universe.watchlist || form.universe.tickers ? form : { ...form, universe: { watchlist: defaultWatchlist(watchlists), tickers: "" } };
+    form.universe.watchlist || form.universe.tickers
+      ? form
+      : { ...form, universe: { watchlist: defaultWatchlist(watchlists), tickers: "" } };
   const [draft, setDraft] = useState(() => withUniverse(initial));
   useEffect(() => setDraft(withUniverse(initial)), [initial, watchlists]);
   const invalid = !edgeBody(draft) || hasProblems(draft.signalParams, signalSpecs(signals));
@@ -59,17 +73,30 @@ function EdgeFormPanel({
   return (
     <form onSubmit={submit} noValidate className="space-y-3">
       <Panel className="space-y-3">
-        <UniversePicker value={draft.universe} onChange={(universe) => setDraft({ ...draft, universe })} watchlists={watchlists} />
+        <UniversePicker
+          value={draft.universe}
+          onChange={(universe) => setDraft({ ...draft, universe })}
+          watchlists={watchlists}
+        />
         <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
           <DirectionPicker value={draft.direction} onChange={(direction) => setDraft({ ...draft, direction })} />
           <div className="w-32">
             <Field label="Horizons (bars)">
-              <Input value={draft.horizons} onChange={(event) => setDraft({ ...draft, horizons: event.target.value })} placeholder="5,10,20" />
+              <Input
+                value={draft.horizons}
+                onChange={(event) => setDraft({ ...draft, horizons: event.target.value })}
+                placeholder="5,10,20"
+              />
             </Field>
           </div>
           <div className="w-28">
             <Field label="Min events">
-              <NumberInput value={draft.minEvents} min={0} step="1" onChange={(value) => setDraft({ ...draft, minEvents: value ?? 0 })} />
+              <NumberInput
+                value={draft.minEvents}
+                min={0}
+                step="1"
+                onChange={(value) => setDraft({ ...draft, minEvents: value ?? 0 })}
+              />
             </Field>
           </div>
           <div className="w-36">
@@ -85,7 +112,11 @@ function EdgeFormPanel({
             </Field>
           </div>
           <div className="w-full min-w-0 sm:w-auto sm:flex-1">
-            <FamilyPicker value={draft.families} onChange={(value) => setDraft({ ...draft, families: value })} families={families} />
+            <FamilyPicker
+              value={draft.families}
+              onChange={(value) => setDraft({ ...draft, families: value })}
+              families={families}
+            />
           </div>
           <Button type="submit" variant="primary" disabled={busy || invalid} className="h-9 px-5">
             {busy ? "Computing…" : "Compute edge"}
@@ -115,7 +146,8 @@ export function EdgePage() {
 
   const failed = config.error ?? signals.error ?? watchlists.error;
   if (failed) return <ErrorBox error={failed} />;
-  if (!config.data || !signals.data || !watchlists.data) return <Loading message="Connecting to the tradescan server…" />;
+  if (!config.data || !signals.data || !watchlists.data)
+    return <Loading message="Connecting to the tradescan server…" />;
 
   return (
     <>
@@ -148,21 +180,26 @@ export function EdgePage() {
           {edge.data.missing.length > 0 && <Notice>No data for: {edge.data.missing.join(", ")}</Notice>}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-muted">
-              <span className="font-semibold text-fg">{edge.data.rows.length} signals</span> on {edge.data.universe} ({edge.data.tickers}{" "}
-              tickers) · horizons {parseHorizons(form.horizons).join(", ")} bars
+              <span className="font-semibold text-fg">{edge.data.rows.length} signals</span> on {edge.data.universe} (
+              {edge.data.tickers} tickers) · horizons {parseHorizons(form.horizons).join(", ")} bars
             </p>
-            <Button onClick={() => downloadCsv(`tradescan-edge-${edge.data.universe}.csv`, edgeToCsv(edge.data))} disabled={!edge.data.rows.length}>
+            <Button
+              onClick={() => downloadCsv(`tradescan-edge-${edge.data.universe}.csv`, edgeToCsv(edge.data))}
+              disabled={!edge.data.rows.length}
+            >
               Export CSV
             </Button>
           </div>
           {edge.data.rows.length ? (
             <EdgeTable rows={edge.data.rows} horizons={edge.data.horizons} minEvents={form.minEvents} />
           ) : (
-            <EmptyState title="No signal has enough events">Lower the minimum events or use a longer history.</EmptyState>
+            <EmptyState title="No signal has enough events">
+              Lower the minimum events or use a longer history.
+            </EmptyState>
           )}
           <p className="text-xs text-muted">
-            Returns are in the signal's direction from the next open. Event counts below 20 are highlighted: treat them as noise. Today's
-            index members carry survivorship bias.
+            Returns are in the signal's direction from the next open. Event counts below 20 are highlighted: treat them
+            as noise. Today's index members carry survivorship bias.
           </p>
         </div>
       )}

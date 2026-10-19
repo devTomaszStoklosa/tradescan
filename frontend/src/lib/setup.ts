@@ -32,7 +32,8 @@ export function hasSetupProblems(
     !rulesBody(setup) ||
     hasProblems(setup.settings, sectionSpecs(sections)) ||
     hasRuleProblems(setup, config) ||
-    (selected !== undefined && hasProblems({ [selected.name]: setup.signalParams }, { [selected.name]: selected.params }))
+    (selected !== undefined &&
+      hasProblems({ [selected.name]: setup.signalParams }, { [selected.name]: selected.params }))
   );
 }
 

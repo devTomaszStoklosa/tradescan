@@ -36,7 +36,11 @@ export const openRun = (run: PinnedRun) => cardOf(run).open(run);
 export function RunLabel({ run }: { run: PinnedRun }) {
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-      <span aria-hidden className="inline-block size-2.5 shrink-0 rounded-full" style={{ background: `var(${runColorVar(run)})` }} />
+      <span
+        aria-hidden
+        className="inline-block size-2.5 shrink-0 rounded-full"
+        style={{ background: `var(${runColorVar(run)})` }}
+      />
       <span className="num text-muted">#{run.slot}</span>
       <span className="text-fg">{run.name}</span>
     </span>
@@ -97,9 +101,14 @@ export function RunCard({
         {scope && `${scope} · `}
         {run.engine} · {run.start} → {run.end} · return {fmtPct(run.metrics.total_return_pct, 1, true)}
       </p>
-      {fewTrades && <p className="text-xs text-warn">Only {run.metrics.trades} trades: too few to trust the metrics.</p>}
+      {fewTrades && (
+        <p className="text-xs text-warn">Only {run.metrics.trades} trades: too few to trust the metrics.</p>
+      )}
       <div className="flex flex-wrap gap-1.5">
-        <Link to={open.to} className="inline-flex items-center rounded-lg border border-line px-3 py-1.5 text-sm font-medium hover:bg-panel-2">
+        <Link
+          to={open.to}
+          className="inline-flex items-center rounded-lg border border-line px-3 py-1.5 text-sm font-medium hover:bg-panel-2"
+        >
           {open.label}
         </Link>
         <Link

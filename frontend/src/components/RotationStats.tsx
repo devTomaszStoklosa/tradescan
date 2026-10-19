@@ -20,7 +20,11 @@ const STATS: RotationStat[] = [
   { key: "average_cash_pct", label: "Average in cash", format: (s) => fmtPct(s.average_cash_pct) },
   { key: "turnover_pct", label: "Turnover per year", format: (s) => fmtPct(s.turnover_pct, 0) },
   { key: "orders", label: "Orders filled", format: (s) => String(s.orders) },
-  { key: "unfilled_orders", label: "Orders dropped: no bar before the next rebalance", format: (s) => String(s.unfilled_orders) },
+  {
+    key: "unfilled_orders",
+    label: "Orders dropped: no bar before the next rebalance",
+    format: (s) => String(s.unfilled_orders),
+  },
   { key: "commissions", label: "Commissions", format: (s) => fmtNumber(s.commissions, 0) },
 ];
 

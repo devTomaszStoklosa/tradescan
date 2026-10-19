@@ -41,7 +41,16 @@ interface PriceChartProps {
   label: string;
 }
 
-export function PriceChart({ candles, smaFast, smaSlow, markers, levels, visibleBars, height = 380, label }: PriceChartProps) {
+export function PriceChart({
+  candles,
+  smaFast,
+  smaSlow,
+  markers,
+  levels,
+  visibleBars,
+  height = 380,
+  label,
+}: PriceChartProps) {
   const container = useRef<HTMLDivElement>(null);
   const { resolved } = useTheme();
 
@@ -60,7 +69,12 @@ export function PriceChart({ candles, smaFast, smaSlow, markers, levels, visible
     });
     price.setData(candles.map(({ time, open, high, low, close }) => ({ time: time as Time, open, high, low, close })));
 
-    const volume = chart.addSeries(HistogramSeries, { priceScaleId: "volume", priceFormat: { type: "volume" }, lastValueVisible: false, priceLineVisible: false });
+    const volume = chart.addSeries(HistogramSeries, {
+      priceScaleId: "volume",
+      priceFormat: { type: "volume" },
+      lastValueVisible: false,
+      priceLineVisible: false,
+    });
     chart.priceScale("volume").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
     volume.setData(
       candles.map((candle) => ({
@@ -75,7 +89,13 @@ export function PriceChart({ candles, smaFast, smaSlow, markers, levels, visible
       [smaSlow, palette.slow],
     ] as const) {
       if (!points?.length) continue;
-      const line = chart.addSeries(LineSeries, { color, lineWidth: 1, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false });
+      const line = chart.addSeries(LineSeries, {
+        color,
+        lineWidth: 1,
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: false,
+      });
       line.setData(points.map((point) => ({ time: point.time as Time, value: point.value })));
     }
 
@@ -124,7 +144,13 @@ export function PriceChart({ candles, smaFast, smaSlow, markers, levels, visible
         <LegendItem color="var(--chart-sma-slow)" label="SMA 200" />
         {markers?.length ? <span>▲▼ markers: signal events / trades</span> : null}
       </div>
-      <div ref={container} role="img" aria-label={label} style={{ height }} className="w-full overflow-hidden rounded-lg" />
+      <div
+        ref={container}
+        role="img"
+        aria-label={label}
+        style={{ height }}
+        className="w-full overflow-hidden rounded-lg"
+      />
     </div>
   );
 }

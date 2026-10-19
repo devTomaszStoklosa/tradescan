@@ -28,7 +28,10 @@ function renderPage(path: string) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);
     const body = Object.entries(RESPONSES).find(([route]) => url.endsWith(route))?.[1] ?? null;
-    return new Response(JSON.stringify(body), { status: body ? 200 : 404, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify(body), {
+      status: body ? 200 : 404,
+      headers: { "Content-Type": "application/json" },
+    });
   });
   const router = createMemoryRouter([{ path: "/backtest", element: <BacktestPage /> }], { initialEntries: [path] });
   render(
@@ -75,10 +78,18 @@ describe("BacktestPage pinning", () => {
 
 describe("BacktestPage out-of-sample results", () => {
   it("shows both periods next to the full history and links the setup to a sweep", async () => {
-    renderPage("/backtest?ticker=SPY&signal=connors_rsi2_long&sig.connors_rsi2_long.oversold=15&set.backtest.oos_pct=20");
-    const periods = await screen.findByRole("table", { name: "Metrics of the full history and of the in-sample and out-of-sample periods" });
+    renderPage(
+      "/backtest?ticker=SPY&signal=connors_rsi2_long&sig.connors_rsi2_long.oversold=15&set.backtest.oos_pct=20",
+    );
+    const periods = await screen.findByRole("table", {
+      name: "Metrics of the full history and of the in-sample and out-of-sample periods",
+    });
     const sharpe = within(periods).getByRole("row", { name: /Sharpe/ });
-    expect(within(sharpe).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["0.80", "1.10", "0.20"]);
+    expect(
+      within(sharpe)
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual(["0.80", "1.10", "0.20"]);
     expect(screen.getByText("Out-of-sample: only 12 trades, too few to trust the metrics.")).toBeInTheDocument();
     expect(backtestBodies().at(-1)).toMatchObject({ settings: { backtest: { oos_pct: 20 } } });
     expect(screen.getByLabelText("Out-of-sample share (% of history)")).toHaveValue(20);
@@ -89,7 +100,11 @@ describe("BacktestPage out-of-sample results", () => {
   });
 
   it("explains a missing split", async () => {
-    RESPONSES["/backtest"] = { ...backtestResult, split: null, runs: backtestResult.runs.map((run) => ({ ...run, in_sample: null, out_of_sample: null })) };
+    RESPONSES["/backtest"] = {
+      ...backtestResult,
+      split: null,
+      runs: backtestResult.runs.map((run) => ({ ...run, in_sample: null, out_of_sample: null })),
+    };
     renderPage("/backtest?ticker=SPY&signal=connors_rsi2_long");
     expect(await screen.findByText(/The history is too short to split/)).toBeInTheDocument();
     RESPONSES["/backtest"] = backtestResult;
@@ -100,7 +115,10 @@ describe("BacktestPage Monte Carlo", () => {
   it("shows the run's order next to each method's spread and sends the Monte Carlo settings", async () => {
     renderPage("/backtest?ticker=SPY&signal=connors_rsi2_long&set.monte_carlo.seed=7&set.monte_carlo.simulations=2000");
     const table = await screen.findByRole("table", { name: "Monte Carlo of the run's trades" });
-    const cells = (name: RegExp) => within(within(table).getByRole("row", { name })).getAllByRole("cell").map((cell) => cell.textContent);
+    const cells = (name: RegExp) =>
+      within(within(table).getByRole("row", { name }))
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent);
     expect(cells(/Final return/)).toEqual(["+9.1%", "+9.1%", "+9.1%", "+9.1%", "-7.3%", "+8.8%", "+26.4%"]);
     expect(cells(/Max drawdown/)).toEqual(["-6.2%", "-14.8%", "-8.4%", "-5.1%", "-21.5%", "-9.7%", "-4.8%"]);
     expect(cells(/losing streak/)).toEqual(["5", "9", "6", "4", "10", "6.5", "4"]);
@@ -110,11 +128,17 @@ describe("BacktestPage Monte Carlo", () => {
     expect(backtestBodies().at(-1)).toMatchObject({ settings: { monte_carlo: { seed: 7, simulations: 2000 } } });
     expect(screen.getByLabelText("Random seed")).toHaveValue(7);
     expect(screen.getByRole("button", { name: "Run backtest" })).toBeEnabled();
-    expect(screen.getByRole("link", { name: "Sweep parameters of this setup →" })).toHaveAttribute("href", "/sweep?ticker=SPY&signal=connors_rsi2_long");
+    expect(screen.getByRole("link", { name: "Sweep parameters of this setup →" })).toHaveAttribute(
+      "href",
+      "/sweep?ticker=SPY&signal=connors_rsi2_long",
+    );
   });
 
   it("explains a run with too few trades", async () => {
-    RESPONSES["/backtest"] = { ...backtestResult, runs: backtestResult.runs.map((run) => ({ ...run, monte_carlo: null })) };
+    RESPONSES["/backtest"] = {
+      ...backtestResult,
+      runs: backtestResult.runs.map((run) => ({ ...run, monte_carlo: null })),
+    };
     renderPage("/backtest?ticker=SPY&signal=connors_rsi2_long");
     expect(await screen.findByText(/Too few closed trades for a Monte Carlo/)).toBeInTheDocument();
     RESPONSES["/backtest"] = backtestResult;
@@ -125,7 +149,10 @@ describe("BacktestPage trade rules", () => {
   it("sends the chosen entry and exits", async () => {
     renderPage("/backtest?ticker=SPY&signal=connors_rsi2_long");
     await screen.findByRole("button", { name: "Pin run" });
-    expect(backtestBodies().at(-1)).toMatchObject({ entry: { name: "next_open" }, exits: [{ name: "target" }, { name: "time" }] });
+    expect(backtestBodies().at(-1)).toMatchObject({
+      entry: { name: "next_open" },
+      exits: [{ name: "target" }, { name: "time" }],
+    });
 
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Entry" }), "limit");
     expect(screen.getByText(/^Buy-limit 0.5 ATR below/)).toBeInTheDocument();
@@ -181,7 +208,9 @@ describe("BacktestPage trade rules", () => {
     try {
       renderPage("/backtest?ticker=SPY&signal=connors_rsi2_long&filter=market&b=QQQ");
       const line = await screen.findByText(/^Filters: Benchmark close above its SMA\(200\)/);
-      expect(line).toHaveTextContent("Filters: Benchmark close above its SMA(200) for longs, below it for shorts · benchmark QQQ");
+      expect(line).toHaveTextContent(
+        "Filters: Benchmark close above its SMA(200) for longs, below it for shorts · benchmark QQQ",
+      );
     } finally {
       RESPONSES["/backtest"] = backtestResult;
     }
@@ -191,9 +220,20 @@ describe("BacktestPage trade rules", () => {
 describe("BacktestPage pyramiding", () => {
   it("sends the pyramiding settings and shows the units of each position", async () => {
     const trade = {
-      direction: "long" as const, signal_date: "2024-03-01", entry_date: "2024-03-04", exit_date: "2024-03-15", entry_price: 102,
-      exit_price: 110, size: 300, pnl: 2400, r_multiple: 2.4, exit_reason: "trailing",
-      adds: [{ date: "2024-03-06", price: 102 }, { date: "2024-03-08", price: 104 }],
+      direction: "long" as const,
+      signal_date: "2024-03-01",
+      entry_date: "2024-03-04",
+      exit_date: "2024-03-15",
+      entry_price: 102,
+      exit_price: 110,
+      size: 300,
+      pnl: 2400,
+      r_multiple: 2.4,
+      exit_reason: "trailing",
+      adds: [
+        { date: "2024-03-06", price: 102 },
+        { date: "2024-03-08", price: 104 },
+      ],
     };
     RESPONSES["/backtest"] = {
       ...backtestResult,
@@ -216,7 +256,10 @@ describe("BacktestPage pyramiding", () => {
   });
 
   it("leaves the units column out while no position was pyramided", async () => {
-    RESPONSES["/backtest"] = { ...backtestResult, runs: backtestResult.runs.map((run) => ({ ...run, trades: [{ ...backtestTrade, adds: [] }] })) };
+    RESPONSES["/backtest"] = {
+      ...backtestResult,
+      runs: backtestResult.runs.map((run) => ({ ...run, trades: [{ ...backtestTrade, adds: [] }] })),
+    };
     try {
       renderPage("/backtest?ticker=SPY&signal=connors_rsi2_long");
       const table = await screen.findByRole("table", { name: "Trades" });
@@ -229,6 +272,14 @@ describe("BacktestPage pyramiding", () => {
 });
 
 const backtestTrade = {
-  direction: "long" as const, signal_date: "2024-03-01", entry_date: "2024-03-04", exit_date: "2024-03-08", entry_price: 170,
-  exit_price: 178, size: 100, pnl: 780, r_multiple: 1.6, exit_reason: "target",
+  direction: "long" as const,
+  signal_date: "2024-03-01",
+  entry_date: "2024-03-04",
+  exit_date: "2024-03-08",
+  entry_price: 170,
+  exit_price: 178,
+  size: 100,
+  pnl: 780,
+  r_multiple: 1.6,
+  exit_reason: "target",
 };

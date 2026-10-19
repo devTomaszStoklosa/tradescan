@@ -14,7 +14,10 @@ function renderPage(path: string) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);
     const body = Object.entries(RESPONSES).find(([route]) => url.endsWith(route))?.[1] ?? null;
-    return new Response(JSON.stringify(body), { status: body ? 200 : 404, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify(body), {
+      status: body ? 200 : 404,
+      headers: { "Content-Type": "application/json" },
+    });
   });
   const router = createMemoryRouter(
     [
@@ -39,7 +42,8 @@ const sweepBodies = () =>
     .mock.calls.filter(([input]) => String(input).endsWith("/sweep"))
     .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>);
 
-const SWEEP_URL = "/sweep?ticker=SPY&signal=connors_rsi2_long&ax1=signal.oversold&ax1v=5:15:5&ax2=exit.target.target_r&ax2v=2:3:1";
+const SWEEP_URL =
+  "/sweep?ticker=SPY&signal=connors_rsi2_long&ax1=signal.oversold&ax1v=5:15:5&ax2=exit.target.target_r&ax2v=2:3:1";
 
 describe("SweepPage", () => {
   it("adds a parameter with a range around the setup's value and runs the sweep", async () => {
@@ -74,7 +78,9 @@ describe("SweepPage", () => {
   });
 
   it("blocks a sweep over the combination cap", async () => {
-    renderPage("/sweep?ticker=SPY&signal=connors_rsi2_long&ax1=signal.oversold&ax1v=1:30:1&ax2=exit.time.max_hold_bars&ax2v=1:10:1");
+    renderPage(
+      "/sweep?ticker=SPY&signal=connors_rsi2_long&ax1=signal.oversold&ax1v=1:30:1&ax2=exit.time.max_hold_bars&ax2v=1:10:1",
+    );
     expect(await screen.findByText("30 × 10 = 300 combinations (at most 200)")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Run sweep" })).toBeDisabled();
     expect(sweepBodies()).toHaveLength(0);
@@ -86,13 +92,23 @@ describe("SweepPage", () => {
     const outOfSample = screen.getByRole("table", { name: /^Out-of-sample \(last 30%\)/ });
     expect(within(inSample).getAllByRole("button")).toHaveLength(6);
 
-    const best = within(inSample).getByRole("button", { name: /Oversold level 10, Distance 3: Sharpe 1.40, 30 trades, best in-sample/ });
+    const best = within(inSample).getByRole("button", {
+      name: /Oversold level 10, Distance 3: Sharpe 1.40, 30 trades, best in-sample/,
+    });
     expect(best).toHaveAttribute("aria-pressed", "true");
-    expect(within(outOfSample).getByRole("button", { name: /Oversold level 10, Distance 3: Sharpe 0.30, 8 trades \(too few to trust\)/ })).toHaveAttribute(
-      "data-few",
-    );
-    expect(within(inSample).getByRole("button", { name: /Oversold level 10, Distance 2: .*current setting/ })).toBeInTheDocument();
-    expect(within(inSample).getByRole("button", { name: /Oversold level 15, Distance 3: could not run \(connors_rsi2_long: test failure\)/ })).toHaveTextContent("×");
+    expect(
+      within(outOfSample).getByRole("button", {
+        name: /Oversold level 10, Distance 3: Sharpe 0.30, 8 trades \(too few to trust\)/,
+      }),
+    ).toHaveAttribute("data-few");
+    expect(
+      within(inSample).getByRole("button", { name: /Oversold level 10, Distance 2: .*current setting/ }),
+    ).toBeInTheDocument();
+    expect(
+      within(inSample).getByRole("button", {
+        name: /Oversold level 15, Distance 3: could not run \(connors_rsi2_long: test failure\)/,
+      }),
+    ).toHaveTextContent("×");
     expect(screen.getByText("1 combination could not run, e.g. connors_rsi2_long: test failure")).toBeInTheDocument();
 
     expect(screen.getByRole("heading", { name: "Oversold level 10, Distance 3" })).toBeInTheDocument();
@@ -115,7 +131,11 @@ describe("SweepPage", () => {
     await screen.findByRole("table", { name: /^In-sample/ });
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Colour by" }), "trades");
     expect(router.state.location.search).toContain("m=trades");
-    expect(within(screen.getByRole("table", { name: /^Out-of-sample/ })).getByRole("button", { name: /Oversold level 10, Distance 3: Trades 8/ })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("table", { name: /^Out-of-sample/ })).getByRole("button", {
+        name: /Oversold level 10, Distance 3: Trades 8/,
+      }),
+    ).toBeInTheDocument();
     expect(sweepBodies()).toHaveLength(1);
   });
 });

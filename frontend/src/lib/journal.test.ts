@@ -10,7 +10,13 @@ const NOW = new Date(2026, 9, 18, 23, 30); // late evening: still the 18th in th
 describe("journal form", () => {
   it("starts a trade today, long, without a run", () => {
     expect(today(NOW)).toBe("2026-10-18");
-    expect(newTradeForm(undefined, NOW)).toMatchObject({ ticker: "", direction: "long", opened: "2026-10-18", run: null, closed: "" });
+    expect(newTradeForm(undefined, NOW)).toMatchObject({
+      ticker: "",
+      direction: "long",
+      opened: "2026-10-18",
+      run: null,
+      closed: "",
+    });
   });
 
   it("starts a trade from a pinned run with its ticker, direction and a copy of the run", () => {
@@ -65,6 +71,8 @@ describe("journal form", () => {
   it("reads the run a trade keeps, or says why it cannot", () => {
     const run = makeRun(1, {}, { name: "baseline" });
     expect(suggestedBy(suggestingRun(run))).toMatchObject({ run: { name: "baseline", ticker: "SPY" } });
-    expect(suggestedBy({ format: RUNS_FILE_VERSION, snapshot: { kind: "backtest" } })).toEqual({ problem: 'Run 1 has an invalid "id"' });
+    expect(suggestedBy({ format: RUNS_FILE_VERSION, snapshot: { kind: "backtest" } })).toEqual({
+      problem: 'Run 1 has an invalid "id"',
+    });
   });
 });

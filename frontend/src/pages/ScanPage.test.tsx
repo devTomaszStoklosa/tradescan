@@ -9,13 +9,21 @@ import { ThemeProvider } from "../state/theme";
 import { config, scanResult, signals, watchlists } from "../test/fixtures";
 import { ScanPage } from "./ScanPage";
 
-const RESPONSES: Record<string, unknown> = { "/config": config, "/signals": signals, "/watchlists": watchlists, "/scan": scanResult };
+const RESPONSES: Record<string, unknown> = {
+  "/config": config,
+  "/signals": signals,
+  "/watchlists": watchlists,
+  "/scan": scanResult,
+};
 
 function mockServer() {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);
     const body = Object.entries(RESPONSES).find(([path]) => url.endsWith(path))?.[1] ?? null;
-    return new Response(JSON.stringify(body), { status: body ? 200 : 404, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify(body), {
+      status: body ? 200 : 404,
+      headers: { "Content-Type": "application/json" },
+    });
   });
 }
 
@@ -69,7 +77,10 @@ describe("ScanPage", () => {
     renderPage("/?t=AAPL,MSFT");
 
     expect(await screen.findByText("MSFT")).toBeInTheDocument();
-    expect(scanRequest(fetch)).toMatchObject({ tickers: ["AAPL", "MSFT"], settings: { account: { equity: 50000, risk_pct: 0.5 } } });
+    expect(scanRequest(fetch)).toMatchObject({
+      tickers: ["AAPL", "MSFT"],
+      settings: { account: { equity: 50000, risk_pct: 0.5 } },
+    });
   });
 
   it("puts changed parameters in the URL and the request", async () => {

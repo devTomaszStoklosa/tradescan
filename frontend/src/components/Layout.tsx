@@ -28,7 +28,10 @@ export function Layout() {
             <img src="/favicon.svg" alt="" className="size-6" />
             tradescan
           </NavLink>
-          <nav aria-label="Main" className="order-last -mx-1 flex w-full gap-1 overflow-x-auto sm:order-none sm:w-auto sm:flex-1">
+          <nav
+            aria-label="Main"
+            className="order-last -mx-1 flex w-full gap-1 overflow-x-auto sm:order-none sm:w-auto sm:flex-1"
+          >
             {LINKS.map((link) => (
               <NavLink
                 key={link.to}
@@ -58,7 +61,8 @@ export function Layout() {
         <Outlet />
       </main>
       <footer className="border-t border-line px-4 py-3 text-center text-xs text-muted">
-        Research tool, not investment advice. Prices from Yahoo Finance via yfinance; charts by TradingView Lightweight Charts.
+        Research tool, not investment advice. Prices from Yahoo Finance via yfinance; charts by TradingView Lightweight
+        Charts.
       </footer>
     </div>
   );
