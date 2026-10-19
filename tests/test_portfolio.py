@@ -287,6 +287,20 @@ def test_the_portfolio_use_case_scores_with_the_runs_settings_and_every_signal_o
     for ticker in tickers:
         pd.testing.assert_series_equal(scan.signal_points[ticker], expected.signal_points[ticker])
     assert report.runs[0].result.trades
+    # The report keeps what the score read, for the run's result to show.
+    assert list(report.scan.settings) == ["scoring", "trend", "scan"] and report.scan.settings["scan"] == {"fresh_bars": 7}
+    assert report.scan.settings["scoring"]["signal_weights"] == {"connors_rsi2_long": 3.0}
+    assert report.scan.settings["trend"]["fast_period"] == 20
+    assert report.scan.signals == tuple(signal for signal in signals if signal is not traded)
+
+
+def test_the_portfolio_use_case_reports_no_scan_inputs_for_a_priority_that_does_not_read_the_scanner():
+    frames = {name: random_walk(400, seed=seed) for seed, name in enumerate(["AAA", "BBB", "SPY"], start=1)}
+    setup = BacktestRequest(ticker="", signal="connors_rsi2_long")
+    report = build_use_cases(Settings(), FakeProvider(frames)).portfolio.run(
+        PortfolioRequest(Watchlist("demo", ("AAA", "BBB"), "SPY"), setup, RuleChoice("momentum"))
+    )
+    assert report.scan is None
 
 
 def test_the_portfolio_use_case_scores_the_other_signals_with_the_runs_score_signal_params():

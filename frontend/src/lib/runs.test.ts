@@ -11,6 +11,8 @@ import {
   makePortfolioPin,
   makePortfolioRun,
   makeRun,
+  makeScanInputs,
+  makeScorePin,
   portfolioForm,
   portfolioResult,
   priorityRules,
@@ -63,6 +65,7 @@ describe("snapshotPortfolioRun", () => {
       monteCarlo: null,
     });
     expect(snapshot?.form).toMatchObject({ engines: ["cerebro"], priority: "momentum", universe: { watchlist: "us_large" } });
+    expect(snapshot?.scan).toBeNull();
     expect(snapshot).not.toHaveProperty("trades");
     expect(snapshot).not.toHaveProperty("positions");
   });
@@ -132,6 +135,16 @@ describe("runKey of portfolio runs", () => {
     expect(runKey(makePortfolioPin(1, { tickers: ["MSFT", "AAPL"] }))).toBe(runKey(run));
     expect(runKey(makePortfolioPin(1, { universe: "custom" }))).not.toBe(runKey(run));
     expect(runKey(makePortfolioPin(1, { params: { ...run.params, oversold: 15 } }))).not.toBe(runKey(run));
+  });
+
+  it("tells score priority runs apart by what they read of the scanner, in any key order", () => {
+    const run = makeScorePin(1);
+    expect(runKey(makeScorePin(1, makeScanInputs({ trend_bonus: 2.5 })))).not.toBe(runKey(run));
+    expect(runKey(makeScorePin(1, makeScanInputs({}, 55)))).not.toBe(runKey(run));
+    expect(runKey(makePortfolioPin(1, { priority: run.priority, scan: null }))).not.toBe(runKey(run));
+    const { scoring, trend, scan } = run.scan!.settings;
+    const reordered = { ...run.scan!, settings: { scan: scan!, trend: trend!, scoring: Object.fromEntries(Object.entries(scoring!).reverse()) } };
+    expect(runKey(makeScorePin(1, reordered))).toBe(runKey(run));
   });
 
   it("never equals the key of a backtest run", () => {
@@ -239,8 +252,17 @@ describe("runs file", () => {
     expect(() => parseRunsFile(JSON.stringify({ version: RUNS_FILE_VERSION, runs: old }))).toThrow('Run 2 has an invalid "form"');
   });
 
+  it("upgrades version 7 portfolio runs, whose result did not report what the score read of the scanner", () => {
+    const pins = [makeRun(1), makeScorePin(2)];
+    const old = encodeRuns(pins).runs.map((run) => (run.kind === "portfolio" ? { ...run, scan: undefined } : run));
+    const runs = parseRunsFile(JSON.stringify({ version: 7, runs: old }));
+    expect(runs[0]).not.toHaveProperty("scan");
+    expect(runs[1]).toMatchObject({ kind: "portfolio", priority: { name: "score" }, scan: null });
+    expect(() => parseRunsFile(JSON.stringify({ version: RUNS_FILE_VERSION, runs: old }))).toThrow('Run 2 has an invalid "scan"');
+  });
+
   it("round-trips portfolio runs next to backtest runs", () => {
-    const runs = [makeRun(1), makePortfolioPin(2, {}, { name: "top 5 by momentum" })];
+    const runs = [makeRun(1), makePortfolioPin(2, {}, { name: "top 5 by momentum" }), makeScorePin(3)];
     const decoded = parseRunsFile(JSON.stringify(encodeRuns(runs)));
     expect(decoded).toEqual(runs.map((run) => ({ ...run, equity: run.equity.map((point) => ({ ...point, value: Math.round(point.value * 100) / 100 })) })));
     expect(decoded.map(runKey)).toEqual(runs.map(runKey));
@@ -301,6 +323,14 @@ describe("runs file", () => {
       "a portfolio run without its limits",
       JSON.stringify({ version: RUNS_FILE_VERSION, runs: [{ ...encodeRuns([makePortfolioPin(1)]).runs[0], portfolio: { max_positions: 5 } }] }),
       'Run 1 has an invalid "portfolio"',
+    ],
+    [
+      "a portfolio run with bad scan inputs",
+      JSON.stringify({
+        version: RUNS_FILE_VERSION,
+        runs: [{ ...encodeRuns([makeScorePin(1)]).runs[0], scan: { settings: { scan: { fresh_bars: "3" } }, signal_params: {} } }],
+      }),
+      'Run 1 has an invalid "scan"',
     ],
     [
       "a portfolio run with a backtest form",

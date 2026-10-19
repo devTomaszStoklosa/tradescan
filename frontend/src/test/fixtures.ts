@@ -15,6 +15,7 @@ import type {
   RotationOut,
   RotationStatsOut,
   RuleOut,
+  ScanInputsOut,
   ScanOut,
   SignalOut,
   SweepOut,
@@ -790,6 +791,7 @@ export const portfolioResult: PortfolioOut = {
   end: "2026-10-13",
   portfolio: { max_positions: 5, max_exposure_pct: 100 },
   priority: appliedRule(priorityRules[1]!),
+  scan: null,
   buy_hold_benchmark: "SPY",
   buy_hold: backtestResult.buy_hold,
   split: backtestResult.split,
@@ -813,6 +815,21 @@ export function makePortfolioPin(slot: number, overrides: Partial<PortfolioSnaps
   const snapshot = snapshotPortfolioRun(portfolioResult, "vectorized", portfolioForm)!;
   return { ...toPinnedRun({ ...snapshot, ...overrides }, new Date("2026-10-14T09:00:00Z")), id: `portfolio-${slot}`, slot, ...extra };
 }
+
+/** What the scan score priority reads of the scanner with the default settings, changed by `scoring` and the
+ * Donchian breakout's channel length. */
+export const makeScanInputs = (scoring: Record<string, number> = {}, donchianPeriod = 20): ScanInputsOut => ({
+  settings: {
+    scoring: { trend_bonus: 1, family_weights: FAMILY_WEIGHTS, signal_weights: {}, ...scoring },
+    trend: { fast_period: 50 },
+    scan: { fresh_bars: 3 },
+  },
+  signal_params: { donchian_breakout: { period: donchianPeriod } },
+});
+
+/** A pinned run of `portfolioResult` ranked by the scan score, with `scan` as what it read of the scanner. */
+export const makeScorePin = (slot: number, scan: ScanInputsOut = makeScanInputs()): PinnedPortfolioRun =>
+  makePortfolioPin(slot, { priority: appliedRule(priorityRules[2]!), scan });
 
 const rotationStats = (overrides: Partial<RotationStatsOut> = {}): RotationStatsOut => ({
   rebalances: 108,

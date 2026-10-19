@@ -439,6 +439,7 @@ def test_portfolio_backtest(client):
     tickers = client.post("/api/portfolio-backtest", json={"tickers": ["aaa", "zzz"], "signal": "connors_rsi2_long"}).json()
     assert tickers["missing"] == ["ZZZ"] and tickers["benchmark"] is None and tickers["buy_hold_benchmark"] == "SPY"
     assert tickers["priority"]["name"] == "relative_strength" and [run["engine"] for run in tickers["runs"]] == ["vectorized"]
+    assert data["scan"] is None and tickers["scan"] is None  # neither priority reads the scanner
 
     def status(**extra):
         return client.post("/api/portfolio-backtest", json={"signal": "connors_rsi2_long", **extra}).status_code
@@ -520,8 +521,16 @@ def test_portfolio_backtest_with_the_score_priority(client):
     vectorized, cerebro = data["runs"]
     assert keys(vectorized) == keys(cerebro) and vectorized["full"]["stats"]["skipped_no_slot"] > 0
 
+    sections = {section["name"]: section for section in client.get("/api/config").json()["sections"]}
+    defaults = {name: {spec["name"]: spec["default"] for spec in sections[name]["params"]} for name in ("scoring", "trend")}
+    assert data["scan"]["settings"] == {**defaults, "scan": {"fresh_bars": 3}}
+
     scoring = {"scoring": {"rs_bonus": 3, "family_weights": {"breakout": 0}}, "scan": {"fresh_bars": 1}, "trend": {"fast_period": 20}}
-    assert run({**limits, **scoring}).status_code == 200
+    scored = run({**limits, **scoring})
+    assert scored.status_code == 200
+    settings = scored.json()["scan"]["settings"]
+    assert settings["scoring"]["rs_bonus"] == 3 and settings["scoring"]["family_weights"]["breakout"] == 0
+    assert settings["trend"]["fast_period"] == 20 and settings["scan"] == {"fresh_bars": 1}
     assert run({"scoring": {"rs_strong_pct": 10}}).status_code == 400
     assert run({"scoring": {"signal_weights": {"nope": 1}}}).status_code == 400
 
@@ -531,7 +540,17 @@ def test_portfolio_backtest_with_the_score_signal_params(client):
         body = {"watchlist": "demo", "signal": "connors_rsi2_long", "priority": {"name": "score"}}
         return client.post("/api/portfolio-backtest", json={**body, "score_signal_params": score_signal_params})
 
-    assert run({"donchian_breakout": {"period": 5}, "connors_rsi2_long": {"oversold": 30}}).status_code == 200
+    response = run({"donchian_breakout": {"period": 5}, "connors_rsi2_long": {"oversold": 30}})
+    assert response.status_code == 200
+    # Every counted signal but the traded one, whose parameters are the setup's.
+    data = response.json()
+    longs = {signal["name"]: signal for signal in client.get("/api/signals").json() if signal["direction"] == "long"}
+    counted = data["scan"]["signal_params"]
+    assert list(counted) == [name for name in longs if name != "connors_rsi2_long"]
+    assert counted["donchian_breakout"]["period"] == 5 and data["params"]["oversold"] != 30
+    for name, params in counted.items():
+        if name != "donchian_breakout":
+            assert params == {spec["name"]: spec["default"] for spec in longs[name]["params"]}
     unknown = run({"nope": {"period": 5}})
     assert unknown.status_code == 400 and "nope" in unknown.json()["detail"]
     assert run({"donchian_breakout": {"period": 1}}).status_code == 400

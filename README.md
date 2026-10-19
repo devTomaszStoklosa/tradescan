@@ -86,7 +86,8 @@ the built UI. The screens:
 - **Edge**: signal statistics across a watchlist at several horizons, coloured by edge.
 - **Compare**: backtest and portfolio runs pinned with **Pin run** on the Backtest and Portfolio pages,
   side by side: the parameters that differ (for a portfolio also its universe, max positions, max exposure
-  and priority rule with its parameters), an out-of-sample check (key metrics in-sample next to
+  and priority rule with its parameters, and for the scan score priority the scoring, trend and fresh-signal
+  settings and the counted signals' parameters it read), an out-of-sample check (key metrics in-sample next to
   out-of-sample), a Monte Carlo check (unlucky and median return, drawdown and losing streak, and the
   chance of ruin, per method), every metric of the full history or of one period with the best value
   highlighted, the portfolio stats (open positions, exposure, skipped signals) of the same period, and the

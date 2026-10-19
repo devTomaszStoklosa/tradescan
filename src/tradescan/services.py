@@ -1056,11 +1056,21 @@ class PortfolioRun:
 
 
 @dataclass(frozen=True)
+class ScanInputs:
+    """What a priority that scores like the scanner read besides the bars: the run's values of the scanner's settings
+    it reads, by section as a request names them, and the signals it counted besides the traded one."""
+
+    settings: dict[str, dict[str, object]]
+    signals: tuple[Signal, ...]
+
+
+@dataclass(frozen=True)
 class PortfolioReport:
     universe: Watchlist
     base: ResolvedBacktest
     portfolio: PortfolioConfig
     priority: PriorityRule
+    scan: ScanInputs | None  # None when the priority does not read the scanner
     benchmark: str  # compared by buy & hold, and by the filters that read a benchmark
     benchmark_close: pd.Series  # on the shared calendar, each date with the benchmark's last close at or before it
     calendar: pd.DatetimeIndex
@@ -1116,8 +1126,13 @@ class PortfolioUseCase:
             raise ValueError(f"No data for any ticker of {universe.name}")
         if benchmark not in loaded.frames:
             raise ValueError(f"No data for the benchmark {benchmark}, which buy & hold compares")
+        scan = None
         if priority.needs_scan:
-            priority = priority.with_scan(_scan_score(frames, base, self._registry, request.score_signal_params))
+            traded = base.signal
+            signals = _score_signals(traded, self._registry, request.score_signal_params)
+            priority = priority.with_scan(_scan_score(frames, base.settings, signals, traded.direction))
+            others = tuple(signal for signal in signals if signal.name != traded.name)
+            scan = ScanInputs(settings=_score_settings(base.settings), signals=others)
         calendar = shared_calendar(frames.values())
         benchmark_close = loaded.frames[benchmark]["close"].astype(float).reindex(calendar, method="ffill")
         split = split_history(calendar, base.config.oos_pct)
@@ -1131,6 +1146,7 @@ class PortfolioUseCase:
             base=base,
             portfolio=portfolio,
             priority=priority,
+            scan=scan,
             benchmark=benchmark,
             benchmark_close=benchmark_close,
             calendar=calendar,
@@ -1140,17 +1156,36 @@ class PortfolioUseCase:
         )
 
 
-def _scan_score(
-    frames: Mapping[str, pd.DataFrame], base: ResolvedBacktest, registry: SignalRegistry, params: GroupOverrides
-) -> ScanScore:
-    """What the score priority reads: the run's scoring, trend and fresh-bars settings and every signal of the
-    traded direction, the traded one with the run's parameters and the others with `params`. Built once, for every
-    engine and both periods."""
-    settings, traded = base.settings, base.signal
+# The settings the scanner's score reads, by section; None reads every parameter of the section.
+_SCORE_SETTINGS: dict[str, tuple[str, ...] | None] = {"scoring": None, "trend": None, "scan": ("fresh_bars",)}
+
+
+def _score_signals(traded: Signal, registry: SignalRegistry, params: GroupOverrides) -> list[Signal]:
+    """The signals the score priority counts: every signal of the traded direction, the traded one with the run's
+    parameters and the others with `params`."""
     counted = registry.select(directions={traded.direction}, params=params)
-    signals = [traded if signal.name == traded.name else signal for signal in counted]
+    return [traded if signal.name == traded.name else signal for signal in counted]
+
+
+def _score_settings(settings: Settings) -> dict[str, dict[str, object]]:
+    """The run's values of the settings the score priority reads, by section."""
+    return {
+        section: {
+            spec.name: spec.default
+            for spec in parameters_of(getattr(settings, section))
+            if names is None or spec.name in names
+        }
+        for section, names in _SCORE_SETTINGS.items()
+    }
+
+
+def _scan_score(
+    frames: Mapping[str, pd.DataFrame], settings: Settings, signals: Sequence[Signal], direction: Direction
+) -> ScanScore:
+    """What the score priority reads: the run's settings named in `_SCORE_SETTINGS` and the counted signals. Built
+    once, for every engine and both periods."""
     return ScanScore.build(
-        frames, signals, traded.direction, build_scorer(settings), build_context_builder(settings), settings.scan.fresh_bars
+        frames, signals, direction, build_scorer(settings), build_context_builder(settings), settings.scan.fresh_bars
     )
 
 

@@ -37,6 +37,7 @@ from tradescan.services import (
     MarketReport,
     PortfolioReport,
     RotationReport,
+    ScanInputs,
     ScanReport,
     SweepReport,
     SweptParameter,
@@ -552,6 +553,15 @@ def contribution_out(row: TickerContribution) -> schemas.TickerContributionOut:
     )
 
 
+def scan_inputs_out(scan: ScanInputs) -> schemas.ScanInputsOut:
+    return schemas.ScanInputsOut(
+        settings={  # type: ignore[arg-type]
+            section: {name: _value(value) for name, value in values.items()} for section, values in scan.settings.items()
+        },
+        signal_params={signal.name: signal_params(signal) for signal in scan.signals},
+    )
+
+
 def portfolio_out(report: PortfolioReport) -> schemas.PortfolioOut:
     base = report.base
     close = report.benchmark_close.dropna()
@@ -565,6 +575,7 @@ def portfolio_out(report: PortfolioReport) -> schemas.PortfolioOut:
             max_positions=report.portfolio.max_positions, max_exposure_pct=report.portfolio.max_exposure_pct
         ),
         priority=applied_rule_out(report.priority),
+        scan=scan_inputs_out(report.scan) if report.scan else None,
         buy_hold_benchmark=report.benchmark,
         buy_hold=points(buy_hold),
         split=split_out(report.split) if report.split else None,
