@@ -9,7 +9,7 @@ from datetime import UTC, date, datetime
 
 from tradescan.journal import JournalTrade, SuggestedBy, TradeEntry
 from tradescan.signals.base import Direction
-from tradescan.storage.database import Database, NotFound, encode_json
+from tradescan.storage.database import Database, NotFoundError, encode_json
 
 _COLUMNS = (
     "ticker", "direction", "opened", "entry_price", "quantity", "stop", "closed", "exit_price", "fees", "notes",
@@ -43,7 +43,7 @@ class TradeJournal:
         return JournalTrade(id=int(cursor.lastrowid or 0), entry=entry, created_at=now, updated_at=now)
 
     def replace(self, trade_id: int, entry: TradeEntry) -> JournalTrade:
-        """The trade with every field of `entry`; a NotFound when there is no such trade."""
+        """The trade with every field of `entry`; a NotFoundError when there is no such trade."""
         assignments = ", ".join(f"{name} = ?" for name in (*_COLUMNS, "updated_at"))
         with self._database.connect() as connection:
             connection.execute(
@@ -51,13 +51,13 @@ class TradeJournal:
             )
             row = connection.execute("SELECT * FROM journal_trades WHERE id = ?", (trade_id,)).fetchone()
         if row is None:
-            raise NotFound(f"No trade {trade_id} in the journal")
+            raise NotFoundError(f"No trade {trade_id} in the journal")
         return _trade(row)
 
     def remove(self, trade_id: int) -> None:
         with self._database.connect() as connection:
             if not connection.execute("DELETE FROM journal_trades WHERE id = ?", (trade_id,)).rowcount:
-                raise NotFound(f"No trade {trade_id} in the journal")
+                raise NotFoundError(f"No trade {trade_id} in the journal")
 
     def _timestamp(self) -> str:
         return self._clock().isoformat(timespec="seconds")

@@ -50,11 +50,11 @@ _MIGRATIONS: tuple[str, ...] = (
 )
 
 
-class NotFound(LookupError):
+class NotFoundError(LookupError):
     """No stored item has the id asked for."""
 
 
-class Conflict(Exception):
+class ConflictError(Exception):
     """The change clashes with what is stored, e.g. a slot another run already holds."""
 
 

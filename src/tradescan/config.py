@@ -176,7 +176,8 @@ class RegimeSettings:
             raise ValueError(f"regime: fast_period ({self.fast_period}) must be below slow_period ({self.slow_period})")
         if self.risk_off_breadth > self.risk_on_breadth:
             raise ValueError(
-                f"regime: risk_off_breadth ({self.risk_off_breadth:g}) must not exceed risk_on_breadth ({self.risk_on_breadth:g})"
+                f"regime: risk_off_breadth ({self.risk_off_breadth:g}) "
+                f"must not exceed risk_on_breadth ({self.risk_on_breadth:g})"
             )
 
 
@@ -286,7 +287,8 @@ class RotationSettings:
         step=1,
         label="Absolute momentum",
         unit="bars",
-        help="A pick whose return over this lookback is at or below 0 goes to the safe asset or cash; 0 turns the check off",
+        help="A pick whose return over this lookback is at or below 0 goes to the safe asset or cash; "
+        "0 turns the check off",
     )
 
 

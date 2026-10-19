@@ -57,7 +57,7 @@ class ContextBuilder:
         self._fast_period = fast_period
         self._slow_period = slow_period
         self._weekly_period = weekly_period
-        self._rs_weights = tuple(zip(rs_periods, rs_weights))
+        self._rs_weights = tuple(zip(rs_periods, rs_weights, strict=True))
 
     def build(self, ticker: str, df: pd.DataFrame) -> TickerContext:
         close = df["close"]

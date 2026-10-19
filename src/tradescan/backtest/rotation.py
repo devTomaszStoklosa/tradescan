@@ -242,7 +242,7 @@ def targets(setup: RotationSetup, rotation: RotationConfig, day: int) -> Targets
     weights: dict[int, float] = {}
     picks = []
     failed = 0.0
-    for candidate, share in zip(chosen, shares):
+    for candidate, share in zip(chosen, shares, strict=True):
         held = not rotation.checks_momentum or candidate.momentum > 0
         if held:
             weights[candidate.position] = weights.get(candidate.position, 0.0) + float(share)

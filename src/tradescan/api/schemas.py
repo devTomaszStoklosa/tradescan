@@ -27,7 +27,9 @@ SignalParamsIn = dict[str, float | list[float]]
 
 _SETTINGS = Field(
     default_factory=dict,
-    description='Per-run overrides by settings section, e.g. {"risk": {"atr_mult": 3}}; see /api/config for every parameter',
+    description=(
+        'Per-run overrides by settings section, e.g. {"risk": {"atr_mult": 3}}; see /api/config for every parameter'
+    ),
 )
 _SIGNAL_PARAMS = Field(
     default_factory=dict,
@@ -118,7 +120,8 @@ class BacktestIn(BacktestSetupIn):
 
 class SweepAxisIn(_Request):
     target: SweepTarget = Field(
-        description="What holds the parameter: the signal, the entry rule, an exit rule, an entry filter or a settings section"
+        description="What holds the parameter: the signal, the entry rule, an exit rule, an entry filter "
+        "or a settings section"
     )
     owner: str | None = Field(
         None, description="The exit rule, entry filter or settings section; omit for the signal and the entry rule"
@@ -137,11 +140,13 @@ class WalkForwardIn(SweepIn):
 
     scheme: WindowScheme = Field(
         WindowScheme.ROLLING,
-        description="rolling: in-sample windows of fixed length that slide along; anchored: in-sample windows from the first bar",
+        description="rolling: in-sample windows of fixed length that slide along; "
+        "anchored: in-sample windows from the first bar",
     )
     metric: str = Field(
         DEFAULT_SELECTION_METRIC,
-        description="Each in-sample window picks the combination with the highest value of this metric; /api/config lists them",
+        description="Each in-sample window picks the combination with the highest value of this metric; "
+        "/api/config lists them",
     )
 
 
@@ -166,7 +171,8 @@ class PortfolioIn(UniverseIn, BacktestRulesIn):
     )
     benchmark: str | None = Field(
         None,
-        description="Benchmark for buy & hold and for the market filter; omit for the watchlist's, else the configured benchmark",
+        description="Benchmark for buy & hold and for the market filter; omit for the watchlist's, "
+        "else the configured benchmark",
     )
 
 
@@ -291,7 +297,8 @@ class FilterRuleOut(RuleOut):
 
 class PriorityRuleOut(RuleOut):
     needs_scan: bool = Field(
-        description="True when the rule reads the scanner's settings (scoring, trend, scan.fresh_bars), which a run can override"
+        description="True when the rule reads the scanner's settings (scoring, trend, scan.fresh_bars), "
+        "which a run can override"
     )
 
 
@@ -658,8 +665,8 @@ class WalkForwardWindowOut(WindowPickOut):
         "position of the window before was still open; null when the window had no part of its own"
     )
     traded_to: str | None = Field(
-        description="The bar where the next window took over: the next window's first bar, or later while a position of "
-        "this window was still open; the last bar for the last window; null when the window had no part of its own"
+        description="The bar where the next window took over: the next window's first bar, or later while a position "
+        "of this window was still open; the last bar for the last window; null when the window had no part of its own"
     )
     out_of_sample: MetricsOut | None = Field(
         description="Of the window's own part of the stitched curve; null without one"

@@ -96,7 +96,8 @@ class TickerOrders:
             self._manage_exits(index)
             return
         if self._entry_order is not None:
-            assert self._plan is not None and self._signal is not None
+            assert self._plan is not None
+            assert self._signal is not None
             if index - self._signal[0] < self._plan.valid_bars:
                 return
             self._strategy.cancel(self._entry_order)
@@ -192,7 +193,9 @@ class TickerOrders:
             self._record(last_date, self._data.close[0], 0.0, ExitReason.OPEN)
 
     def _record(self, exit_date: pd.Timestamp, exit_price: float, exit_commission: float, reason: str) -> None:
-        assert self._plan is not None and self._fills and self._signal is not None
+        assert self._plan is not None
+        assert self._fills
+        assert self._signal is not None
         entry_date, _, unit_size, _ = self._fills[0]
         size = sum(fill[2] for fill in self._fills)
         entry_price = sum(fill[1] * fill[2] for fill in self._fills) / size

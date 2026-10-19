@@ -6,8 +6,8 @@ import math
 import numpy as np
 import pandas as pd
 import pytest
-from tests.synthetic import random_walk
 
+from tests.synthetic import random_walk
 from tradescan.backtest.exits import (
     BreakevenStop,
     ChannelStop,
@@ -132,7 +132,9 @@ def test_supertrend_exit_follows_the_direction_against_the_trade():
     long, short = (np.array(_exits(SupertrendExit(), bars, side)) for side in (Direction.LONG, Direction.SHORT))
     np.testing.assert_array_equal(long, direction == -1)
     np.testing.assert_array_equal(short, direction == 1)
-    assert long.any() and short.any() and not (long | short)[np.isnan(direction)].any()
+    assert long.any()
+    assert short.any()
+    assert not (long | short)[np.isnan(direction)].any()
 
 
 def test_failed_breakout_exit_checks_the_first_closes_against_the_reference():

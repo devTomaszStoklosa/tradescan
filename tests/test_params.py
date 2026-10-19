@@ -3,8 +3,8 @@ from dataclasses import fields
 from pathlib import Path
 
 import pytest
-from tests.synthetic import random_walk
 
+from tests.synthetic import random_walk
 from tradescan.backtest.entries import entry_rules
 from tradescan.backtest.exits import exit_rules
 from tradescan.backtest.filters import entry_filters
@@ -73,7 +73,8 @@ def _assert_description_shows_every_parameter(obj, name):
         allowed = {"g", ".0%"} if kinds[key] is ParamKind.FLOAT else {""}
         assert format_spec in allowed, f"{name}: {{{key}:{format_spec}}}"
     text = obj.describe()
-    assert "{" not in text and "}" not in text
+    assert "{" not in text
+    assert "}" not in text
 
 
 @pytest.mark.parametrize("name", ALL_SIGNALS)
@@ -92,7 +93,8 @@ def test_rule_descriptions_show_every_parameter_in_a_format_the_ui_renders(rule)
 def test_signal_overrides_are_validated_and_leave_the_default_untouched():
     signal = default_registry.create("connors_rsi2_long")
     changed = with_overrides(signal, {"oversold": 15, "rsi_period": 3.0}, owner="connors_rsi2_long")
-    assert (changed.oversold, changed.rsi_period) == (15.0, 3) and isinstance(changed.rsi_period, int)
+    assert (changed.oversold, changed.rsi_period) == (15.0, 3)
+    assert isinstance(changed.rsi_period, int)
     assert changed.describe().startswith("RSI(3) < 15 while price is above SMA(200)")
     assert signal.oversold == 10.0
     for values, message in [
@@ -130,7 +132,8 @@ def test_list_and_weight_parameters():
     )
     assert settings.risk.targets_r == (1.5,)
     assert settings.trend.rs_periods == (21, 63)
-    assert settings.scoring.family_weights["breakout"] == 3.0 and settings.scoring.family_weights["trend"] == 1.0
+    assert settings.scoring.family_weights["breakout"] == 3.0
+    assert settings.scoring.family_weights["trend"] == 1.0
     assert settings.scoring.signal_weights == {"golden_cross": 2.0}
     assert Settings().scoring.family_weights["breakout"] == 1.5
     for overrides, message in [
@@ -175,7 +178,8 @@ def test_rule_catalog_builds_validated_rules():
     catalog = RuleCatalog()
     assert catalog.build() == TradeRules()
     rules = catalog.build(RuleChoice("stop", {"offset_atr": 0.25}), [RuleChoice("target", {"target_r": 3})])
-    assert rules.entry.offset_atr == 0.25 and [rule.target_r for rule in rules.exits] == [3.0]
+    assert rules.entry.offset_atr == 0.25
+    assert [rule.target_r for rule in rules.exits] == [3.0]
     assert catalog.build(exits=[]).exits == ()
     for entry, exits, message in [
         (RuleChoice("nope"), None, "Unknown entry rule 'nope'. Use: next_open, stop, limit"),

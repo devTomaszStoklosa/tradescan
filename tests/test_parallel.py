@@ -1,5 +1,4 @@
 from tests.synthetic import FakeProvider, random_walk
-
 from tradescan.backtest.edge import EdgeSampler, combine_samples, edge_samples
 from tradescan.config import Settings
 from tradescan.parallel import ProcessRunner, SequentialRunner
@@ -31,7 +30,7 @@ def test_multi_horizon_samples_match_single_horizon():
     df = FRAMES["AAA"]
     signal = default_registry.create("donchian_breakout")
     together = EdgeSampler((signal,), (5, 10, 20))(df)[0]
-    for sample, horizon in zip(together, (5, 10, 20)):
+    for sample, horizon in zip(together, (5, 10, 20), strict=True):
         alone = edge_samples(df, signal, (horizon,))[0]
         assert combine_samples(signal.name, horizon, [sample]) == combine_samples(signal.name, horizon, [alone])
 

@@ -3,8 +3,8 @@ from dataclasses import replace
 import numpy as np
 import pandas as pd
 import pytest
-from tests.synthetic import FixedSignal, RatchetStop, random_walk
 
+from tests.synthetic import FixedSignal, RatchetStop, random_walk
 from tradescan.backtest.base import BacktestConfig, ExitReason, Fill
 from tradescan.backtest.entries import LimitEntry, StopEntry
 from tradescan.backtest.exits import BreakevenStop, OpenTrade, TargetExit, TimeExit, TrailingStop
@@ -58,7 +58,8 @@ def test_units_are_added_every_step_up_to_the_max_and_the_stop_follows_the_last_
     df = _bars(RISING)
     result = _run(engine, df)
     (trade,) = result.trades
-    assert trade.adds == (Fill(df.index[22], 102.0), Fill(df.index[23], 104.0)) and trade.units == 3
+    assert trade.adds == (Fill(df.index[22], 102.0), Fill(df.index[23], 104.0))
+    assert trade.units == 3
     assert (trade.entry_date, trade.entry_price, trade.size) == (df.index[21], 102.0, 750)
     assert (trade.exit_date, trade.exit_reason, trade.exit_price) == (df.index[25], ExitReason.STOP, 100.0)
     assert trade.pnl == pytest.approx(250 * ((100 - 100) + (100 - 102) + (100 - 104)))
@@ -91,7 +92,8 @@ def test_exit_rules_close_the_whole_position_and_measure_from_the_first_unit(eng
     rules = TradeRules(exits=(TargetExit(target_r=2.0),))
     (trade,) = _run(engine, df, config=replace(NO_COSTS, max_units=2), rules=rules).trades
     assert (trade.exit_reason, trade.exit_price, trade.units) == (ExitReason.TARGET, 108.0, 2)
-    assert trade.pnl == pytest.approx(250 * (8 + 6)) and trade.r_multiple == pytest.approx(3.5)
+    assert trade.pnl == pytest.approx(250 * (8 + 6))
+    assert trade.r_multiple == pytest.approx(3.5)
 
     timed = _run(engine, _bars(RISING), rules=TradeRules(exits=(TimeExit(max_hold_bars=3),))).trades[0]
     assert (timed.exit_reason, timed.exit_date, timed.units) == (ExitReason.TIME, _bars({}).index[24], 3)
@@ -102,7 +104,8 @@ def test_shorts_add_below_the_last_fill_and_move_the_stop_down(engine):
         22: (100.0, 100.5, 97.5, 98.0), 23: (98.0, 98.5, 95.5, 96.0), 25: (96.0, 101.0, 95.5, 100.0),
     })  # fmt: skip
     (trade,) = _run(engine, df, side=Direction.SHORT).trades
-    assert [fill.price for fill in trade.adds] == [98.0, 96.0] and trade.direction is Direction.SHORT
+    assert [fill.price for fill in trade.adds] == [98.0, 96.0]
+    assert trade.direction is Direction.SHORT
     assert (trade.exit_reason, trade.exit_price) == (ExitReason.STOP, 100.0)
     assert trade.pnl == pytest.approx(250 * ((100 - 100) + (98 - 100) + (96 - 100)))
 
@@ -110,10 +113,11 @@ def test_shorts_add_below_the_last_fill_and_move_the_stop_down(engine):
 def test_an_open_position_keeps_every_unit_marked_to_the_last_close(engine):
     df = _bars(
         {22: (100.0, 102.5, 99.5, 102.0), 23: (102.0, 104.5, 101.5, 104.0)}
-        | {i: (104.0, 105.0, 103.0, 104.0) for i in range(24, 30)}
+        | dict.fromkeys(range(24, 30), (104.0, 105.0, 103.0, 104.0))
     )
     (trade,) = _run(engine, df).trades
-    assert trade.exit_reason == ExitReason.OPEN and trade.units == 3
+    assert trade.exit_reason == ExitReason.OPEN
+    assert trade.units == 3
     assert trade.pnl == pytest.approx(250 * (4 + 2 + 0))
 
 
@@ -130,7 +134,8 @@ def test_commission_and_slippage_are_paid_on_every_unit(engine):
     fills = [100.1]
     for _ in range(2):
         fills.append((fills[-1] + 2.0) * 1.001)
-    assert trade.units == 3 and trade.entry_price == pytest.approx(sum(fills) / 3)
+    assert trade.units == 3
+    assert trade.entry_price == pytest.approx(sum(fills) / 3)
     exit_price = (fills[-1] - 4.0) * 0.999  # the stop moved from the last fill, slipped against the sell
     commissions = 0.001 * 250 * (sum(fills) + 3 * exit_price)
     assert trade.exit_price == pytest.approx(exit_price)
@@ -140,11 +145,14 @@ def test_commission_and_slippage_are_paid_on_every_unit(engine):
 def test_units_ask_for_their_add_and_their_moved_stop():
     trade = OpenTrade(Direction.LONG, entry_index=5, entry_price=100.0, reference=99.0, stop=95.0, risk=4.0)
     units = Pyramiding(max_units=3, add_every_atr=0.5).start(trade, atr=2.0)
-    assert units.add_level() == 101.0 and units.orders(5).stop is None
+    assert units.add_level() == 101.0
+    assert units.orders(5).stop is None
     units.add(7, 101.5)
     assert (units.add_level(), units.orders(7).stop, units.count) == (102.5, 97.5, 2)
     units.add(9, 102.5)
-    assert units.add_level() is None and units.orders(9).stop == 98.5 and units.adds == [(7, 101.5), (9, 102.5)]
+    assert units.add_level() is None
+    assert units.orders(9).stop == 98.5
+    assert units.adds == [(7, 101.5), (9, 102.5)]
 
 
 def test_trades_export_counts_the_units_and_lists_the_adds():
@@ -153,7 +161,8 @@ def test_trades_export_counts_the_units_and_lists_the_adds():
         VectorizedEngine().run("TEST", df, FixedSignal(positions=(20,)), NO_COSTS, STOP_ONLY).trades
     )
     days = [day.date().isoformat() for day in df.index[22:24]]
-    assert frame.loc[0, "units"] == 3 and frame.loc[0, "adds"] == f"{days[0]} 102; {days[1]} 104"
+    assert frame.loc[0, "units"] == 3
+    assert frame.loc[0, "adds"] == f"{days[0]} 102; {days[1]} 104"
 
 
 # --- Both engines give identical pyramided trades -------------------------------------------------
@@ -190,7 +199,7 @@ def test_engines_match_with_pyramiding(rules, signal_name, config):
     slow = _cerebro().run("RW", df, signal, config, rules)
     assert len(fast.trades) == len(slow.trades) > 0
     assert any(trade.adds for trade in fast.trades), "the check needs pyramided positions"
-    for left, right in zip(fast.trades, slow.trades):
+    for left, right in zip(fast.trades, slow.trades, strict=True):
         assert (left.entry_date, left.exit_date, left.exit_reason, left.size) == (
             right.entry_date,
             right.exit_date,

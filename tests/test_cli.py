@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 import pytest
-from tests.synthetic import FakeProvider, random_walk
 
+from tests.synthetic import FakeProvider, random_walk
 from tradescan import cli
 
 
@@ -80,7 +80,8 @@ def test_backtest_entry_and_exit_options(provider, tmp_path):
     )
     assert code == 0
     trades = pd.read_csv(target)
-    assert not trades.empty and set(trades["exit_reason"]) <= {"stop", "time", "open"}
+    assert not trades.empty
+    assert set(trades["exit_reason"]) <= {"stop", "time", "open"}
     assert cli.main(["backtest", "AAA", "connors_rsi2_long", "--exits", "none"]) == 0
 
 
@@ -92,7 +93,8 @@ def test_backtest_pyramiding_options(provider, tmp_path, capsys):
     assert code == 0
     assert "pyramiding up to 3 units 1 ATR apart" in " ".join(capsys.readouterr().out.split())
     trades = pd.read_csv(target)
-    assert trades["units"].max() > 1 and trades["units"].max() <= 3
+    assert trades["units"].max() > 1
+    assert trades["units"].max() <= 3
     assert cli.main(["portfolio-backtest", "donchian_breakout", "-t", "AAA,BBB", "--max-units", "2"]) == 2
     assert "does not pyramid" in capsys.readouterr().out
 
@@ -100,7 +102,8 @@ def test_backtest_pyramiding_options(provider, tmp_path, capsys):
 def test_backtest_filter_options(provider, capsys):
     assert cli.main(["backtest", "AAA", "connors_rsi2_long", "--filters", "trend,market", "--benchmark", "bbb"]) == 0
     output = capsys.readouterr().out
-    assert "filters: Close above SMA(200)" in output and "(benchmark BBB)" in output
+    assert "filters: Close above SMA(200)" in output
+    assert "(benchmark BBB)" in output
     assert provider.calls[-1][0] == ("AAA", "BBB")
     assert cli.main(["backtest", "AAA", "connors_rsi2_long", "--filters", "nope"]) == 2
     assert cli._axis("filter.trend.period=100:200:50").key == "filter.trend.period"
@@ -120,7 +123,9 @@ def test_sweep_exports_every_combination(provider, tmp_path, capsys):
     ])  # fmt: skip
     assert code == 0
     output = capsys.readouterr().out
-    assert "8 combinations" in output and "Out-of-sample (last 30%)" in output and "oversold=15" in output
+    assert "8 combinations" in output
+    assert "Out-of-sample (last 30%)" in output
+    assert "oversold=15" in output
     cells = pd.read_csv(target)
     assert list(cells["signal.oversold"]) == [5, 5, 10, 10, 15, 15, 20, 20]
     assert list(cells["exit.target.target_r"]) == [1, 2.5] * 4
@@ -130,17 +135,19 @@ def test_sweep_exports_every_combination(provider, tmp_path, capsys):
 def test_walk_forward_prints_every_window_and_exports_them(provider, tmp_path, capsys):
     target = tmp_path / "windows.csv"
     code = cli.main([
-        "walk-forward", "AAA", "connors_rsi2_long", "--axis", "signal.oversold=5:20:5", "--axis", "exit.target.target_r=1.5,2.5",
-        "--windows", "4", "--in-sample-ratio", "2", "--min-trades", "5", "--metric", "expectancy_r", "--export", str(target),
+        "walk-forward", "AAA", "connors_rsi2_long",
+        "--axis", "signal.oversold=5:20:5", "--axis", "exit.target.target_r=1.5,2.5",
+        "--windows", "4", "--in-sample-ratio", "2", "--min-trades", "5", "--metric", "expectancy_r",
+        "--export", str(target),
     ])  # fmt: skip
     assert code == 0
     output = " ".join(capsys.readouterr().out.split())  # without the console's line breaks
-    assert (
-        "8 combinations" in output
-        and "4 rolling windows of 250 bars, each after an in-sample window of 500 bars" in output
-    )
-    assert "highest expectancy_r with at least 5 trades" in output and "Walk-forward efficiency" in output
-    assert "unchanged setup" in output and "Next setting: " in output
+    assert "8 combinations" in output
+    assert "4 rolling windows of 250 bars, each after an in-sample window of 500 bars" in output
+    assert "highest expectancy_r with at least 5 trades" in output
+    assert "Walk-forward efficiency" in output
+    assert "unchanged setup" in output
+    assert "Next setting: " in output
     windows = pd.read_csv(target)
     assert list(windows["window"]) == [1, 2, 3, 4]
     assert {
@@ -167,8 +174,11 @@ def test_watchlist_backtest_ranks_tickers_and_exports_every_period(provider, tmp
     ])  # fmt: skip
     assert code == 0
     output = " ".join(capsys.readouterr().out.split())  # without the console's line breaks
-    assert "No data for: ZZZ" in output and "3 tickers of custom" in output and "(benchmark SPY)" in output
-    assert "2 of 3 tickers, best sharpe first" in output and "Spread of sharpe across tickers" in output
+    assert "No data for: ZZZ" in output
+    assert "3 tickers of custom" in output
+    assert "(benchmark SPY)" in output
+    assert "2 of 3 tickers, best sharpe first" in output
+    assert "Spread of sharpe across tickers" in output
     assert "trades pooled, in R" in output
     assert provider.calls[-1][0] == ("AAA", "BBB", "CCC", "ZZZ", "SPY")
     rows = pd.read_csv(target)
@@ -181,17 +191,21 @@ def test_watchlist_backtest_ranks_tickers_and_exports_every_period(provider, tmp
 def test_portfolio_backtest_shares_one_equity_and_exports_every_engines_trades(provider, tmp_path, capsys):
     target = tmp_path / "trades.csv"
     code = cli.main([
-        "portfolio-backtest", "connors_rsi2_long", "-t", "AAA,BBB,CCC,ZZZ", "--max-positions", "2", "--max-exposure", "50",
-        "--priority", "momentum", "--engine", "both", "--top", "2", "--export", str(target),
+        "portfolio-backtest", "connors_rsi2_long", "-t", "AAA,BBB,CCC,ZZZ",
+        "--max-positions", "2", "--max-exposure", "50", "--priority", "momentum", "--engine", "both",
+        "--top", "2", "--export", str(target),
     ])  # fmt: skip
     assert code == 0
     output = " ".join(capsys.readouterr().out.split())
-    assert "No data for: ZZZ" in output and "3 tickers of custom with one equity" in output
+    assert "No data for: ZZZ" in output
+    assert "3 tickers of custom with one equity" in output
     assert "at most 2 positions and 50% exposure, priority: Return from 252 bars ago to 21 bars ago" in output
-    assert "buy & hold is SPY's" in output and "2 of 3 tickers by P&L (vectorized)" in output
+    assert "buy & hold is SPY's" in output
+    assert "2 of 3 tickers by P&L (vectorized)" in output
     assert provider.calls[-1][0] == ("AAA", "BBB", "CCC", "ZZZ", "SPY")
     trades = pd.read_csv(target)
-    assert set(trades["engine"]) == {"vectorized", "cerebro"} and set(trades["ticker"]) <= {"AAA", "BBB", "CCC"}
+    assert set(trades["engine"]) == {"vectorized", "cerebro"}
+    assert set(trades["ticker"]) <= {"AAA", "BBB", "CCC"}
     vectorized, cerebro = (
         trades[trades["engine"] == engine].drop(columns="engine") for engine in ("vectorized", "cerebro")
     )
@@ -216,18 +230,24 @@ def test_rotation_backtest_holds_the_strongest_tickers_and_exports_the_trades(pr
     target = tmp_path / "trades.csv"
     code = cli.main([
         "rotation-backtest", "-t", "AAA,BBB,CCC,ZZZ", "--rank", "relative_strength", "--holdings", "2",
-        "--rebalance", "weekly", "--weighting", "inverse_volatility", "--absolute-lookback", "63", "--safe-asset", "spy",
+        "--rebalance", "weekly", "--weighting", "inverse_volatility",
+        "--absolute-lookback", "63", "--safe-asset", "spy",
         "--commission-pct", "0.05", "--top", "2", "--export", str(target),
     ])  # fmt: skip
     assert code == 0
     output = " ".join(capsys.readouterr().out.split())
-    assert "No data for: ZZZ" in output and "Top 2 of 3 tickers of custom, rebalanced weekly" in output
-    assert "a pick at or below 0 over 63 bars goes to SPY" in output and "Costs 0.05% + 0.05% slippage" in output
-    assert "buy & hold is SPY's" in output and "would pick" in output and "% in SPY, " in output
+    assert "No data for: ZZZ" in output
+    assert "Top 2 of 3 tickers of custom, rebalanced weekly" in output
+    assert "a pick at or below 0 over 63 bars goes to SPY" in output
+    assert "Costs 0.05% + 0.05% slippage" in output
+    assert "buy & hold is SPY's" in output
+    assert "would pick" in output
+    assert "% in SPY, " in output
     assert "2 of 4 tickers by P&L" in output
     assert provider.calls[-1][0] == ("AAA", "BBB", "CCC", "ZZZ", "SPY")
     trades = pd.read_csv(target)
-    assert set(trades["engine"]) == {"vectorized"} and set(trades["ticker"]) <= {"AAA", "BBB", "CCC", "SPY"}
+    assert set(trades["engine"]) == {"vectorized"}
+    assert set(trades["ticker"]) <= {"AAA", "BBB", "CCC", "SPY"}
     assert set(trades["exit_reason"]) <= {"rebalance", "open"}
     with pytest.raises(SystemExit):
         cli.main(["rotation-backtest", "-t", "AAA", "--rank", "score"])

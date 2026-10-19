@@ -1,8 +1,10 @@
+from itertools import pairwise
+
 import numpy as np
 import pandas as pd
 import pytest
-from tests.synthetic import AdverseCloseExit, FixedSignal, RatchetStop, random_walk
 
+from tests.synthetic import AdverseCloseExit, FixedSignal, RatchetStop, random_walk
 from tradescan.backtest.base import BacktestConfig, ExitReason
 from tradescan.backtest.entries import LimitEntry, NextOpenEntry, StopEntry, entry_rules
 from tradescan.backtest.exits import (
@@ -70,7 +72,8 @@ def test_long_target_hit(engine):
         108.0,
         250,
     )
-    assert trade.pnl == pytest.approx(2_000.0) and trade.r_multiple == pytest.approx(2.0)
+    assert trade.pnl == pytest.approx(2_000.0)
+    assert trade.r_multiple == pytest.approx(2.0)
     assert result.equity.iloc[-1] == pytest.approx(102_000.0)
     assert result.equity.iloc[22] == pytest.approx(102_000.0)
 
@@ -100,7 +103,8 @@ def test_time_exit_at_open_after_max_hold_and_signals_ignored_while_in_trade(eng
     result = _run(engine, df, positions=(20, 22))
     (trade,) = result.trades
     assert trade.exit_reason == ExitReason.TIME
-    assert trade.exit_date == df.index[26] and trade.exit_price == 102.0
+    assert trade.exit_date == df.index[26]
+    assert trade.exit_price == 102.0
 
 
 def test_short_target_and_open_trade_at_end(engine):
@@ -110,7 +114,8 @@ def test_short_target_and_open_trade_at_end(engine):
     assert trade.pnl == pytest.approx(2_000.0)
 
     last = _run(engine, _bars({}), positions=(27,)).trades[0]
-    assert last.exit_reason == ExitReason.OPEN and not last.is_closed
+    assert last.exit_reason == ExitReason.OPEN
+    assert not last.is_closed
 
 
 def test_without_target_and_time_exit_only_the_stop_closes_the_trade(engine):
@@ -131,7 +136,8 @@ def test_stop_entry_fills_at_its_level_or_at_a_gap_open(engine):
         engine, _bars({21: (100.0, 103.0, 99.0, 102.5), 23: (104.0, 111.0, 103.0, 110.0)}), rules=rules
     ).trades[0]
     assert (touched.entry_price, touched.exit_reason, touched.exit_price) == (102.0, ExitReason.TARGET, 110.0)
-    assert touched.size == 250 and touched.r_multiple == pytest.approx(2.0)
+    assert touched.size == 250
+    assert touched.r_multiple == pytest.approx(2.0)
 
     df = _bars({21: (105.0, 106.0, 104.0, 105.0)})
     gapped = _run(engine, df, rules=rules).trades[0]
@@ -143,7 +149,8 @@ def test_stop_entry_fills_at_its_level_or_at_a_gap_open(engine):
 def test_short_stop_entry_sells_below_the_signal_bars_low(engine):
     rules = TradeRules(entry=StopEntry(offset_atr=0.5), exits=(TargetExit(),))
     trade = _run(engine, _bars({21: (100.0, 100.5, 97.0, 97.5)}), side=Direction.SHORT, rules=rules).trades[0]
-    assert trade.entry_price == 98.0 and trade.direction is Direction.SHORT
+    assert trade.entry_price == 98.0
+    assert trade.direction is Direction.SHORT
 
 
 def test_limit_entry_fills_at_its_level_or_better(engine):
@@ -169,7 +176,8 @@ def test_trailing_stop_exits_at_the_level_set_by_the_last_close(engine):
     level = 111.0 - Bars.from_frame(df, NO_COSTS.atr_period).atr[23]
     (trade,) = _run(engine, df, rules=TradeRules(exits=(TrailingStop(atr_mult=1.0),))).trades
     assert (trade.exit_reason, trade.exit_date) == ("trailing", df.index[24])
-    assert trade.exit_price == pytest.approx(level) and trade.r_multiple == pytest.approx((level - 100.0) / 4)
+    assert trade.exit_price == pytest.approx(level)
+    assert trade.r_multiple == pytest.approx((level - 100.0) / 4)
 
     # The breakeven stop (at 100 from bar 23 on) is looser, so the trailing stop still closes the trade.
     rules = TradeRules(exits=(BreakevenStop(), TrailingStop(atr_mult=1.0)))
@@ -215,7 +223,8 @@ def test_rsi_exit_closes_a_short_once_rsi_falls_to_the_mirrored_level(engine):
     df = _bars({22: (100.0, 100.5, 96.5, 97.0), 23: (96.0, 97.0, 95.5, 96.5)})
     (trade,) = _run(engine, df, side=Direction.SHORT, rules=TradeRules(exits=(RsiExit(period=2, level=70),))).trades
     assert (trade.exit_reason, trade.exit_date, trade.exit_price) == ("rsi", df.index[23], 96.0)
-    assert trade.pnl == pytest.approx(1_000.0) and trade.r_multiple == pytest.approx(1.0)
+    assert trade.pnl == pytest.approx(1_000.0)
+    assert trade.r_multiple == pytest.approx(1.0)
 
 
 # --- Breakout exits ------------------------------------------------------------------------------------
@@ -241,7 +250,8 @@ def test_no_progress_exit_closes_a_short_that_has_not_gained_enough(engine):
     rules = TradeRules(exits=(NoProgressExit(after_bars=3, min_r=0.5),))
     (trade,) = _run(engine, df, side=Direction.SHORT, rules=rules).trades
     assert (trade.exit_reason, trade.exit_date, trade.exit_price) == ("no_progress", df.index[24], 99.5)
-    assert trade.pnl == pytest.approx(125.0) and trade.r_multiple == pytest.approx(0.125)
+    assert trade.pnl == pytest.approx(125.0)
+    assert trade.r_multiple == pytest.approx(0.125)
 
     rules = TradeRules(exits=(NoProgressExit(after_bars=3, min_r=0.25),))
     assert _run(engine, df, side=Direction.SHORT, rules=rules).trades[0].exit_reason == ExitReason.OPEN
@@ -281,7 +291,7 @@ def test_costs_reduce_pnl_and_equity_matches_trades():
     assert len(result.trades) > 10
     closed = sum(trade.pnl for trade in result.trades)
     assert result.equity.iloc[-1] == pytest.approx(config.initial_equity + closed)
-    for previous, current in zip(result.trades, result.trades[1:]):
+    for previous, current in pairwise(result.trades):
         assert current.signal_date >= previous.exit_date
 
 
@@ -290,12 +300,14 @@ def test_metrics_on_known_values():
     curve = compute_metrics(equity, [], equity, bars_per_year=252)
     assert curve.max_drawdown_pct == pytest.approx(-10.0)
     assert curve.total_return_pct == pytest.approx(20.0)
-    assert curve.trades == 0 and np.isnan(curve.win_rate_pct)
+    assert curve.trades == 0
+    assert np.isnan(curve.win_rate_pct)
 
     df = _bars({22: (100.0, 109.0, 99.0, 105.0)})
     result = _run(VectorizedEngine(), df)
     metrics = compute_metrics(result.equity, result.trades, df["close"], bars_per_year=252)
-    assert metrics.trades == 1 and metrics.win_rate_pct == 100.0
+    assert metrics.trades == 1
+    assert metrics.win_rate_pct == 100.0
     assert metrics.profit_factor == float("inf")
     assert metrics.expectancy_r == pytest.approx(2.0)
     assert metrics.exposure_pct == pytest.approx(100.0 / 30)
@@ -313,7 +325,7 @@ def _assert_engines_match(df, signal, config, rules=None):
     fast = VectorizedEngine().run("RW", df, signal, config, rules)
     slow = _cerebro().run("RW", df, signal, config, rules)
     assert len(fast.trades) == len(slow.trades) > 0, signal
-    for left, right in zip(fast.trades, slow.trades):
+    for left, right in zip(fast.trades, slow.trades, strict=True):
         assert (left.entry_date, left.exit_date, left.exit_reason) == (
             right.entry_date,
             right.exit_date,

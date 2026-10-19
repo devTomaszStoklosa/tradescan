@@ -164,7 +164,9 @@ def sweep_cells_frame(report: SweepReport) -> pd.DataFrame:
     """Every combination with both periods' metrics, one row each (for export)."""
     records = []
     for cell in report.cells:
-        record: dict[str, object] = {item.axis.key: value for item, value in zip(report.parameters, cell.values)}
+        record: dict[str, object] = {
+            item.axis.key: value for item, value in zip(report.parameters, cell.values, strict=True)
+        }
         record["error"] = cell.error or ""
         if cell.periods is not None:
             for prefix, metrics in (("is", cell.periods.in_sample), ("oos", cell.periods.out_of_sample)):
@@ -178,7 +180,7 @@ def _picked(report: WalkForwardReport, pick: WindowPick) -> str:
     if pick.combination is None:
         return "none qualified"
     values = report.combinations[pick.combination].values
-    return ", ".join(f"{item.axis.name}={value:g}" for item, value in zip(report.parameters, values))
+    return ", ".join(f"{item.axis.name}={value:g}" for item, value in zip(report.parameters, values, strict=True))
 
 
 def _dates(index: pd.DatetimeIndex, first: int, last: int) -> str:
@@ -243,7 +245,7 @@ def walk_forward_export_frame(report: WalkForwardReport) -> pd.DataFrame:
             "qualified": pick.qualified,
         }
         values = report.combinations[pick.combination].values if pick.combination is not None else no_pick
-        record.update({parameter.axis.key: value for parameter, value in zip(report.parameters, values)})
+        record.update({parameter.axis.key: value for parameter, value in zip(report.parameters, values, strict=True)})
         for prefix, metrics in (("is", pick.in_sample), ("oos", item.out_of_sample)):
             if metrics is not None:
                 record.update({f"{prefix}_{field.name}": getattr(metrics, field.name) for field in fields(metrics)})
@@ -309,7 +311,7 @@ def pooled_frame(report: WatchlistBacktestReport) -> pd.DataFrame:
 
 def _whole_counts(frame: pd.DataFrame, *columns: str) -> pd.DataFrame:
     """Counts kept as Python ints, so a row that also holds floats still shows them as whole numbers."""
-    return frame.astype({column: object for column in columns})
+    return frame.astype(dict.fromkeys(columns, object))
 
 
 def watchlist_export_frame(report: WatchlistBacktestReport) -> pd.DataFrame:

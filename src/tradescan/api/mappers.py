@@ -685,7 +685,7 @@ def chart_out(data: ChartData) -> schemas.ChartOut:
             schemas.Candle(
                 time=day(index), open=row.open, high=row.high, low=row.low, close=row.close, volume=row.volume
             )
-            for index, row in zip(bars.index, bars.itertuples(index=False))
+            for index, row in zip(bars.index, bars.itertuples(index=False), strict=True)
         ],
         sma_fast=points(data.sma_fast),
         sma_slow=points(data.sma_slow),

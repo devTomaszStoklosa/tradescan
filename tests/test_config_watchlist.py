@@ -22,7 +22,8 @@ def test_from_tickers_splits_commas():
 def test_bundled_watchlists_load():
     for name in ("us_large", "wig20", "etf", "crypto"):
         watchlist = load_watchlist(name, PROJECT_CONFIG / "watchlists")
-        assert watchlist.tickers and watchlist.benchmark
+        assert watchlist.tickers
+        assert watchlist.benchmark
 
 
 def test_missing_watchlist_lists_available(tmp_path):

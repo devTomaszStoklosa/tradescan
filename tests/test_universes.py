@@ -35,9 +35,11 @@ def test_update_writes_a_watchlist_and_reports_changes(tmp_path: Path):
     first = update_universe(
         SOURCE, tmp_path, fetch=lambda url: _page(["AAPL", "MSFT", "NVDA"]), today=lambda: date(2026, 10, 13)
     )
-    assert first.created and first.added == ()
+    assert first.created
+    assert first.added == ()
     watchlist = load_watchlist("demo", tmp_path)
-    assert watchlist.tickers == ("AAPL", "MSFT", "NVDA") and watchlist.benchmark == "SPY"
+    assert watchlist.tickers == ("AAPL", "MSFT", "NVDA")
+    assert watchlist.benchmark == "SPY"
     assert "2026-10-13" in (tmp_path / "demo.txt").read_text()
 
     second = update_universe(SOURCE, tmp_path, fetch=lambda url: _page(["AAPL", "MSFT", "AMD", "BRK.B"]))
@@ -47,7 +49,7 @@ def test_update_writes_a_watchlist_and_reports_changes(tmp_path: Path):
 
 def test_failed_update_keeps_the_existing_file(tmp_path: Path):
     (tmp_path / "demo.txt").write_text("# benchmark: SPY\nAAPL MSFT NVDA\n")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="only 1 members found"):
         update_universe(SOURCE, tmp_path, fetch=lambda url: _page(["AAPL"]))
     assert load_watchlist("demo", tmp_path).tickers == ("AAPL", "MSFT", "NVDA")
 

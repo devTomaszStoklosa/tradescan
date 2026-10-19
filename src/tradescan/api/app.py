@@ -36,13 +36,13 @@ from tradescan.data.provider import DataProvider
 from tradescan.parallel import TaskRunner
 from tradescan.services import EngineFactory, PortfolioEngineFactory, build_scorer, build_use_cases
 from tradescan.signals.registry import SignalRegistry, default_registry
-from tradescan.storage.database import Conflict, Database, NotFound
+from tradescan.storage.database import ConflictError, Database, NotFoundError
 from tradescan.storage.runs import PinnedRunStore
 from tradescan.storage.trades import TradeJournal
 
 ROUTERS = (
-    meta, signals, watchlists, scan, market, edge, backtest, sweep, walk_forward, watchlist_backtest, portfolio, rotation,
-    chart, runs, journal,
+    meta, signals, watchlists, scan, market, edge, backtest, sweep, walk_forward, watchlist_backtest,
+    portfolio, rotation, chart, runs, journal,
 )  # fmt: skip
 
 
@@ -89,12 +89,12 @@ def create_app(
     async def value_error(_: Request, error: ValueError) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": str(error)})
 
-    @app.exception_handler(NotFound)
-    async def not_found(_: Request, error: NotFound) -> JSONResponse:
+    @app.exception_handler(NotFoundError)
+    async def not_found(_: Request, error: NotFoundError) -> JSONResponse:
         return JSONResponse(status_code=404, content={"detail": str(error)})
 
-    @app.exception_handler(Conflict)
-    async def conflict(_: Request, error: Conflict) -> JSONResponse:
+    @app.exception_handler(ConflictError)
+    async def conflict(_: Request, error: ConflictError) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": str(error)})
 
     @app.exception_handler(ImportError)

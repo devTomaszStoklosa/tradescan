@@ -51,6 +51,7 @@ from tradescan.report.tables import (
     watchlist_rows_frame,
 )
 from tradescan.services import (
+    SWEEP_SECTIONS,
     BacktestRequest,
     EdgeRequest,
     MarketRequest,
@@ -58,7 +59,6 @@ from tradescan.services import (
     RotationRequest,
     ScanRequest,
     SignalFilter,
-    SWEEP_SECTIONS,
     SweepRequest,
     UseCases,
     WalkForwardRequest,
@@ -329,7 +329,8 @@ def cmd_backtest(args: argparse.Namespace, settings: Settings, report: ConsoleRe
         report.frame(
             periods_to_frame(result.runs),
             title=f"In-sample {split.in_sample[0].date()} to {split.in_sample[1].date()}, "
-            f"out-of-sample (last {split.oos_pct:g}%) {split.out_of_sample[0].date()} to {split.out_of_sample[1].date()}",
+            f"out-of-sample (last {split.oos_pct:g}%) "
+            f"{split.out_of_sample[0].date()} to {split.out_of_sample[1].date()}",
             caption="Each period starts with fresh equity; out-of-sample signals only fire from the split on",
             show_index=True,
         )
@@ -401,8 +402,9 @@ def cmd_walk_forward(args: argparse.Namespace, settings: Settings, report: Conso
     names = " x ".join(f"{item.axis.name} ({item.spec.label})" for item in result.parameters)
     longer = " or more" if plan.scheme is WindowScheme.ANCHORED else ""
     report.note(
-        f"{len(result.combinations)} combinations of {names} on {result.ticker} {signal.name} ({signal.direction.value}), "
-        f"vectorized engine: {walk.windows} {plan.scheme.value} windows of {first.out_of_sample.bars} bars, "
+        f"{len(result.combinations)} combinations of {names} on {result.ticker} "
+        f"{signal.name} ({signal.direction.value}), vectorized engine: "
+        f"{walk.windows} {plan.scheme.value} windows of {first.out_of_sample.bars} bars, "
         f"each after an in-sample window of {first.in_sample.bars} bars{longer}"
     )
     report.frame(
@@ -442,9 +444,9 @@ def cmd_watchlist_backtest(args: argparse.Namespace, settings: Settings, report:
     filters = "; ".join(rule.describe() for rule in rules.filters) or "none"
     benchmark = f" (benchmark {base.benchmark})" if base.benchmark else ""
     report.note(
-        f"{signal.name} ({signal.direction.value}) on {len(result.rows)} tickers of {universe.name}, vectorized engine. "
-        f"Filters: {filters}{benchmark}. Entry: {rules.entry.describe()}. Stop {config.atr_mult:g} ATR{_pyramiding(config)}, "
-        f"exits: {exits}. "
+        f"{signal.name} ({signal.direction.value}) on {len(result.rows)} tickers of {universe.name}, "
+        f"vectorized engine. Filters: {filters}{benchmark}. Entry: {rules.entry.describe()}. "
+        f"Stop {config.atr_mult:g} ATR{_pyramiding(config)}, exits: {exits}. "
         f"Risk {config.risk_pct:g}%/trade, costs {config.commission_pct:g}% + {config.slippage_pct:g}% slippage"
     )
     rows = watchlist_rows_frame(result, metric)
@@ -486,7 +488,8 @@ def cmd_portfolio_backtest(args: argparse.Namespace, settings: Settings, report:
     tickers = len(result.runs[0].contributions)
     report.note(
         f"{signal.name} ({signal.direction.value}) on {tickers} tickers of {universe.name} with one equity: at most "
-        f"{portfolio.max_positions} positions and {portfolio.max_exposure_pct:g}% exposure, priority: {result.priority.describe()}. "
+        f"{portfolio.max_positions} positions and {portfolio.max_exposure_pct:g}% exposure, "
+        f"priority: {result.priority.describe()}. "
         f"Filters: {filters}. Entry: {rules.entry.describe()}. Stop {config.atr_mult:g} ATR, exits: {exits}. "
         f"Risk {config.risk_pct:g}%/trade, costs {config.commission_pct:g}% + {config.slippage_pct:g}% slippage"
     )
@@ -497,7 +500,8 @@ def cmd_portfolio_backtest(args: argparse.Namespace, settings: Settings, report:
         title=f"{universe.name} portfolio, {calendar[0].date()} to {calendar[-1].date()}",
         caption=f"buy & hold is {result.benchmark}'s, exposure the share of days with a position"
         + (
-            f"; out-of-sample from {split.out_of_sample[0].date()} (last {split.oos_pct:g}%), each period with fresh equity"
+            f"; out-of-sample from {split.out_of_sample[0].date()} (last {split.oos_pct:g}%), "
+            "each period with fresh equity"
             if split
             else ""
         ),
@@ -567,7 +571,8 @@ def cmd_rotation_backtest(args: argparse.Namespace, settings: Settings, report: 
         caption=f"from the first rebalance with a pick; buy & hold is {result.benchmark}'s, exposure the share of days "
         "with a holding"
         + (
-            f"; out-of-sample from {split.out_of_sample[0].date()} (last {split.oos_pct:g}%), each period with fresh equity"
+            f"; out-of-sample from {split.out_of_sample[0].date()} (last {split.oos_pct:g}%), "
+            "each period with fresh equity"
             if split
             else ""
         ),

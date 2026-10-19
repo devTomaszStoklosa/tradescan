@@ -22,12 +22,12 @@ from typing import TypeVar
 
 import pandas as pd
 
+from tradescan.backtest.allocation import PortfolioConfig
 from tradescan.backtest.base import BacktestConfig, BacktestEngine, BacktestResult
 from tradescan.backtest.edge import EdgeSampler, EdgeStats, combine_samples
 from tradescan.backtest.metrics import Metrics, compute_metrics
 from tradescan.backtest.monte_carlo import MonteCarlo, MonteCarloConfig, closed_r_multiples, simulate
 from tradescan.backtest.oos import MIN_PERIOD_BARS, PeriodMetrics, SignalFrom, Split, run_periods, split_history
-from tradescan.backtest.allocation import PortfolioConfig
 from tradescan.backtest.pooled import BREAK_EVEN, PooledTrades, Spread, pool_trades, spread
 from tradescan.backtest.portfolio import (
     PortfolioEngine,
@@ -699,7 +699,7 @@ class SweepGridBuilder:
         combinations: list[Combination] = []
         for values in grid(checked):
             combination = setup
-            for axis, value in zip(checked, values):
+            for axis, value in zip(checked, values, strict=True):
                 combination = _APPLY[axis.target](combination, axis, value)
             try:
                 resolved = resolve_backtest(combination, self._settings, self._registry, self._rules)
@@ -747,7 +747,10 @@ class SweepUseCase:
                 f"with at least {MIN_PERIOD_BARS} bars in each period. Use a longer history."
             )
         results = sweep.per_combination(self._runner.map(SweepJob(ticker, df, split.index), sweep.cases))
-        cells = [SweepCell(item.values, periods, item.error) for item, periods in zip(sweep.combinations, results)]
+        cells = [
+            SweepCell(item.values, periods, item.error)
+            for item, periods in zip(sweep.combinations, results, strict=True)
+        ]
         return SweepReport(
             ticker=ticker, base=sweep.base, parameters=sweep.parameters, close=df["close"], split=split, cells=cells
         )
@@ -1029,7 +1032,9 @@ class WatchlistBacktestUseCase:
             raise ValueError(f"No data for any ticker of {universe.name}")
 
         runs = self._runner.map(TickerJob(base.signal, rules, base.config), frames)
-        rows = [TickerRow(ticker, df.index[0], df.index[-1], run) for (ticker, df), run in zip(frames, runs)]
+        rows = [
+            TickerRow(ticker, df.index[0], df.index[-1], run) for (ticker, df), run in zip(frames, runs, strict=True)
+        ]
         return WatchlistBacktestReport(
             universe=universe,
             base=base,

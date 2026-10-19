@@ -87,7 +87,7 @@ def _signal_points(df: pd.DataFrame, signals: Sequence[Signal], scorer: Scorer, 
 def _percentiles(values: Sequence[np.ndarray], days: Sequence[np.ndarray], calendar_length: int) -> list[np.ndarray]:
     """Each ticker's percentile rank (0-100) at each bar among the tickers with a value on that calendar day."""
     table = np.full((calendar_length, len(values)), np.nan)
-    for column, (value, day) in enumerate(zip(values, days)):
+    for column, (value, day) in enumerate(zip(values, days, strict=True)):
         table[day, column] = value
     ranks = pd.DataFrame(table).rank(axis=1, pct=True).to_numpy() * 100.0
     return [ranks[day, column] for column, day in enumerate(days)]
@@ -157,7 +157,7 @@ class RelativeStrengthPriority(TickerPriorityRule):
 
     def strength(self, bars: Bars) -> np.ndarray:
         total = np.zeros(len(bars))
-        for period, weight in zip(self.periods, self.weights):
+        for period, weight in zip(self.periods, self.weights, strict=True):
             total += weight * (bars.close / _shifted(bars.close, period) - 1.0)
         return total
 
@@ -222,7 +222,7 @@ class ScorePriority(PriorityRule):
                 scan.context.weekly_trends(close),
                 percentile,
             )
-            for ticker, bars, close, percentile in zip(inputs.tickers, inputs.bars, closes, percentiles)
+            for ticker, bars, close, percentile in zip(inputs.tickers, inputs.bars, closes, percentiles, strict=True)
         ]
 
 

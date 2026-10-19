@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
-from tests.synthetic import FakeProvider, make_ohlcv
 
+from tests.synthetic import FakeProvider, make_ohlcv
 from tradescan.data.cache import CachedProvider
 from tradescan.data.schema import normalize_ohlcv
 from tradescan.data.yfinance_provider import YFinanceProvider, split_download
@@ -21,7 +21,9 @@ def test_normalize_ohlcv_cleans_yahoo_style_frames():
     raw.iloc[0, 3] = float("nan")
     clean = normalize_ohlcv(raw)
     assert list(clean.columns) == ["open", "high", "low", "close", "volume"]
-    assert clean.index.tz is None and clean.index.is_monotonic_increasing and clean.index.is_unique
+    assert clean.index.tz is None
+    assert clean.index.is_monotonic_increasing
+    assert clean.index.is_unique
     assert len(clean) == 2
 
 
@@ -52,7 +54,8 @@ def test_yfinance_provider_batches_one_request():
     frames = YFinanceProvider(fake_download).history(["AAA", "BBB"], "1y", "1d")
     assert set(frames) == {"AAA", "BBB"}
     assert len(calls) == 1
-    assert calls[0][1]["auto_adjust"] is True and calls[0][1]["period"] == "1y"
+    assert calls[0][1]["auto_adjust"] is True
+    assert calls[0][1]["period"] == "1y"
 
 
 def test_cache_serves_fresh_files_and_refetches_stale(tmp_path):

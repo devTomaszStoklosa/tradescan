@@ -122,7 +122,7 @@ def _distribution(method: Method, r_multiples: np.ndarray, risk_pct: float, conf
     # Each method starts from the seed, so adding or reordering methods never changes another's results.
     rng = np.random.default_rng(config.seed)
     batches = [_paths(method.resample(rng, r_multiples, count), risk_pct) for count in _batches(config.simulations)]
-    final, drawdown, streak = (np.concatenate(values) for values in zip(*batches))
+    final, drawdown, streak = (np.concatenate(values) for values in zip(*batches, strict=True))
     return Distribution(
         method=method,
         final_return_pct=_percentiles(final),

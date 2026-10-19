@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 import pytest
-from tests.synthetic import FakeProvider, random_walk
 
+from tests.synthetic import FakeProvider, random_walk
 from tradescan.backtest.base import ExitReason, Trade
 from tradescan.backtest.monte_carlo import METHODS, MonteCarloConfig, closed_r_multiples, simulate
 from tradescan.config import Settings
@@ -18,7 +18,8 @@ def method(result, name):
 
 def test_the_actual_order_is_traded_with_fixed_fractional_sizing():
     result = simulate(np.array([1.0, -1.0, -1.0, 2.0]), 10.0, MonteCarloConfig(simulations=100))
-    assert result.trades == 4 and result.risk_pct == 10.0
+    assert result.trades == 4
+    assert result.risk_pct == 10.0
     assert result.actual.final_return_pct == pytest.approx((1.1 * 0.9 * 0.9 * 1.2 - 1) * 100)
     assert result.actual.max_drawdown_pct == pytest.approx((0.9 * 0.9 - 1) * 100)
     assert result.actual.longest_losing_streak == 2
@@ -29,7 +30,8 @@ def test_shuffling_keeps_the_final_return_and_spreads_the_drawdown():
     result = simulate(R, 1.0, MonteCarloConfig(simulations=500))
     shuffled = method(result, "shuffled")
     final = shuffled.final_return_pct
-    assert final.p5 == pytest.approx(result.actual.final_return_pct) and final.p95 == pytest.approx(final.p5)
+    assert final.p5 == pytest.approx(result.actual.final_return_pct)
+    assert final.p95 == pytest.approx(final.p5)
     drawdown = shuffled.max_drawdown_pct
     assert drawdown.p5 < drawdown.p25 < drawdown.p50 < drawdown.p75 < drawdown.p95 < 0
     streak = shuffled.longest_losing_streak
@@ -65,7 +67,8 @@ def test_ruin_is_a_drawdown_at_least_as_deep_as_the_ruin_level():
 
 def test_equity_stops_at_zero():
     result = simulate(np.array([-1.5, 3.0, 2.0]), 100.0, MonteCarloConfig(simulations=100, ruin_drawdown_pct=100.0))
-    assert result.actual.final_return_pct == -100.0 and result.actual.max_drawdown_pct == -100.0
+    assert result.actual.final_return_pct == -100.0
+    assert result.actual.max_drawdown_pct == -100.0
     assert method(result, "shuffled").ruin_pct == 100.0  # every order loses everything on the -1.5R trade
 
 
@@ -94,7 +97,8 @@ def test_backtest_simulates_every_engine_run_with_the_run_settings():
     report = use_cases.backtest.run(BacktestRequest(ticker="AAA", signal="connors_rsi2_long", settings=settings))
     run = report.runs[0]
     result = run.monte_carlo
-    assert result is not None and result.trades == run.metrics.trades
+    assert result is not None
+    assert result.trades == run.metrics.trades
     assert (result.config.simulations, result.config.ruin_drawdown_pct, result.config.seed) == (200, 30.0, 3)
     assert result.risk_pct == 2.0
     assert result == simulate(closed_r_multiples(run.result.trades), 2.0, result.config)
