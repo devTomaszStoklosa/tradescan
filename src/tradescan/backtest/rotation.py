@@ -189,7 +189,9 @@ def prepare(
     bars = [Bars.from_frame(df, config.atr_period) for df in every.values()]
     days = [calendar.get_indexer(df.index) for df in every.values()]
     ranked = len(frames)
-    scores = ranking.scores(PriorityInputs(tuple(frames), tuple(bars[:ranked]), tuple(days[:ranked]), calendar, Direction.LONG))
+    scores = ranking.scores(
+        PriorityInputs(tuple(frames), tuple(bars[:ranked]), tuple(days[:ranked]), calendar, Direction.LONG)
+    )
     absolute = MomentumPriority(lookback=rotation.absolute_lookback, skip=0) if rotation.checks_momentum else None
     assets = tuple(
         _Asset(
@@ -226,7 +228,9 @@ def targets(setup: RotationSetup, rotation: RotationConfig, day: int) -> Targets
         bar = asset.last_bar(day)
         if not asset.trading(bar, day):
             continue
-        candidate = _Candidate(position, float(asset.scores[bar]), float(asset.weights[bar]), float(asset.momentum[bar]))
+        candidate = _Candidate(
+            position, float(asset.scores[bar]), float(asset.weights[bar]), float(asset.momentum[bar])
+        )
         if math.isnan(candidate.score) or math.isnan(candidate.weight):
             continue
         if rotation.checks_momentum and math.isnan(candidate.momentum):
@@ -353,7 +357,9 @@ class VectorizedRotationEngine:
             owned = np.flatnonzero(shares).tolist()
             ended = [position for position in owned if assets[position].last_bar(day) + 1 >= len(assets[position].bars)]
             # What a ticker whose bars have ended holds cannot be sold, so the rest of the equity is shared out.
-            investable = cash + sum(shares[position] * setup.closes[day, position] for position in owned if position not in ended)
+            investable = cash + sum(
+                shares[position] * setup.closes[day, position] for position in owned if position not in ended
+            )
             for position in sorted(set(owned) | set(chosen.weights)):
                 asset, close = assets[position], setup.closes[day, position]
                 weight = chosen.weights.get(position, 0.0)
@@ -392,7 +398,9 @@ class VectorizedRotationEngine:
         for position, holding in open_holdings.items():
             asset = assets[position]
             trades.append(
-                PortfolioTrade(asset.ticker, holding.trade(asset.bars.dates[asset.last_bar(last)], setup.closes[last, position]))
+                PortfolioTrade(
+                    asset.ticker, holding.trade(asset.bars.dates[asset.last_bar(last)], setup.closes[last, position])
+                )
             )
 
         held = np.cumsum(share_changes, axis=0)

@@ -45,7 +45,9 @@ def _bars(high=None, low=None, atr=None, close=None) -> Bars:
     )
 
 
-def _stops(rule: ExitRule, bars: Bars, direction=Direction.LONG, entry_index=0, entry_price=100.0, reference=100.0, risk=4.0):
+def _stops(
+    rule: ExitRule, bars: Bars, direction=Direction.LONG, entry_index=0, entry_price=100.0, reference=100.0, risk=4.0
+):
     """The stop the rule asks for at every close from the entry bar on (None for no stop)."""
     trade = OpenTrade(direction, entry_index, entry_price, reference, reference - direction.sign * risk, risk)
     tracker = rule.prepare(bars, direction)(trade)
@@ -153,11 +155,19 @@ def test_no_progress_exit_checks_one_close_against_the_gain_from_the_fill():
     # Fill 100 (the reference, 99, is not used), risk 4. The third close from the entry on (bar 3) has gained 1,
     # which is below 0.5R (2) but not below 0.25R (1).
     long = _bars(close=[90, 100, 102, 101, 103])
-    assert _exits(NoProgressExit(after_bars=3, min_r=0.5), long, entry_index=1, reference=99.0) == [False, False, True, False]
+    assert _exits(NoProgressExit(after_bars=3, min_r=0.5), long, entry_index=1, reference=99.0) == [
+        False,
+        False,
+        True,
+        False,
+    ]
     assert not any(_exits(NoProgressExit(after_bars=3, min_r=0.25), long, entry_index=1, reference=99.0))
     short = _bars(close=[110, 100, 98, 99, 97])
     assert _exits(NoProgressExit(after_bars=3, min_r=0.5), short, Direction.SHORT, entry_index=1, reference=101.0) == [
-        False, False, True, False
+        False,
+        False,
+        True,
+        False,
     ]
     # One bar means the entry bar's close; a later close with enough gain keeps the trade.
     assert _exits(NoProgressExit(after_bars=1, min_r=0.5), long, entry_index=1) == [True, False, False, False]

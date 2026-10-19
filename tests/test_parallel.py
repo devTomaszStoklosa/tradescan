@@ -37,7 +37,10 @@ def test_multi_horizon_samples_match_single_horizon():
 
 
 def _hits(report):
-    return [(hit.ticker, hit.direction, hit.score.total, tuple(item.signal.name for item in hit.fired), hit.edge) for hit in report.hits]
+    return [
+        (hit.ticker, hit.direction, hit.score.total, tuple(item.signal.name for item in hit.fired), hit.edge)
+        for hit in report.hits
+    ]
 
 
 def test_parallel_scan_and_edge_match_sequential():

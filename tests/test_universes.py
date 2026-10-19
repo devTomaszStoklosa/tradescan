@@ -7,7 +7,9 @@ from tradescan import cli
 from tradescan.universes import SOURCES, UniverseSource, parse_constituents, update_universe, yahoo_symbol
 from tradescan.watchlist import load_watchlist
 
-SOURCE = UniverseSource(name="demo", title="Demo 5", url="https://example.test/demo", column="Symbol", benchmark="SPY", min_members=3)
+SOURCE = UniverseSource(
+    name="demo", title="Demo 5", url="https://example.test/demo", column="Symbol", benchmark="SPY", min_members=3
+)
 
 
 def _page(symbols: list[str]) -> str:
@@ -30,7 +32,9 @@ def test_parse_finds_the_symbol_table_and_validates_size():
 
 
 def test_update_writes_a_watchlist_and_reports_changes(tmp_path: Path):
-    first = update_universe(SOURCE, tmp_path, fetch=lambda url: _page(["AAPL", "MSFT", "NVDA"]), today=lambda: date(2026, 10, 13))
+    first = update_universe(
+        SOURCE, tmp_path, fetch=lambda url: _page(["AAPL", "MSFT", "NVDA"]), today=lambda: date(2026, 10, 13)
+    )
     assert first.created and first.added == ()
     watchlist = load_watchlist("demo", tmp_path)
     assert watchlist.tickers == ("AAPL", "MSFT", "NVDA") and watchlist.benchmark == "SPY"

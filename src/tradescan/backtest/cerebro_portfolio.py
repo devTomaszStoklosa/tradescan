@@ -128,7 +128,9 @@ class CerebroPortfolioEngine:
         cerebro = bt.Cerebro(stdstats=False)
         cerebro.setbroker(_Broker())
         for ticker, df in frames.items():
-            cerebro.adddata(bt.feeds.PandasData(dataname=df.loc[:, list(OHLCV_COLUMNS)], openinterest=None), name=ticker)
+            cerebro.adddata(
+                bt.feeds.PandasData(dataname=df.loc[:, list(OHLCV_COLUMNS)], openinterest=None), name=ticker
+            )
         cerebro.addstrategy(_PortfolioStrategy, setup=setup, config=config, portfolio=portfolio)
         cerebro.broker.setcash(config.initial_equity)
         cerebro.broker.setcommission(commission=config.commission_pct / 100.0, leverage=LEVERAGE)

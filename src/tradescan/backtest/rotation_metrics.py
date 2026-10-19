@@ -41,7 +41,9 @@ def rotation_metrics(result: RotationResult, benchmark_close: pd.Series, bars_pe
     before it."""
     equity, holdings = result.equity, result.holdings
     benchmark = benchmark_close.astype(float).reindex(equity.index, method="ffill").dropna()
-    metrics = compute_metrics(equity, [item.trade for item in result.trades], benchmark if len(benchmark) else equity, bars_per_year)
+    metrics = compute_metrics(
+        equity, [item.trade for item in result.trades], benchmark if len(benchmark) else equity, bars_per_year
+    )
     metrics = replace(
         metrics,
         exposure_pct=float((holdings > 0).mean() * 100.0) if len(holdings) else math.nan,
@@ -59,7 +61,9 @@ def rotation_metrics(result: RotationResult, benchmark_close: pd.Series, bars_pe
         average_exposure_pct=exposure,
         average_safe_pct=_average(result.safe_pct),
         average_cash_pct=100.0 - exposure,
-        turnover_pct=result.traded_value / 2.0 / average_equity / years * 100.0 if years > 0 and average_equity > 0 else math.nan,
+        turnover_pct=result.traded_value / 2.0 / average_equity / years * 100.0
+        if years > 0 and average_equity > 0
+        else math.nan,
         commissions=result.commissions,
     )
     return RotationMetrics(metrics, stats)

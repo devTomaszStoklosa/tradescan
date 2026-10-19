@@ -113,7 +113,12 @@ exit_rules: RuleRegistry[ExitRule] = RuleRegistry("exit")
 @dataclass(frozen=True)
 class TargetExit(ExitRule):
     target_r: float = param(
-        2.0, minimum=0.25, maximum=50.0, step=0.25, label="Distance", unit="R",
+        2.0,
+        minimum=0.25,
+        maximum=50.0,
+        step=0.25,
+        label="Distance",
+        unit="R",
         help="From the entry reference, as a multiple of the initial risk",
     )
     name = "target"
@@ -192,7 +197,12 @@ def _best_prices(bars: Bars, direction: Direction) -> np.ndarray:
 @dataclass(frozen=True)
 class TrailingStop(ExitRule):
     atr_mult: float = param(
-        3.0, minimum=0.5, maximum=20.0, step=0.25, label="Distance", unit="ATR",
+        3.0,
+        minimum=0.5,
+        maximum=20.0,
+        step=0.25,
+        label="Distance",
+        unit="ATR",
         help="From the highest high since the entry bar (the lowest low for shorts), in ATRs of the current bar",
     )
     name = "trailing"
@@ -221,7 +231,12 @@ class _Trailing(_Ratchet):
 @dataclass(frozen=True)
 class ChannelStop(ExitRule):
     period: int = param(
-        10, minimum=2, maximum=250, step=1, label="Lookback", unit="bars",
+        10,
+        minimum=2,
+        maximum=250,
+        step=1,
+        label="Lookback",
+        unit="bars",
         help="The current bar and the ones before it, bars before the entry included",
     )
     name = "channel"
@@ -247,11 +262,21 @@ class _Channel(_Ratchet):
 @dataclass(frozen=True)
 class BreakevenStop(ExitRule):
     trigger_r: float = param(
-        1.0, minimum=0.25, maximum=20.0, step=0.25, label="Trigger", unit="R",
+        1.0,
+        minimum=0.25,
+        maximum=20.0,
+        step=0.25,
+        label="Trigger",
+        unit="R",
         help="Gain from the fill price that the high since the entry bar (the low for shorts) has to reach",
     )
     lock_r: float = param(
-        0.0, minimum=0.0, maximum=10.0, step=0.05, label="Lock in", unit="R",
+        0.0,
+        minimum=0.0,
+        maximum=10.0,
+        step=0.05,
+        label="Lock in",
+        unit="R",
         help="Where the stop moves, measured from the fill price; below the trigger",
     )
     name = "breakeven"
@@ -314,7 +339,11 @@ class _ExitWhen:
 class RsiExit(_ConditionExit):
     period: int = param(2, minimum=2, maximum=50, step=1, label="RSI period", unit="bars")
     level: float = param(
-        70.0, minimum=50.0, maximum=99.0, step=1.0, label="Exit level",
+        70.0,
+        minimum=50.0,
+        maximum=99.0,
+        step=1.0,
+        label="Exit level",
         help="Longs exit once RSI closes at or above it, shorts once it closes at or below 100 minus it",
     )
     name = "rsi"
@@ -377,11 +406,21 @@ class SupertrendExit(_ConditionExit):
 @dataclass(frozen=True)
 class FailedBreakoutExit(ExitRule):
     buffer_atr: float = param(
-        0.5, minimum=0.0, maximum=5.0, step=0.1, label="Buffer", unit="ATR",
+        0.5,
+        minimum=0.0,
+        maximum=5.0,
+        step=0.1,
+        label="Buffer",
+        unit="ATR",
         help="How far the close has to fall below the entry reference (rise above it for shorts), in ATRs of that bar",
     )
     within_bars: int = param(
-        5, minimum=1, maximum=250, step=1, label="Checked for", unit="bars",
+        5,
+        minimum=1,
+        maximum=250,
+        step=1,
+        label="Checked for",
+        unit="bars",
         help="Closes checked, counting the entry bar",
     )
     name = "failed_breakout"
@@ -419,11 +458,21 @@ class _FailedBreakout:
 @dataclass(frozen=True)
 class NoProgressExit(ExitRule):
     after_bars: int = param(
-        5, minimum=1, maximum=250, step=1, label="Check after", unit="bars",
+        5,
+        minimum=1,
+        maximum=250,
+        step=1,
+        label="Check after",
+        unit="bars",
         help="The close checked, counting the entry bar",
     )
     min_r: float = param(
-        0.5, minimum=0.0, maximum=10.0, step=0.05, label="Minimum gain", unit="R",
+        0.5,
+        minimum=0.0,
+        maximum=10.0,
+        step=0.05,
+        label="Minimum gain",
+        unit="R",
         help="From the fill price, as a multiple of the initial risk",
     )
     name = "no_progress"

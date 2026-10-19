@@ -62,7 +62,13 @@ class TrendFilter(EntryFilter):
 @dataclass(frozen=True)
 class MarketFilter(EntryFilter):
     period: int = param(
-        200, minimum=2, maximum=400, step=1, label="Benchmark SMA", unit="bars", help="Counted in the benchmark's own bars"
+        200,
+        minimum=2,
+        maximum=400,
+        step=1,
+        label="Benchmark SMA",
+        unit="bars",
+        help="Counted in the benchmark's own bars",
     )
     name = "market"
     label = "Market filter"
@@ -101,7 +107,12 @@ class VolumeFilter(EntryFilter):
         20, minimum=2, maximum=250, step=1, label="Average over", unit="bars", help="The bars before the signal bar"
     )
     min_ratio: float = param(
-        1.5, minimum=0.1, maximum=20.0, step=0.1, label="Minimum volume", unit="× average",
+        1.5,
+        minimum=0.1,
+        maximum=20.0,
+        step=0.1,
+        label="Minimum volume",
+        unit="× average",
         help="Tickers without volume (indices, some FX) never pass",
     )
     name = "volume"
@@ -117,7 +128,12 @@ class VolumeFilter(EntryFilter):
 @dataclass(frozen=True)
 class AtrPercentFilter(EntryFilter):
     min_pct: float = param(
-        1.0, minimum=0.0, maximum=100.0, step=0.1, label="Minimum", unit="% of close",
+        1.0,
+        minimum=0.0,
+        maximum=100.0,
+        step=0.1,
+        label="Minimum",
+        unit="% of close",
         help="ATR of the risk settings' period",
     )
     max_pct: float = param(5.0, minimum=0.1, maximum=100.0, step=0.1, label="Maximum", unit="% of close")

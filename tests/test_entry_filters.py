@@ -77,7 +77,9 @@ def test_adx_filter_needs_the_minimum_trend_strength_whatever_the_direction():
 
 
 def test_volume_filter_compares_the_bar_with_the_average_of_the_bars_before_it():
-    bars = _bars([10] * 6, volume=[100, 100, 100, 150, 300, 0])  # averages of the 3 bars before: -, -, -, 100, 116.7, 183.3
+    bars = _bars(
+        [10] * 6, volume=[100, 100, 100, 150, 300, 0]
+    )  # averages of the 3 bars before: -, -, -, 100, 116.7, 183.3
     rule = VolumeFilter(period=3, min_ratio=1.5)
     assert _allows(rule, bars) == [False, False, False, True, True, False]
     assert _allows(rule, _bars([10] * 6, volume=0.0)) == [False] * 6  # no volume never passes
@@ -85,7 +87,15 @@ def test_volume_filter_compares_the_bar_with_the_average_of_the_bars_before_it()
 
 def test_atr_percent_filter_keeps_the_atr_inside_the_band():
     bars = _bars(np.full(30, 100.0))
-    bars = Bars(bars.open, bars.high, bars.low, bars.close, bars.volume, np.r_[np.full(10, np.nan), np.linspace(0.5, 6.0, 20)], bars.dates)
+    bars = Bars(
+        bars.open,
+        bars.high,
+        bars.low,
+        bars.close,
+        bars.volume,
+        np.r_[np.full(10, np.nan), np.linspace(0.5, 6.0, 20)],
+        bars.dates,
+    )
     allowed = np.array(_allows(AtrPercentFilter(min_pct=1.0, max_pct=5.0), bars))
     pct = bars.atr / bars.close * 100.0
     assert not allowed[:10].any()

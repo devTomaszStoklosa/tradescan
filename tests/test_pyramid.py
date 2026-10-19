@@ -34,7 +34,9 @@ def engine(request):
 def _bars(overrides: dict[int, tuple[float, float, float, float]], length: int = 30) -> pd.DataFrame:
     """Flat bars (O=C=100, H=101, L=99, so ATR=2) with selected bars replaced by (open, high, low, close)."""
     rows = [overrides.get(i, (100.0, 101.0, 99.0, 100.0)) for i in range(length)]
-    frame = pd.DataFrame(rows, columns=["open", "high", "low", "close"], index=pd.bdate_range("2020-01-01", periods=length))
+    frame = pd.DataFrame(
+        rows, columns=["open", "high", "low", "close"], index=pd.bdate_range("2020-01-01", periods=length)
+    )
     frame["volume"] = 1_000.0
     return frame
 
@@ -106,7 +108,10 @@ def test_shorts_add_below_the_last_fill_and_move_the_stop_down(engine):
 
 
 def test_an_open_position_keeps_every_unit_marked_to_the_last_close(engine):
-    df = _bars({22: (100.0, 102.5, 99.5, 102.0), 23: (102.0, 104.5, 101.5, 104.0)} | {i: (104.0, 105.0, 103.0, 104.0) for i in range(24, 30)})
+    df = _bars(
+        {22: (100.0, 102.5, 99.5, 102.0), 23: (102.0, 104.5, 101.5, 104.0)}
+        | {i: (104.0, 105.0, 103.0, 104.0) for i in range(24, 30)}
+    )
     (trade,) = _run(engine, df).trades
     assert trade.exit_reason == ExitReason.OPEN and trade.units == 3
     assert trade.pnl == pytest.approx(250 * (4 + 2 + 0))
@@ -144,7 +149,9 @@ def test_units_ask_for_their_add_and_their_moved_stop():
 
 def test_trades_export_counts_the_units_and_lists_the_adds():
     df = _bars(RISING)
-    frame = trades_to_frame(VectorizedEngine().run("TEST", df, FixedSignal(positions=(20,)), NO_COSTS, STOP_ONLY).trades)
+    frame = trades_to_frame(
+        VectorizedEngine().run("TEST", df, FixedSignal(positions=(20,)), NO_COSTS, STOP_ONLY).trades
+    )
     days = [day.date().isoformat() for day in df.index[22:24]]
     assert frame.loc[0, "units"] == 3 and frame.loc[0, "adds"] == f"{days[0]} 102; {days[1]} 104"
 
@@ -160,14 +167,22 @@ PYRAMID_RULES = [
     TradeRules(exits=(TrailingStop(atr_mult=2.0),)),
     TradeRules(exits=(BreakevenStop(trigger_r=1.0, lock_r=0.2), TimeExit(max_hold_bars=40))),
     TradeRules(exits=(RatchetStop(), TargetExit(target_r=4.0))),
-    TradeRules(entry=StopEntry(offset_atr=0.2, valid_bars=2), exits=(TargetExit(target_r=4.0), TimeExit(max_hold_bars=40))),
+    TradeRules(
+        entry=StopEntry(offset_atr=0.2, valid_bars=2), exits=(TargetExit(target_r=4.0), TimeExit(max_hold_bars=40))
+    ),
     TradeRules(entry=LimitEntry(valid_bars=2), exits=(TrailingStop(atr_mult=1.5),)),
 ]
 
 
-@pytest.mark.parametrize("rules", PYRAMID_RULES, ids=lambda rules: f"{rules.entry.name}+" + "+".join(rule.name for rule in rules.exits))
+@pytest.mark.parametrize(
+    "rules", PYRAMID_RULES, ids=lambda rules: f"{rules.entry.name}+" + "+".join(rule.name for rule in rules.exits)
+)
 @pytest.mark.parametrize("signal_name", ["donchian_breakout", "ema_cross_down"])
-@pytest.mark.parametrize("config", [ENGINE_CHECK_CONFIG, replace(ENGINE_CHECK_CONFIG, max_units=2, add_every_atr=1.5)], ids=["4x0.5", "2x1.5"])
+@pytest.mark.parametrize(
+    "config",
+    [ENGINE_CHECK_CONFIG, replace(ENGINE_CHECK_CONFIG, max_units=2, add_every_atr=1.5)],
+    ids=["4x0.5", "2x1.5"],
+)
 def test_engines_match_with_pyramiding(rules, signal_name, config):
     df = random_walk(1500, seed=31)
     signal = default_registry.create(signal_name)
@@ -176,7 +191,12 @@ def test_engines_match_with_pyramiding(rules, signal_name, config):
     assert len(fast.trades) == len(slow.trades) > 0
     assert any(trade.adds for trade in fast.trades), "the check needs pyramided positions"
     for left, right in zip(fast.trades, slow.trades):
-        assert (left.entry_date, left.exit_date, left.exit_reason, left.size) == (right.entry_date, right.exit_date, right.exit_reason, right.size)
+        assert (left.entry_date, left.exit_date, left.exit_reason, left.size) == (
+            right.entry_date,
+            right.exit_date,
+            right.exit_reason,
+            right.size,
+        )
         assert [fill.date for fill in left.adds] == [fill.date for fill in right.adds]
         np.testing.assert_allclose([fill.price for fill in left.adds], [fill.price for fill in right.adds], rtol=1e-9)
         assert left.entry_price == pytest.approx(right.entry_price, rel=1e-9)

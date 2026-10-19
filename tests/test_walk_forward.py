@@ -35,8 +35,18 @@ from tradescan.services import BacktestRequest, WalkForwardRequest, build_use_ca
 
 def test_rolling_windows_end_on_the_last_bar_after_in_sample_windows_of_fixed_length():
     plan = plan_windows(1000, 4, 3.0, WindowScheme.ROLLING)  # 142-bar windows after 426-bar in-sample windows
-    assert [window.out_of_sample for window in plan.windows] == [Span(432, 574), Span(574, 716), Span(716, 858), Span(858, 1000)]
-    assert [window.in_sample for window in plan.windows] == [Span(6, 432), Span(148, 574), Span(290, 716), Span(432, 858)]
+    assert [window.out_of_sample for window in plan.windows] == [
+        Span(432, 574),
+        Span(574, 716),
+        Span(716, 858),
+        Span(858, 1000),
+    ]
+    assert [window.in_sample for window in plan.windows] == [
+        Span(6, 432),
+        Span(148, 574),
+        Span(290, 716),
+        Span(432, 858),
+    ]
     assert plan.next_in_sample == Span(574, 1000) and plan.start == 432
     assert plan.in_samples[-1] == plan.next_in_sample and len(plan.in_samples) == 5
 
@@ -147,7 +157,9 @@ def test_windows_join_into_one_curve_that_carries_the_equity_over():
     # Every window is the backtest of its pick, started with the equity carried over.
     second = run.segments[1]
     config = replace(WIDE_STOP, initial_equity=run.segments[0].equity.iloc[-1])
-    alone = VectorizedEngine().run("RW", df, SignalBetween(FixedSignal(positions=(650,)), 600, 800), config, _case(()).rules)
+    alone = VectorizedEngine().run(
+        "RW", df, SignalBetween(FixedSignal(positions=(650,)), 600, 800), config, _case(()).rules
+    )
     assert second.trades == alone.trades
 
 
@@ -210,7 +222,10 @@ def test_each_window_trades_the_best_combination_of_its_in_sample_window(frames)
     window = report.windows[1]
     engine, df = VectorizedEngine(), frames["AAA"]
     direct = [in_sample_metrics(engine, "AAA", df, item.case, window.window.in_sample) for item in report.combinations]
-    assert window.pick.combination == pick(direct, "sharpe", 5) and window.pick.in_sample == direct[window.pick.combination]
+    assert (
+        window.pick.combination == pick(direct, "sharpe", 5)
+        and window.pick.in_sample == direct[window.pick.combination]
+    )
     assert window.pick.qualified == sum(metrics.trades >= 5 for metrics in direct)
 
     # The stitched curve is each window's pick traded on its window, and the unchanged setup trades the same bars.
@@ -218,14 +233,18 @@ def test_each_window_trades_the_best_combination_of_its_in_sample_window(frames)
     stitched = stitch(engine, "AAA", df, report.plan, picked, report.base.config.initial_equity)
     assert report.stitched.equity.equals(stitched.equity)
     assert report.metrics == compute_metrics(stitched.equity, stitched.trades, df["close"].iloc[report.plan.start :])
-    unchanged = engine.run("AAA", df, SignalFrom(report.base.signal, report.plan.start), report.base.config, report.base.rules)
+    unchanged = engine.run(
+        "AAA", df, SignalFrom(report.base.signal, report.plan.start), report.base.config, report.base.rules
+    )
     assert report.unchanged.trades == unchanged.trades
     assert report.unchanged_metrics.buy_hold_pct == report.metrics.buy_hold_pct
     assert report.next_pick.span == Span(1500 - 561, 1500) and report.next_pick.combination is not None
 
 
 def test_a_walk_forward_reads_its_windows_scheme_and_metric(frames):
-    request = replace(_request(windows=3, in_sample_ratio=2, min_trades=0), scheme=WindowScheme.ANCHORED, metric="expectancy_r")
+    request = replace(
+        _request(windows=3, in_sample_ratio=2, min_trades=0), scheme=WindowScheme.ANCHORED, metric="expectancy_r"
+    )
     report = _use_cases(frames).walk_forward.run(request)
     assert report.plan == plan_windows(1500, 3, 2.0, WindowScheme.ANCHORED) and report.metric == "expectancy_r"
     assert (report.settings.windows, report.settings.in_sample_ratio) == (3, 2.0)
@@ -289,7 +308,9 @@ def test_walk_forward_limits(frames, monkeypatch):
     with pytest.raises(ValueError, match="windows must be between 2 and 20"):
         _use_cases(frames).walk_forward.run(_request(windows=1))
     monkeypatch.setattr(services, "MAX_RUNS", 40)
-    with pytest.raises(ValueError, match="8 combinations on 6 in-sample windows .* 48 backtests; a walk-forward runs at most 40"):
+    with pytest.raises(
+        ValueError, match="8 combinations on 6 in-sample windows .* 48 backtests; a walk-forward runs at most 40"
+    ):
         _use_cases(frames).walk_forward.run(_request())
 
 

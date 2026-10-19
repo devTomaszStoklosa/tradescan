@@ -132,7 +132,12 @@ def _shifted(close: np.ndarray, bars: int) -> np.ndarray:
 @dataclass(frozen=True)
 class RelativeStrengthPriority(TickerPriorityRule):
     periods: tuple[int, ...] = param(
-        (63, 126, 189, 252), minimum=1, maximum=1000, step=1, label="Lookbacks", unit="bars",
+        (63, 126, 189, 252),
+        minimum=1,
+        maximum=1000,
+        step=1,
+        label="Lookbacks",
+        unit="bars",
         help="Returns over these lookbacks are weighted into one score",
     )
     weights: tuple[float, ...] = param(
@@ -144,7 +149,9 @@ class RelativeStrengthPriority(TickerPriorityRule):
 
     def __post_init__(self) -> None:
         if len(self.periods) != len(self.weights):
-            raise ValueError(f"{self.name}: {len(self.periods)} lookbacks need as many weights, got {len(self.weights)}")
+            raise ValueError(
+                f"{self.name}: {len(self.periods)} lookbacks need as many weights, got {len(self.weights)}"
+            )
         if not any(self.weights):
             raise ValueError(f"{self.name}: at least one weight must be above 0")
 
@@ -160,7 +167,12 @@ class RelativeStrengthPriority(TickerPriorityRule):
 class MomentumPriority(TickerPriorityRule):
     lookback: int = param(252, minimum=2, maximum=1000, step=1, label="Lookback", unit="bars")
     skip: int = param(
-        21, minimum=0, maximum=250, step=1, label="Skip", unit="bars",
+        21,
+        minimum=0,
+        maximum=250,
+        step=1,
+        label="Skip",
+        unit="bars",
         help="The latest bars left out; 252 and 21 give the 12-1 month momentum",
     )
     name = "momentum"

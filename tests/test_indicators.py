@@ -68,7 +68,9 @@ def test_percent_b_places_the_close_within_the_bands():
 
 
 def test_internal_bar_strength():
-    df = pd.DataFrame({"high": [12.0, 12.0, 12.0, 10.0], "low": [10.0, 10.0, 10.0, 10.0], "close": [10.0, 10.5, 12.0, 10.0]})
+    df = pd.DataFrame(
+        {"high": [12.0, 12.0, 12.0, 10.0], "low": [10.0, 10.0, 10.0, 10.0], "close": [10.0, 10.5, 12.0, 10.0]}
+    )
     strength = ind.internal_bar_strength(df)
     assert strength.iloc[:3].tolist() == [0.0, 0.25, 1.0]
     # A bar without range has no IBS.

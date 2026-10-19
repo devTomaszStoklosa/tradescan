@@ -46,7 +46,9 @@ def engine(request):
 def _bars(overrides: dict[int, tuple[float, float, float, float]], length: int = 30) -> pd.DataFrame:
     """Flat bars (O=C=100, H=101, L=99, so ATR=2) with selected bars replaced by (open, high, low, close)."""
     rows = [overrides.get(i, (100.0, 101.0, 99.0, 100.0)) for i in range(length)]
-    frame = pd.DataFrame(rows, columns=["open", "high", "low", "close"], index=pd.bdate_range("2020-01-01", periods=length))
+    frame = pd.DataFrame(
+        rows, columns=["open", "high", "low", "close"], index=pd.bdate_range("2020-01-01", periods=length)
+    )
     frame["volume"] = 1_000.0
     return frame
 
@@ -62,7 +64,12 @@ def test_long_target_hit(engine):
     # Signal on bar 20 (close 100, ATR 2): stop 96, target 108, size 1000/4 = 250.
     result = _run(engine, _bars({22: (100.0, 109.0, 99.0, 105.0)}))
     (trade,) = result.trades
-    assert (trade.exit_reason, trade.entry_price, trade.exit_price, trade.size) == (ExitReason.TARGET, 100.0, 108.0, 250)
+    assert (trade.exit_reason, trade.entry_price, trade.exit_price, trade.size) == (
+        ExitReason.TARGET,
+        100.0,
+        108.0,
+        250,
+    )
     assert trade.pnl == pytest.approx(2_000.0) and trade.r_multiple == pytest.approx(2.0)
     assert result.equity.iloc[-1] == pytest.approx(102_000.0)
     assert result.equity.iloc[22] == pytest.approx(102_000.0)
@@ -120,7 +127,9 @@ def test_without_target_and_time_exit_only_the_stop_closes_the_trade(engine):
 def test_stop_entry_fills_at_its_level_or_at_a_gap_open(engine):
     # Buy-stop 0.5 ATR above the signal bar's high: 101 + 1 = 102. Stop and target come from 102.
     rules = TradeRules(entry=StopEntry(offset_atr=0.5), exits=(TargetExit(),))
-    touched = _run(engine, _bars({21: (100.0, 103.0, 99.0, 102.5), 23: (104.0, 111.0, 103.0, 110.0)}), rules=rules).trades[0]
+    touched = _run(
+        engine, _bars({21: (100.0, 103.0, 99.0, 102.5), 23: (104.0, 111.0, 103.0, 110.0)}), rules=rules
+    ).trades[0]
     assert (touched.entry_price, touched.exit_reason, touched.exit_price) == (102.0, ExitReason.TARGET, 110.0)
     assert touched.size == 250 and touched.r_multiple == pytest.approx(2.0)
 
@@ -146,7 +155,9 @@ def test_limit_entry_fills_at_its_level_or_better(engine):
     gapped = _run(engine, _bars({21: (97.0, 98.0, 96.5, 97.5)}), rules=rules).trades[0]
     assert gapped.entry_price == 97.0
 
-    assert not _run(engine, _bars({21: (100.0, 101.0, 99.5, 100.0)}), rules=TradeRules(entry=LimitEntry(offset_atr=0.5))).trades
+    assert not _run(
+        engine, _bars({21: (100.0, 101.0, 99.5, 100.0)}), rules=TradeRules(entry=LimitEntry(offset_atr=0.5))
+    ).trades
 
 
 # --- Trailing, channel and breakeven stops -----------------------------------------------------------
@@ -303,7 +314,11 @@ def _assert_engines_match(df, signal, config, rules=None):
     slow = _cerebro().run("RW", df, signal, config, rules)
     assert len(fast.trades) == len(slow.trades) > 0, signal
     for left, right in zip(fast.trades, slow.trades):
-        assert (left.entry_date, left.exit_date, left.exit_reason) == (right.entry_date, right.exit_date, right.exit_reason), signal
+        assert (left.entry_date, left.exit_date, left.exit_reason) == (
+            right.entry_date,
+            right.exit_date,
+            right.exit_reason,
+        ), signal
         assert left.entry_price == pytest.approx(right.entry_price, rel=1e-9)
         assert left.exit_price == pytest.approx(right.exit_price, rel=1e-9)
         assert left.pnl == pytest.approx(right.pnl, rel=1e-6, abs=1e-6)
@@ -333,7 +348,10 @@ def test_engines_match_with_non_default_parameters():
         _assert_engines_match(df, default_registry.create(name, params), config, rules)
 
 
-ENTRIES = [cls() for cls in entry_rules.classes()] + [StopEntry(offset_atr=0.3, valid_bars=3), LimitEntry(offset_atr=0.2, valid_bars=4)]
+ENTRIES = [cls() for cls in entry_rules.classes()] + [
+    StopEntry(offset_atr=0.3, valid_bars=3),
+    LimitEntry(offset_atr=0.2, valid_bars=4),
+]
 
 # Every registered exit alone, none, combinations, and the test-only moving stop and exit at the open.
 EXITS = [(cls(),) for cls in exit_rules.classes()] + [
@@ -373,7 +391,9 @@ def test_engines_match_for_every_entry_rule(entry, signal_name):
 @pytest.mark.parametrize("signal_name", ["connors_rsi2_long", "ema_cross_down"])
 def test_engines_match_for_every_exit_rule(exits, entry, signal_name):
     df = random_walk(1000, seed=22)
-    result = _assert_engines_match(df, default_registry.create(signal_name), ENGINE_CHECK_CONFIG, TradeRules(entry, exits))
+    result = _assert_engines_match(
+        df, default_registry.create(signal_name), ENGINE_CHECK_CONFIG, TradeRules(entry, exits)
+    )
     reasons = {trade.exit_reason for trade in result.trades}
     if any(isinstance(rule, RatchetStop) for rule in exits):
         assert "trailing" in reasons
@@ -387,7 +407,9 @@ def test_engines_match_for_every_exit_rule(exits, entry, signal_name):
 def test_engines_match_for_breakout_exits_after_a_stop_entry():
     # With a stop entry the reference is the order level above the signal bar's high (below its low for shorts).
     df = random_walk(1000, seed=23)
-    rules = TradeRules(StopEntry(offset_atr=0.3, valid_bars=3), (FailedBreakoutExit(), NoProgressExit(), TrailingStop()))
+    rules = TradeRules(
+        StopEntry(offset_atr=0.3, valid_bars=3), (FailedBreakoutExit(), NoProgressExit(), TrailingStop())
+    )
     for name in ("donchian_breakout", "donchian_breakdown"):
         result = _assert_engines_match(df, default_registry.create(name), ENGINE_CHECK_CONFIG, rules)
         assert {"failed_breakout", "no_progress"} <= {trade.exit_reason for trade in result.trades}, name

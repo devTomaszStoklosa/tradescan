@@ -117,7 +117,11 @@ class PortfolioSetup:
 
 
 def prepare(
-    frames: Mapping[str, pd.DataFrame], signal: Signal, config: BacktestConfig, rules: TradeRules, priority: PriorityRule
+    frames: Mapping[str, pd.DataFrame],
+    signal: Signal,
+    config: BacktestConfig,
+    rules: TradeRules,
+    priority: PriorityRule,
 ) -> PortfolioSetup:
     if not frames:
         raise ValueError("A portfolio backtest needs at least one ticker with bars")
@@ -134,7 +138,9 @@ def prepare(
             scores=ticker_scores,
             days=ticker_days,
         )
-        for (ticker, df), ticker_bars, ticker_days, ticker_scores in zip(frames.items(), bars, days, scores, strict=True)
+        for (ticker, df), ticker_bars, ticker_days, ticker_scores in zip(
+            frames.items(), bars, days, scores, strict=True
+        )
     )
     return PortfolioSetup(calendar, tickers, signal.direction)
 
@@ -227,7 +233,9 @@ class VectorizedPortfolioEngine:
                 plan = ticker.rules.plan(index, equity, config)
                 if plan is not None:
                     candidates.append(Candidate(position, index, float(ticker.scores[index]), plan))
-            allocation = allocate(candidates, len(slots), open_value + waiting_value, equity, portfolio, config.lot_size)
+            allocation = allocate(
+                candidates, len(slots), open_value + waiting_value, equity, portfolio, config.lot_size
+            )
             orders += len(allocation.accepted)
             no_slot += allocation.no_slot
             no_room += allocation.no_room
@@ -270,6 +278,8 @@ def run_portfolio_periods(
     signals from the split on."""
     early = {ticker: df.loc[df.index < split] for ticker, df in frames.items()}
     return PortfolioPeriods(
-        in_sample=engine.run({ticker: df for ticker, df in early.items() if len(df)}, signal, config, rules, portfolio, priority),
+        in_sample=engine.run(
+            {ticker: df for ticker, df in early.items() if len(df)}, signal, config, rules, portfolio, priority
+        ),
         out_of_sample=engine.run(frames, SignalSince(signal, split), config, rules, portfolio, priority),
     )

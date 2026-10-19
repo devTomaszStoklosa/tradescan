@@ -126,10 +126,14 @@ class VectorizedEngine:
             next_free = exit_.index if exit_.reason != ExitReason.OPEN else len(bars)
 
         equity_curve = pd.Series(config.initial_equity + np.cumsum(daily_pnl), index=df.index, name="equity")
-        return BacktestResult(engine=self.name, ticker=ticker, signal=signal.name, equity=equity_curve, trades=tuple(trades))
+        return BacktestResult(
+            engine=self.name, ticker=ticker, signal=signal.name, equity=equity_curve, trades=tuple(trades)
+        )
 
 
-def find_entry(bars: Bars, signal_index: int, plan: EntryPlan, fills: FillModel, sign: float) -> tuple[int, float] | None:
+def find_entry(
+    bars: Bars, signal_index: int, plan: EntryPlan, fills: FillModel, sign: float
+) -> tuple[int, float] | None:
     """The bar and price at which the entry order fills, or None when it expires unfilled."""
     last = min(signal_index + plan.valid_bars, len(bars) - 1)
     for i in range(signal_index + 1, last + 1):

@@ -40,7 +40,9 @@ class TickerRun:
     out_of_sample: PeriodRun | None
 
     def period(self, period: Period) -> PeriodRun | None:
-        return {Period.FULL: self.full, Period.IN_SAMPLE: self.in_sample, Period.OUT_OF_SAMPLE: self.out_of_sample}[period]
+        return {Period.FULL: self.full, Period.IN_SAMPLE: self.in_sample, Period.OUT_OF_SAMPLE: self.out_of_sample}[
+            period
+        ]
 
 
 def _r_multiples(result: BacktestResult) -> np.ndarray:

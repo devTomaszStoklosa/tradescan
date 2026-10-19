@@ -27,7 +27,13 @@ def pinned(slot: int, run_id: str | None = None, **changes) -> PinnedRun:
 
 
 def entry(**changes) -> TradeEntry:
-    values = {"ticker": "SPY", "direction": Direction.LONG, "opened": date(2026, 3, 2), "entry_price": 500.0, "quantity": 2.0}
+    values = {
+        "ticker": "SPY",
+        "direction": Direction.LONG,
+        "opened": date(2026, 3, 2),
+        "entry_price": 500.0,
+        "quantity": 2.0,
+    }
     return TradeEntry(**(values | changes))
 
 
@@ -145,7 +151,12 @@ def test_clear_removes_every_run(database):
 def test_trades_keep_every_field_and_the_suggesting_run(database):
     journal = TradeJournal(database, clock=Clock())
     logged = entry(
-        stop=490.0, closed=date(2026, 3, 9), exit_price=520.0, fees=1.5, notes="Gap up\nheld", run=SuggestedBy(7, SNAPSHOT)
+        stop=490.0,
+        closed=date(2026, 3, 9),
+        exit_price=520.0,
+        fees=1.5,
+        notes="Gap up\nheld",
+        run=SuggestedBy(7, SNAPSHOT),
     )
     added = journal.add(logged)
     assert (added.created_at, added.updated_at) == ("2026-10-18T09:00:00+00:00", "2026-10-18T09:00:00+00:00")

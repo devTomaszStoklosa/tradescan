@@ -45,7 +45,12 @@ def test_scorer_weights_and_alignment():
     assert scorer.weight(macd) == 1.0
 
     long_score = scorer.score(Direction.LONG, [breakout, macd], _context(), rs_percentile=90.0)
-    assert (long_score.signals, long_score.trend, long_score.weekly, long_score.relative_strength) == (2.5, 1.0, 0.5, 1.0)
+    assert (long_score.signals, long_score.trend, long_score.weekly, long_score.relative_strength) == (
+        2.5,
+        1.0,
+        0.5,
+        1.0,
+    )
     assert long_score.total == pytest.approx(5.0)
 
     short_score = scorer.score(Direction.SHORT, [macd], _context(weekly=Trend.NEUTRAL), rs_percentile=math.nan)

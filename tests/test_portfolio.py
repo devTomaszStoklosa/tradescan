@@ -87,7 +87,9 @@ def _ticker(fire=(20,), scale=1.0, overrides=None, length=30):
     """Flat bars (O=C=100, H=101, L=99, so ATR=2) times `scale`, with selected bars replaced by (open, high, low,
     close) before scaling, and the signal firing on the bars in `fire`."""
     rows = [(overrides or {}).get(i, (100.0, 101.0, 99.0, 100.0)) for i in range(length)]
-    frame = pd.DataFrame(rows, columns=["open", "high", "low", "close"], index=pd.bdate_range("2020-01-01", periods=length))
+    frame = pd.DataFrame(
+        rows, columns=["open", "high", "low", "close"], index=pd.bdate_range("2020-01-01", periods=length)
+    )
     frame *= scale
     frame["volume"] = 1_000.0
     frame["fire"] = np.isin(np.arange(length), fire)
@@ -106,7 +108,9 @@ def _plan(size=100.0, reference=50.0) -> EntryPlan:
 
 
 def test_rank_puts_the_highest_score_first_then_the_watchlist_order_and_missing_scores_last():
-    candidates = [Candidate(position, 0, score, _plan()) for position, score in enumerate([1.0, math.nan, 3.0, 1.0, math.nan])]
+    candidates = [
+        Candidate(position, 0, score, _plan()) for position, score in enumerate([1.0, math.nan, 3.0, 1.0, math.nan])
+    ]
     assert [candidate.ticker for candidate in rank(candidates)] == [2, 0, 3, 1, 4]
 
 
@@ -202,7 +206,11 @@ def test_the_context_at_every_bar_is_what_build_reports_on_the_history_up_to_it(
     df = random_walk(500, seed=21)
     df = df[np.random.default_rng(2).random(len(df)) > 0.1]  # missing days, so some weeks are short
     close = df["close"]
-    daily, weekly, strength = builder.daily_trends(close), builder.weekly_trends(close), builder.relative_strengths(close)
+    daily, weekly, strength = (
+        builder.daily_trends(close),
+        builder.weekly_trends(close),
+        builder.relative_strengths(close),
+    )
     sign = {Trend.UP: 1, Trend.DOWN: -1, Trend.NEUTRAL: 0}
     for bar in range(0, len(df), 5):
         context = builder.build("X", df.iloc[: bar + 1])
@@ -211,7 +219,9 @@ def test_the_context_at_every_bar_is_what_build_reports_on_the_history_up_to_it(
     assert {-1, 0, 1} <= set(daily) and {-1, 0, 1} <= set(weekly)
 
 
-@pytest.mark.parametrize(("direction", "traded"), [(Direction.LONG, "connors_rsi2_long"), (Direction.SHORT, "ema_cross_down")])
+@pytest.mark.parametrize(
+    ("direction", "traded"), [(Direction.LONG, "connors_rsi2_long"), (Direction.SHORT, "ema_cross_down")]
+)
 def test_the_score_priority_scores_like_the_scanner_on_the_history_up_to_each_close(direction, traded):
     frames = _random_frames(5, seed=800, bars=600)
     frames["T4"] = frames["T4"].iloc[200:]  # ranked once its relative strength has a year of bars
@@ -236,10 +246,14 @@ def test_the_score_priority_ranks_relative_strength_among_the_tickers_with_a_bar
     rs_only = Scorer({}, {}, trend_bonus=0.0, weekly_bonus=0.0, rs_bonus=1.0, rs_strong_pct=50.0)
     rule = ScorePriority().with_scan(ScanScore.build(frames, (), Direction.LONG, rs_only, ContextBuilder(), 3))
     scores = rule.scores(_inputs(frames))
-    by_day = pd.DataFrame({ticker: pd.Series(score, index=df.index) for (ticker, df), score in zip(frames.items(), scores)})
+    by_day = pd.DataFrame(
+        {ticker: pd.Series(score, index=df.index) for (ticker, df), score in zip(frames.items(), scores)}
+    )
     assert (by_day.iloc[:252] == 0.0).all().all()  # no relative strength yet, no bonus
     ranked = by_day.iloc[252:]
-    assert ranked.loc[gap, ["T0", "T1"]].tolist() == [1.0, 1.0] and np.isnan(ranked.loc[gap, "T2"])  # of two, both reach the 50th
+    assert ranked.loc[gap, ["T0", "T1"]].tolist() == [1.0, 1.0] and np.isnan(
+        ranked.loc[gap, "T2"]
+    )  # of two, both reach the 50th
     assert (ranked.drop(gap).sum(axis=1) == 2.0).all()  # of three, the top two
 
 
@@ -249,7 +263,9 @@ def test_the_score_priority_reads_the_same_scores_on_a_shorter_history():
     scan = ScanScore.build(frames, _signals(Direction.LONG), Direction.LONG, SCORER, ContextBuilder(), 3)
     early = {ticker: df.iloc[:400] for ticker, df in frames.items()}
     full = prepare(frames, signal, COSTS, TradeRules(), ScorePriority().with_scan(scan))
-    shared = prepare(early, signal, COSTS, TradeRules(), ScorePriority().with_scan(scan))  # how the in-sample run reads it
+    shared = prepare(
+        early, signal, COSTS, TradeRules(), ScorePriority().with_scan(scan)
+    )  # how the in-sample run reads it
     own = prepare(early, signal, COSTS, TradeRules(), _score(early, fresh_bars=3))
     for whole, part, rebuilt in zip(full.tickers, shared.tickers, own.tickers):
         np.testing.assert_array_equal(part.scores, whole.scores[:400])
@@ -260,7 +276,10 @@ def test_the_score_priority_reads_the_same_scores_on_a_shorter_history():
 def test_the_score_priority_needs_the_scan_score_of_its_direction():
     frames = _random_frames(2, seed=950, bars=300)
     assert priority_rules.create("score") == ScorePriority() and ScorePriority.needs_scan
-    assert not RelativeStrengthPriority.needs_scan and RelativeStrengthPriority().with_scan(None) == RelativeStrengthPriority()
+    assert (
+        not RelativeStrengthPriority.needs_scan
+        and RelativeStrengthPriority().with_scan(None) == RelativeStrengthPriority()
+    )
     with pytest.raises(ValueError, match="needs the scanner's settings"):
         ScorePriority().scores(_inputs(frames))
     with pytest.raises(ValueError, match="holds short signals"):
@@ -282,13 +301,17 @@ def test_the_portfolio_use_case_scores_with_the_runs_settings_and_every_signal_o
     assert report.priority.name == "score" and scan.direction is Direction.LONG and scan.scorer.weight(traded) == 3.0
     signals = [traded if signal.name == traded.name else signal for signal in _signals(Direction.LONG)]
     tickers = {ticker: frames[ticker] for ticker in ("AAA", "BBB", "CCC")}
-    expected = ScanScore.build(tickers, signals, Direction.LONG, build_scorer(settings), build_context_builder(settings), 7)
+    expected = ScanScore.build(
+        tickers, signals, Direction.LONG, build_scorer(settings), build_context_builder(settings), 7
+    )
     assert list(scan.signal_points) == list(tickers)
     for ticker in tickers:
         pd.testing.assert_series_equal(scan.signal_points[ticker], expected.signal_points[ticker])
     assert report.runs[0].result.trades
     # The report keeps what the score read, for the run's result to show.
-    assert list(report.scan.settings) == ["scoring", "trend", "scan"] and report.scan.settings["scan"] == {"fresh_bars": 7}
+    assert list(report.scan.settings) == ["scoring", "trend", "scan"] and report.scan.settings["scan"] == {
+        "fresh_bars": 7
+    }
     assert report.scan.settings["scoring"]["signal_weights"] == {"connors_rsi2_long": 3.0}
     assert report.scan.settings["trend"]["fast_period"] == 20
     assert report.scan.signals == tuple(signal for signal in signals if signal is not traded)
@@ -309,7 +332,9 @@ def test_the_portfolio_use_case_scores_the_other_signals_with_the_runs_score_sig
     portfolio = build_use_cases(Settings(), FakeProvider(frames)).portfolio
 
     def scan(score_signal_params):
-        request = PortfolioRequest(Watchlist("demo", ("AAA", "BBB", "CCC"), "SPY"), setup, RuleChoice("score"), score_signal_params)
+        request = PortfolioRequest(
+            Watchlist("demo", ("AAA", "BBB", "CCC"), "SPY"), setup, RuleChoice("score"), score_signal_params
+        )
         return portfolio.run(request).priority.scan
 
     # The traded signal's parameters come from the setup, so its entry changes nothing.
@@ -321,7 +346,9 @@ def test_the_portfolio_use_case_scores_the_other_signals_with_the_runs_score_sig
         for signal in default_registry.select(directions={Direction.LONG}, params=params)
     ]
     tickers = {ticker: frames[ticker] for ticker in ("AAA", "BBB", "CCC")}
-    expected = ScanScore.build(tickers, signals, Direction.LONG, overridden.scorer, overridden.context, Settings().scan.fresh_bars)
+    expected = ScanScore.build(
+        tickers, signals, Direction.LONG, overridden.scorer, overridden.context, Settings().scan.fresh_bars
+    )
     for ticker in tickers:
         pd.testing.assert_series_equal(overridden.signal_points[ticker], expected.signal_points[ticker])
     assert any(not overridden.signal_points[ticker].equals(defaults.signal_points[ticker]) for ticker in tickers)
@@ -366,7 +393,12 @@ def test_a_waiting_order_holds_its_slot_until_it_expires(engine):
     result = _run(engine, frames, PortfolioConfig(max_positions=1), rules=rules)
     (item,) = result.trades
     dates = frames["B"].index
-    assert (item.ticker, item.trade.signal_date, item.trade.entry_date, item.trade.entry_price) == ("B", dates[23], dates[24], 102.0)
+    assert (item.ticker, item.trade.signal_date, item.trade.entry_date, item.trade.entry_price) == (
+        "B",
+        dates[23],
+        dates[24],
+        102.0,
+    )
     assert (result.orders, result.no_slot) == (2, 1)
 
 
@@ -374,7 +406,11 @@ def test_a_slot_frees_at_the_close_of_the_exit_bar(engine):
     frames = {"A": _ticker(fire=(20,)), "B": _ticker(fire=(24, 26))}
     result = _run(engine, frames, PortfolioConfig(max_positions=1))
     first, second = result.trades
-    assert (first.ticker, first.trade.exit_reason, first.trade.exit_date) == ("A", ExitReason.TIME, frames["A"].index[26])
+    assert (first.ticker, first.trade.exit_reason, first.trade.exit_date) == (
+        "A",
+        ExitReason.TIME,
+        frames["A"].index[26],
+    )
     assert (second.ticker, second.trade.signal_date) == ("B", frames["B"].index[26])
     assert result.no_slot == 1
 
@@ -410,10 +446,16 @@ def test_one_ticker_trades_like_a_single_ticker_backtest():
     signal = default_registry.create("connors_rsi2_long")
     config = BacktestConfig(commission_pct=0.1, slippage_pct=0.05)
     single = VectorizedEngine().run("RW", df, signal, config, TradeRules())
-    portfolio = VectorizedPortfolioEngine().run({"RW": df}, signal, config, TradeRules(), PortfolioConfig(1), ClosePriority())
+    portfolio = VectorizedPortfolioEngine().run(
+        {"RW": df}, signal, config, TradeRules(), PortfolioConfig(1), ClosePriority()
+    )
     assert len(portfolio.trades) == len(single.trades) > 10
     for item, trade in zip(portfolio.trades, single.trades):
-        assert (item.trade.entry_date, item.trade.exit_date, item.trade.size) == (trade.entry_date, trade.exit_date, trade.size)
+        assert (item.trade.entry_date, item.trade.exit_date, item.trade.size) == (
+            trade.entry_date,
+            trade.exit_date,
+            trade.size,
+        )
         assert item.trade.pnl == pytest.approx(trade.pnl, rel=1e-9)
     np.testing.assert_allclose(portfolio.equity.to_numpy(), single.equity.to_numpy(), rtol=1e-9)
 
@@ -524,7 +566,14 @@ def test_periods_split_the_shared_calendar():
     frames["late"] = random_walk(1000, seed=1).loc[start:]  # only has out-of-sample bars
     signal = default_registry.create("connors_rsi2_long")
     periods = run_portfolio_periods(
-        VectorizedPortfolioEngine(), frames, signal, COSTS, TradeRules(), PortfolioConfig(3), RelativeStrengthPriority(), start
+        VectorizedPortfolioEngine(),
+        frames,
+        signal,
+        COSTS,
+        TradeRules(),
+        PortfolioConfig(3),
+        RelativeStrengthPriority(),
+        start,
     )
     early, late = periods.in_sample, periods.out_of_sample
     assert early.equity.index[-1] < start and "late" not in early.tickers
@@ -537,7 +586,9 @@ def test_periods_split_the_shared_calendar():
 def test_portfolio_metrics_use_the_benchmark_and_the_days_with_a_position():
     frames = _random_frames(4, seed=600)
     signal = default_registry.create("connors_rsi2_long")
-    result = VectorizedPortfolioEngine().run(frames, signal, COSTS, TradeRules(), PortfolioConfig(2), MomentumPriority())
+    result = VectorizedPortfolioEngine().run(
+        frames, signal, COSTS, TradeRules(), PortfolioConfig(2), MomentumPriority()
+    )
     benchmark = random_walk(1200, seed=8)["close"]
     full = portfolio_metrics(result, benchmark, 252)
     assert full.metrics.buy_hold_pct == pytest.approx((benchmark.iloc[999] / benchmark.iloc[0] - 1) * 100)
@@ -559,10 +610,14 @@ def test_contributions_add_up_to_the_portfolio_result():
     frames = _random_frames(5, seed=700)
     frames["idle"] = random_walk(1000, seed=1).iloc[:50]  # too short to trade
     signal = default_registry.create("connors_rsi2_long")
-    result = VectorizedPortfolioEngine().run(frames, signal, COSTS, TradeRules(), PortfolioConfig(3), MomentumPriority())
+    result = VectorizedPortfolioEngine().run(
+        frames, signal, COSTS, TradeRules(), PortfolioConfig(3), MomentumPriority()
+    )
     rows = contributions(result, COSTS.initial_equity)
     assert [row.ticker for row in rows] == list(frames)
     assert sum(row.pnl for row in rows) == pytest.approx(result.equity.iloc[-1] - COSTS.initial_equity)
-    assert sum(row.contribution_pct for row in rows) == pytest.approx(result.equity.iloc[-1] / COSTS.initial_equity * 100 - 100)
+    assert sum(row.contribution_pct for row in rows) == pytest.approx(
+        result.equity.iloc[-1] / COSTS.initial_equity * 100 - 100
+    )
     idle = rows[-1]
     assert (idle.trades, idle.pnl) == (0, 0.0) and math.isnan(idle.win_rate_pct)

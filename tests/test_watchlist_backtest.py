@@ -133,7 +133,9 @@ def test_the_market_filter_compares_the_watchlist_benchmark_unless_the_setup_nam
     universe = Watchlist("demo", ("AAA", "BBB"), benchmark="QQQ")
     report = _run(frames, setup, universe, provider=provider)
     assert report.base.benchmark == "QQQ" and provider.calls[0][0] == ("AAA", "BBB", "QQQ")
-    single = build_use_cases(Settings(), FakeProvider(frames)).backtest.run(replace(setup, ticker="AAA", benchmark="QQQ"))
+    single = build_use_cases(Settings(), FakeProvider(frames)).backtest.run(
+        replace(setup, ticker="AAA", benchmark="QQQ")
+    )
     _same(report.rows[0].run.full.metrics, single.runs[0].metrics)
 
     assert _run(frames, replace(setup, benchmark="spy"), universe).base.benchmark == "SPY"

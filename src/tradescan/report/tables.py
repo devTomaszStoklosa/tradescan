@@ -93,7 +93,11 @@ def edge_to_frame(rows: Sequence[EdgeRow]) -> pd.DataFrame:
     records = []
     for row in rows:
         signal = row.signal
-        record: dict[str, object] = {"signal": signal.name, "dir": signal.direction.value, "family": signal.family.value}
+        record: dict[str, object] = {
+            "signal": signal.name,
+            "dir": signal.direction.value,
+            "family": signal.family.value,
+        }
         for item in row.stats:
             suffix = f" {item.horizon}d"
             record.update(
@@ -127,7 +131,9 @@ def periods_to_frame(runs: Sequence[EngineRun]) -> pd.DataFrame:
         if run.periods is None:
             continue
         for label, metrics in (("in-sample", run.periods.in_sample), ("out-of-sample", run.periods.out_of_sample)):
-            columns[f"{run.result.engine} {label}"] = {item.name: getattr(metrics, item.name) for item in fields(metrics)}
+            columns[f"{run.result.engine} {label}"] = {
+                item.name: getattr(metrics, item.name) for item in fields(metrics)
+            }
     return pd.DataFrame(columns)
 
 
@@ -207,7 +213,10 @@ def walk_forward_metrics_frame(report: WalkForwardReport) -> pd.DataFrame:
     """The stitched out-of-sample curve's metrics next to the unchanged setup's on the same bars."""
     columns = {"walk-forward": report.metrics, "unchanged setup": report.unchanged_metrics}
     return pd.DataFrame(
-        {label: {item.name: getattr(metrics, item.name) for item in fields(metrics)} for label, metrics in columns.items()}
+        {
+            label: {item.name: getattr(metrics, item.name) for item in fields(metrics)}
+            for label, metrics in columns.items()
+        }
     )
 
 
@@ -257,7 +266,9 @@ def watchlist_rows_frame(report: WatchlistBacktestReport, metric: str) -> pd.Dat
         for period, part in parts.items():
             record[f"{metric} {PERIOD_LABELS[period]}"] = getattr(part.metrics, metric) if part else math.nan
         full = row.run.full.metrics
-        record.update({"return%": full.total_return_pct, "max DD%": full.max_drawdown_pct, "buy&hold%": full.buy_hold_pct})
+        record.update(
+            {"return%": full.total_return_pct, "max DD%": full.max_drawdown_pct, "buy&hold%": full.buy_hold_pct}
+        )
         records.append(record)
     frame = pd.DataFrame(records)
     return frame.sort_values(f"{metric} full", ascending=False, na_position="last", kind="stable", ignore_index=True)
@@ -315,7 +326,9 @@ def watchlist_export_frame(report: WatchlistBacktestReport) -> pd.DataFrame:
         }
         for period, prefix in prefixes.items():
             part = row.run.period(period)
-            record.update({f"{prefix}_{name}": getattr(part.metrics, name) if part else math.nan for name in METRIC_NAMES})
+            record.update(
+                {f"{prefix}_{name}": getattr(part.metrics, name) if part else math.nan for name in METRIC_NAMES}
+            )
         records.append(record)
     return pd.DataFrame(records)
 
@@ -328,7 +341,9 @@ def trades_to_frame(trades: Sequence[Trade], engine: str = "") -> pd.DataFrame:
     for column in ("signal_date", "entry_date", "exit_date"):
         frame[column] = pd.to_datetime(frame[column]).dt.date.astype(str)
     frame["units"] = [trade.units for trade in trades]
-    frame["adds"] = ["; ".join(f"{fill.date.date().isoformat()} {fill.price:g}" for fill in trade.adds) for trade in trades]
+    frame["adds"] = [
+        "; ".join(f"{fill.date.date().isoformat()} {fill.price:g}" for fill in trade.adds) for trade in trades
+    ]
     if engine:
         frame.insert(0, "engine", engine)
     return frame
@@ -350,7 +365,11 @@ def portfolio_metrics_frame(report: PortfolioReport) -> pd.DataFrame:
 def rotation_metrics_frame(report: RotationReport) -> pd.DataFrame:
     """The metrics and rotation stats of the full run and of each period, one column each."""
     columns = {}
-    for label, period in (("full", report.full), ("in-sample", report.in_sample), ("out-of-sample", report.out_of_sample)):
+    for label, period in (
+        ("full", report.full),
+        ("in-sample", report.in_sample),
+        ("out-of-sample", report.out_of_sample),
+    ):
         if period is None:
             continue
         values = {item.name: getattr(period.metrics, item.name) for item in fields(period.metrics)}

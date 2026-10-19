@@ -120,7 +120,9 @@ def priority_rule_out(rule: type[PriorityRule]) -> schemas.PriorityRuleOut:
 
 
 def applied_rule_out(rule: Rule) -> schemas.AppliedRuleOut:
-    return schemas.AppliedRuleOut(name=rule.name, label=rule.label, description=rule.describe(), params=signal_params(rule))
+    return schemas.AppliedRuleOut(
+        name=rule.name, label=rule.label, description=rule.describe(), params=signal_params(rule)
+    )
 
 
 def signal_out(signal: Signal, scorer: Scorer) -> schemas.SignalOut:
@@ -273,7 +275,9 @@ def trade_out(trade: Trade) -> schemas.TradeOut:
 
 
 def percentiles_out(percentiles: Percentiles) -> schemas.PercentilesOut:
-    return schemas.PercentilesOut(**{item.name: finite(getattr(percentiles, item.name)) for item in fields(percentiles)})
+    return schemas.PercentilesOut(
+        **{item.name: finite(getattr(percentiles, item.name)) for item in fields(percentiles)}
+    )
 
 
 def path_out(path: PathStats) -> schemas.MonteCarloPathOut:
@@ -556,7 +560,8 @@ def contribution_out(row: TickerContribution) -> schemas.TickerContributionOut:
 def scan_inputs_out(scan: ScanInputs) -> schemas.ScanInputsOut:
     return schemas.ScanInputsOut(
         settings={  # type: ignore[arg-type]
-            section: {name: _value(value) for name, value in values.items()} for section, values in scan.settings.items()
+            section: {name: _value(value) for name, value in values.items()}
+            for section, values in scan.settings.items()
         },
         signal_params={signal.name: signal_params(signal) for signal in scan.signals},
     )
@@ -663,7 +668,10 @@ def rotation_out(report: RotationReport) -> schemas.RotationOut:
         equity=points(result.equity),
         holdings=points(result.holdings.astype(float)),
         targets=targets_out(result.targets),
-        trades=[schemas.PortfolioTradeOut(ticker=item.ticker, **trade_out(item.trade).model_dump()) for item in result.trades],
+        trades=[
+            schemas.PortfolioTradeOut(ticker=item.ticker, **trade_out(item.trade).model_dump())
+            for item in result.trades
+        ],
         tickers=[contribution_out(row) for row in report.contributions],
         missing=report.missing,
     )
@@ -674,7 +682,9 @@ def chart_out(data: ChartData) -> schemas.ChartOut:
     return schemas.ChartOut(
         ticker=data.ticker,
         candles=[
-            schemas.Candle(time=day(index), open=row.open, high=row.high, low=row.low, close=row.close, volume=row.volume)
+            schemas.Candle(
+                time=day(index), open=row.open, high=row.high, low=row.low, close=row.close, volume=row.volume
+            )
             for index, row in zip(bars.index, bars.itertuples(index=False))
         ],
         sma_fast=points(data.sma_fast),

@@ -42,7 +42,12 @@ class EqualWeight(WeightRule):
 @dataclass(frozen=True)
 class InverseVolatilityWeight(WeightRule):
     lookback: int = param(
-        63, minimum=2, maximum=1000, step=1, label="Volatility lookback", unit="bars",
+        63,
+        minimum=2,
+        maximum=1000,
+        step=1,
+        label="Volatility lookback",
+        unit="bars",
         help="Daily returns over this many bars give each pick's volatility",
     )
     name = "inverse_volatility"

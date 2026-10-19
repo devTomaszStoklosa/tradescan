@@ -106,7 +106,12 @@ def create_app(
 
     if static_dir is not None:
         # Windows can map .js to text/plain in the registry, which browsers refuse for module scripts.
-        for media_type, extension in (("text/javascript", ".js"), ("text/javascript", ".mjs"), ("text/css", ".css"), ("image/svg+xml", ".svg")):
+        for media_type, extension in (
+            ("text/javascript", ".js"),
+            ("text/javascript", ".mjs"),
+            ("text/css", ".css"),
+            ("image/svg+xml", ".svg"),
+        ):
             mimetypes.add_type(media_type, extension)
         app.mount("/", SpaStaticFiles(directory=static_dir, html=True), name="ui")
     return app

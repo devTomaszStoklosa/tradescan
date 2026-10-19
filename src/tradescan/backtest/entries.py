@@ -60,11 +60,21 @@ class NextOpenEntry(EntryRule):
 @dataclass(frozen=True)
 class StopEntry(EntryRule):
     offset_atr: float = param(
-        0.0, minimum=0.0, maximum=5.0, step=0.05, label="Offset", unit="ATR",
+        0.0,
+        minimum=0.0,
+        maximum=5.0,
+        step=0.05,
+        label="Offset",
+        unit="ATR",
         help="Above the signal bar's high for longs, below its low for shorts",
     )
     valid_bars: int = param(
-        1, minimum=1, maximum=20, step=1, label="Active for", unit="bars",
+        1,
+        minimum=1,
+        maximum=20,
+        step=1,
+        label="Active for",
+        unit="bars",
         help="Bars after the signal bar before an unfilled order is cancelled",
     )
     name = "stop"
@@ -84,11 +94,21 @@ class StopEntry(EntryRule):
 @dataclass(frozen=True)
 class LimitEntry(EntryRule):
     offset_atr: float = param(
-        0.5, minimum=0.0, maximum=5.0, step=0.05, label="Offset", unit="ATR",
+        0.5,
+        minimum=0.0,
+        maximum=5.0,
+        step=0.05,
+        label="Offset",
+        unit="ATR",
         help="Below the signal bar's close for longs, above it for shorts",
     )
     valid_bars: int = param(
-        1, minimum=1, maximum=20, step=1, label="Active for", unit="bars",
+        1,
+        minimum=1,
+        maximum=20,
+        step=1,
+        label="Active for",
+        unit="bars",
         help="Bars after the signal bar before an unfilled order is cancelled",
     )
     name = "limit"

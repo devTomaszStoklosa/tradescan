@@ -25,7 +25,9 @@ def test_list_signals_runs():
 
 def test_scan_exports_hits(provider, tmp_path):
     target = tmp_path / "hits.csv"
-    code = cli.main(["scan", "--tickers", "AAA,BBB,CCC,ZZZ", "--fresh", "10", "--min-score", "-10", "--export", str(target)])
+    code = cli.main(
+        ["scan", "--tickers", "AAA,BBB,CCC,ZZZ", "--fresh", "10", "--min-score", "-10", "--export", str(target)]
+    )
     assert code == 0
     hits = pd.read_csv(target)
     assert not hits.empty
@@ -37,7 +39,9 @@ def test_scan_exports_hits(provider, tmp_path):
 def test_market_and_edge(provider, tmp_path):
     assert cli.main(["market", "--tickers", "AAA,BBB", "--benchmark", "SPY"]) == 0
     target = tmp_path / "edge.json"
-    code = cli.main(["edge", "--tickers", "AAA,BBB,CCC", "--family", "breakout", "--horizons", "5,10", "--export", str(target)])
+    code = cli.main(
+        ["edge", "--tickers", "AAA,BBB,CCC", "--family", "breakout", "--horizons", "5,10", "--export", str(target)]
+    )
     assert code == 0
     edge = pd.read_json(target)
     assert set(edge["family"]) == {"breakout"}
@@ -59,7 +63,21 @@ def test_backtest_both_engines(provider, tmp_path):
 
 def test_backtest_entry_and_exit_options(provider, tmp_path):
     target = tmp_path / "trades.csv"
-    code = cli.main(["backtest", "AAA", "connors_rsi2_long", "--entry", "limit", "--exits", "time", "--max-hold", "3", "--export", str(target)])
+    code = cli.main(
+        [
+            "backtest",
+            "AAA",
+            "connors_rsi2_long",
+            "--entry",
+            "limit",
+            "--exits",
+            "time",
+            "--max-hold",
+            "3",
+            "--export",
+            str(target),
+        ]
+    )
     assert code == 0
     trades = pd.read_csv(target)
     assert not trades.empty and set(trades["exit_reason"]) <= {"stop", "time", "open"}
@@ -68,7 +86,9 @@ def test_backtest_entry_and_exit_options(provider, tmp_path):
 
 def test_backtest_pyramiding_options(provider, tmp_path, capsys):
     target = tmp_path / "trades.csv"
-    code = cli.main(["backtest", "AAA", "donchian_breakout", "--max-units", "3", "--add-every-atr", "1", "--export", str(target)])
+    code = cli.main(
+        ["backtest", "AAA", "donchian_breakout", "--max-units", "3", "--add-every-atr", "1", "--export", str(target)]
+    )
     assert code == 0
     assert "pyramiding up to 3 units 1 ATR apart" in " ".join(capsys.readouterr().out.split())
     trades = pd.read_csv(target)
@@ -115,14 +135,23 @@ def test_walk_forward_prints_every_window_and_exports_them(provider, tmp_path, c
     ])  # fmt: skip
     assert code == 0
     output = " ".join(capsys.readouterr().out.split())  # without the console's line breaks
-    assert "8 combinations" in output and "4 rolling windows of 250 bars, each after an in-sample window of 500 bars" in output
+    assert (
+        "8 combinations" in output
+        and "4 rolling windows of 250 bars, each after an in-sample window of 500 bars" in output
+    )
     assert "highest expectancy_r with at least 5 trades" in output and "Walk-forward efficiency" in output
     assert "unchanged setup" in output and "Next setting: " in output
     windows = pd.read_csv(target)
     assert list(windows["window"]) == [1, 2, 3, 4]
-    assert {"is_start", "oos_end", "traded_from", "signal.oversold", "exit.target.target_r", "is_sharpe", "oos_trades"} <= set(
-        windows.columns
-    )
+    assert {
+        "is_start",
+        "oos_end",
+        "traded_from",
+        "signal.oversold",
+        "exit.target.target_r",
+        "is_sharpe",
+        "oos_trades",
+    } <= set(windows.columns)
 
 
 def test_walk_forward_refuses_an_out_of_sample_share(provider):
@@ -163,17 +192,24 @@ def test_portfolio_backtest_shares_one_equity_and_exports_every_engines_trades(p
     assert provider.calls[-1][0] == ("AAA", "BBB", "CCC", "ZZZ", "SPY")
     trades = pd.read_csv(target)
     assert set(trades["engine"]) == {"vectorized", "cerebro"} and set(trades["ticker"]) <= {"AAA", "BBB", "CCC"}
-    vectorized, cerebro = (trades[trades["engine"] == engine].drop(columns="engine") for engine in ("vectorized", "cerebro"))
+    vectorized, cerebro = (
+        trades[trades["engine"] == engine].drop(columns="engine") for engine in ("vectorized", "cerebro")
+    )
     pd.testing.assert_frame_equal(vectorized.reset_index(drop=True), cerebro.reset_index(drop=True), rtol=1e-6)
     with pytest.raises(SystemExit):
         cli.main(["portfolio-backtest", "connors_rsi2_long", "-t", "AAA", "--priority", "nope"])
 
 
 def test_portfolio_backtest_ranks_by_the_scan_score(provider, capsys):
-    code = cli.main(["portfolio-backtest", "connors_rsi2_long", "-t", "AAA,BBB,CCC", "--max-positions", "1", "--priority", "score"])
+    code = cli.main(
+        ["portfolio-backtest", "connors_rsi2_long", "-t", "AAA,BBB,CCC", "--max-positions", "1", "--priority", "score"]
+    )
     assert code == 0
     output = " ".join(capsys.readouterr().out.split())
-    assert "priority: The scanner's confluence score: fresh signals, daily and weekly trend, relative-strength rank" in output
+    assert (
+        "priority: The scanner's confluence score: fresh signals, daily and weekly trend, relative-strength rank"
+        in output
+    )
 
 
 def test_rotation_backtest_holds_the_strongest_tickers_and_exports_the_trades(provider, tmp_path, capsys):
@@ -199,15 +235,27 @@ def test_rotation_backtest_holds_the_strongest_tickers_and_exports_the_trades(pr
 
 def test_backtest_and_sweep_still_take_a_ticker(provider):
     assert cli.build_parser().parse_args(["backtest", "AAA", "connors_rsi2_long"]).ticker == "AAA"
-    assert cli.build_parser().parse_args(["sweep", "AAA", "connors_rsi2_long", "--axis", "signal.oversold=5,10"]).signal == "connors_rsi2_long"
+    assert (
+        cli.build_parser().parse_args(["sweep", "AAA", "connors_rsi2_long", "--axis", "signal.oversold=5,10"]).signal
+        == "connors_rsi2_long"
+    )
 
 
 @pytest.mark.parametrize(
     ("command", "benchmark_help"),
     [
-        ("backtest", "--benchmark BENCHMARK benchmark the market filter compares (default: scan.benchmark from the settings)"),
-        ("sweep", "--benchmark BENCHMARK benchmark the market filter compares (default: scan.benchmark from the settings)"),
-        ("walk-forward", "--benchmark BENCHMARK benchmark the market filter compares (default: scan.benchmark from the settings)"),
+        (
+            "backtest",
+            "--benchmark BENCHMARK benchmark the market filter compares (default: scan.benchmark from the settings)",
+        ),
+        (
+            "sweep",
+            "--benchmark BENCHMARK benchmark the market filter compares (default: scan.benchmark from the settings)",
+        ),
+        (
+            "walk-forward",
+            "--benchmark BENCHMARK benchmark the market filter compares (default: scan.benchmark from the settings)",
+        ),
         (
             "watchlist-backtest",
             "--benchmark BENCHMARK benchmark the market filter compares "
@@ -228,7 +276,14 @@ def test_benchmark_help_names_each_commands_default(command, benchmark_help, cap
 
 @pytest.mark.parametrize(
     "axis",
-    ["oversold=5:20:5", "signal.oversold", "nope.oversold=1,2", "signal.oversold=5:1:1", "signal.oversold=1:100:1", "signal.oversold=a,b"],
+    [
+        "oversold=5:20:5",
+        "signal.oversold",
+        "nope.oversold=1,2",
+        "signal.oversold=5:1:1",
+        "signal.oversold=1:100:1",
+        "signal.oversold=a,b",
+    ],
 )
 def test_sweep_axis_errors(provider, axis):
     assert cli.main(["sweep", "AAA", "connors_rsi2_long", "--axis", axis]) == 2

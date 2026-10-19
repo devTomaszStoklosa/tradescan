@@ -37,7 +37,9 @@ def _assert_numeric_fields_declared(obj, owner, skip=frozenset()):
         if item.type not in KIND_OF_ANNOTATION or (owner, item.name) in skip:
             continue
         assert item.name in declared, f"{owner}.{item.name} has no param() declaration, so the UI cannot offer it"
-        assert declared[item.name].kind is KIND_OF_ANNOTATION[item.type], f"{owner}.{item.name}: default type != annotation"
+        assert declared[item.name].kind is KIND_OF_ANNOTATION[item.type], (
+            f"{owner}.{item.name}: default type != annotation"
+        )
     validate(obj, owner)  # defaults lie inside their own ranges
 
 
@@ -162,7 +164,9 @@ def test_settings_file_values_are_range_checked(tmp_path: Path):
 
 def test_sections_publish_the_configured_values_as_defaults():
     settings = Settings().with_overrides({"risk": {"atr_mult": 3}})
-    sections = {section.name: {spec.name: spec for spec in section.parameters} for section in adjustable_sections(settings)}
+    sections = {
+        section.name: {spec.name: spec for spec in section.parameters} for section in adjustable_sections(settings)
+    }
     assert sections["risk"]["atr_mult"].default == 3.0
     assert "data" not in sections
 

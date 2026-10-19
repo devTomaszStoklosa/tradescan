@@ -43,7 +43,12 @@ class AccountSettings:
     equity: float = param(100_000.0, minimum=1.0, maximum=1e12, step=1000.0, label="Account equity")
     risk_pct: float = param(1.0, minimum=0.01, maximum=100.0, step=0.1, label="Risk per trade", unit="%")
     max_position_pct: float = param(
-        25.0, minimum=0.1, maximum=100.0, step=1.0, label="Max position", unit="% of equity",
+        25.0,
+        minimum=0.1,
+        maximum=100.0,
+        step=1.0,
+        label="Max position",
+        unit="% of equity",
         help="Caps a position's value, whatever the stop distance; with pyramiding, each unit's",
     )
     lot_size: float = param(
@@ -57,7 +62,12 @@ class RiskSettings:
     atr_period: int = param(14, minimum=2, maximum=100, step=1, label="ATR period", unit="bars")
     atr_mult: float = param(2.0, minimum=0.25, maximum=20.0, step=0.25, label="Stop distance", unit="ATR")
     targets_r: tuple[float, ...] = param(
-        (2.0, 3.0), minimum=0.25, maximum=50.0, step=0.25, label="Scan targets", unit="R",
+        (2.0, 3.0),
+        minimum=0.25,
+        maximum=50.0,
+        step=0.25,
+        label="Scan targets",
+        unit="R",
         help="Profit targets shown in scan results, as multiples of the risk",
     )
 
@@ -78,24 +88,45 @@ class ScanSettings:
 class ScoringSettings:
     label: ClassVar[str] = "Scoring"
     trend_bonus: float = param(
-        1.0, minimum=0.0, maximum=10.0, step=0.5, label="Daily trend bonus",
+        1.0,
+        minimum=0.0,
+        maximum=10.0,
+        step=0.5,
+        label="Daily trend bonus",
         help="Added when the daily trend agrees, subtracted when it disagrees",
     )
     weekly_bonus: float = param(
-        1.0, minimum=0.0, maximum=10.0, step=0.5, label="Weekly trend bonus",
+        1.0,
+        minimum=0.0,
+        maximum=10.0,
+        step=0.5,
+        label="Weekly trend bonus",
         help="Added when the weekly trend agrees, subtracted when it disagrees",
     )
     rs_bonus: float = param(1.0, minimum=0.0, maximum=10.0, step=0.5, label="Relative strength bonus")
     rs_strong_pct: float = param(
-        80.0, minimum=50.0, maximum=100.0, step=1.0, label="Strong RS percentile",
+        80.0,
+        minimum=50.0,
+        maximum=100.0,
+        step=1.0,
+        label="Strong RS percentile",
         help="Longs need RS at or above it, shorts at or below 100 minus it",
     )
     family_weights: dict[str, float] = param(
-        _FAMILY_WEIGHTS, minimum=-10.0, maximum=10.0, step=0.5, label="Family weights",
+        _FAMILY_WEIGHTS,
+        minimum=-10.0,
+        maximum=10.0,
+        step=0.5,
+        label="Family weights",
         keys=[family.value for family in Family],
     )
     signal_weights: dict[str, float] = param(
-        {}, minimum=-10.0, maximum=10.0, step=0.5, label="Signal weights", help="Per-signal overrides of the family weight"
+        {},
+        minimum=-10.0,
+        maximum=10.0,
+        step=0.5,
+        label="Signal weights",
+        help="Per-signal overrides of the family weight",
     )
 
 
@@ -106,7 +137,12 @@ class TrendSettings:
     slow_period: int = param(200, minimum=3, maximum=500, step=1, label="Daily trend: slow SMA", unit="bars")
     weekly_period: int = param(30, minimum=2, maximum=200, step=1, label="Weekly trend SMA", unit="weeks")
     rs_periods: tuple[int, ...] = param(
-        (63, 126, 189, 252), minimum=1, maximum=1000, step=1, label="RS lookbacks", unit="bars",
+        (63, 126, 189, 252),
+        minimum=1,
+        maximum=1000,
+        step=1,
+        label="RS lookbacks",
+        unit="bars",
         help="Returns over these lookbacks are combined into the relative-strength rank",
     )
     rs_weights: tuple[float, ...] = param(
@@ -117,7 +153,9 @@ class TrendSettings:
         if self.fast_period >= self.slow_period:
             raise ValueError(f"trend: fast_period ({self.fast_period}) must be below slow_period ({self.slow_period})")
         if len(self.rs_periods) != len(self.rs_weights):
-            raise ValueError(f"trend: {len(self.rs_periods)} RS lookbacks need as many weights, got {len(self.rs_weights)}")
+            raise ValueError(
+                f"trend: {len(self.rs_periods)} RS lookbacks need as many weights, got {len(self.rs_weights)}"
+            )
 
 
 @dataclass(frozen=True)
@@ -149,10 +187,20 @@ class BacktestSettings:
     commission_pct: float = param(0.1, minimum=0.0, maximum=5.0, step=0.01, label="Commission", unit="%")
     slippage_pct: float = param(0.05, minimum=0.0, maximum=5.0, step=0.01, label="Slippage", unit="%")
     bars_per_year: int = param(
-        252, minimum=1, maximum=10_000, step=1, label="Bars per year", help="Annualizes CAGR, Sharpe and Sortino (365 for crypto)"
+        252,
+        minimum=1,
+        maximum=10_000,
+        step=1,
+        label="Bars per year",
+        help="Annualizes CAGR, Sharpe and Sortino (365 for crypto)",
     )
     oos_pct: float = param(
-        30.0, minimum=10.0, maximum=50.0, step=5.0, label="Out-of-sample share", unit="% of history",
+        30.0,
+        minimum=10.0,
+        maximum=50.0,
+        step=5.0,
+        label="Out-of-sample share",
+        unit="% of history",
         help="The last part of the history, reported separately and left out of tuning",
     )
 
@@ -161,11 +209,20 @@ class BacktestSettings:
 class PyramidSettings:
     label: ClassVar[str] = "Pyramiding"
     max_units: int = param(
-        1, minimum=1, maximum=10, step=1, label="Max units",
+        1,
+        minimum=1,
+        maximum=10,
+        step=1,
+        label="Max units",
         help="The first entry plus the adds, each the size of the first; 1 turns pyramiding off",
     )
     add_every_atr: float = param(
-        0.5, minimum=0.1, maximum=10.0, step=0.1, label="Add every", unit="ATR",
+        0.5,
+        minimum=0.1,
+        maximum=10.0,
+        step=0.1,
+        label="Add every",
+        unit="ATR",
         help="Another unit once price moves this far in the trade's favour from the last unit's fill, "
         "in ATRs of the signal bar",
     )
@@ -175,10 +232,20 @@ class PyramidSettings:
 class MonteCarloSettings:
     label: ClassVar[str] = "Monte Carlo"
     simulations: int = param(
-        1000, minimum=100, maximum=10_000, step=100, label="Simulations", help="Resampled sequences of the run's trades per method"
+        1000,
+        minimum=100,
+        maximum=10_000,
+        step=100,
+        label="Simulations",
+        help="Resampled sequences of the run's trades per method",
     )
     ruin_drawdown_pct: float = param(
-        50.0, minimum=1.0, maximum=100.0, step=5.0, label="Ruin level", unit="% drawdown",
+        50.0,
+        minimum=1.0,
+        maximum=100.0,
+        step=5.0,
+        label="Ruin level",
+        unit="% drawdown",
         help="A drawdown from the peak at least this deep counts as ruin",
     )
     seed: int = param(
@@ -190,10 +257,20 @@ class MonteCarloSettings:
 class PortfolioSettings:
     label: ClassVar[str] = "Portfolio"
     max_positions: int = param(
-        10, minimum=1, maximum=100, step=1, label="Max positions", help="Open positions plus entry orders waiting to fill"
+        10,
+        minimum=1,
+        maximum=100,
+        step=1,
+        label="Max positions",
+        help="Open positions plus entry orders waiting to fill",
     )
     max_exposure_pct: float = param(
-        100.0, minimum=1.0, maximum=300.0, step=5.0, label="Max exposure", unit="% of equity",
+        100.0,
+        minimum=1.0,
+        maximum=300.0,
+        step=5.0,
+        label="Max exposure",
+        unit="% of equity",
         help="Gross value of the open positions and waiting orders; above 100% is leverage",
     )
 
@@ -203,7 +280,12 @@ class RotationSettings:
     label: ClassVar[str] = "Rotation"
     holdings: int = param(5, minimum=1, maximum=50, step=1, label="Holdings", help="Tickers picked at each rebalance")
     absolute_lookback: int = param(
-        252, minimum=0, maximum=1000, step=1, label="Absolute momentum", unit="bars",
+        252,
+        minimum=0,
+        maximum=1000,
+        step=1,
+        label="Absolute momentum",
+        unit="bars",
         help="A pick whose return over this lookback is at or below 0 goes to the safe asset or cash; 0 turns the check off",
     )
 
@@ -212,15 +294,28 @@ class RotationSettings:
 class WalkForwardSettings:
     label: ClassVar[str] = "Walk-forward"
     windows: int = param(
-        5, minimum=2, maximum=20, step=1, label="Windows",
+        5,
+        minimum=2,
+        maximum=20,
+        step=1,
+        label="Windows",
         help="Out-of-sample windows, each traded with the best setting of the in-sample window before it",
     )
     in_sample_ratio: float = param(
-        3.0, minimum=1.0, maximum=10.0, step=0.5, label="In-sample length", unit="× out-of-sample",
+        3.0,
+        minimum=1.0,
+        maximum=10.0,
+        step=0.5,
+        label="In-sample length",
+        unit="× out-of-sample",
         help="How many times longer each in-sample window is than an out-of-sample window",
     )
     min_trades: int = param(
-        10, minimum=0, maximum=500, step=1, label="Min in-sample trades",
+        10,
+        minimum=0,
+        maximum=500,
+        step=1,
+        label="Min in-sample trades",
         help="A setting needs this many closed trades in an in-sample window to be picked",
     )
 
@@ -247,7 +342,8 @@ class Settings:
             return self
         check_group(overrides, list(_SECTIONS), "settings section(s)")
         return replace(
-            self, **{name: with_overrides(getattr(self, name), values, owner=name) for name, values in overrides.items()}
+            self,
+            **{name: with_overrides(getattr(self, name), values, owner=name) for name, values in overrides.items()},
         )
 
 
@@ -264,7 +360,9 @@ class SettingsSection:
 def adjustable_sections(settings: Settings) -> list[SettingsSection]:
     """Sections with adjustable parameters; each spec's default is the configured value."""
     sections = [
-        SettingsSection(name=name, label=getattr(settings, name).label, parameters=parameters_of(getattr(settings, name)))
+        SettingsSection(
+            name=name, label=getattr(settings, name).label, parameters=parameters_of(getattr(settings, name))
+        )
         for name in _SECTIONS
     ]
     return [section for section in sections if section.parameters]

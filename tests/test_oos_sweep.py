@@ -61,7 +61,12 @@ def test_signal_from_drops_earlier_events_but_keeps_the_signal():
     late_events = late.events(df)
     assert not late_events.iloc[:300].any()
     assert late_events.iloc[300:].equals(events.iloc[300:]) and events.iloc[300:].any()
-    assert (late.name, late.direction, late.family, late.describe()) == (signal.name, signal.direction, signal.family, signal.describe())
+    assert (late.name, late.direction, late.family, late.describe()) == (
+        signal.name,
+        signal.direction,
+        signal.family,
+        signal.describe(),
+    )
     assert pickle.loads(pickle.dumps(late)).events(df).equals(late_events)  # worker processes can receive it
 
 
@@ -85,7 +90,9 @@ def test_out_of_sample_starts_fresh_at_the_split():
     periods = run_periods(VectorizedEngine(), "RW", df, signal, CONFIG, RULES, 1000)
     expected = compute_metrics(late.equity.iloc[1000:], late.trades, df["close"].iloc[1000:])
     assert periods.out_of_sample == expected
-    assert periods.out_of_sample.buy_hold_pct == pytest.approx((df["close"].iloc[-1] / df["close"].iloc[1000] - 1) * 100)
+    assert periods.out_of_sample.buy_hold_pct == pytest.approx(
+        (df["close"].iloc[-1] / df["close"].iloc[1000] - 1) * 100
+    )
 
 
 def test_out_of_sample_warms_indicators_up_on_the_earlier_bars():
@@ -104,7 +111,9 @@ def test_engines_agree_on_both_periods():
         slow = run_periods(_cerebro(), "RW", df, signal, CONFIG, RULES, 840)
         for left, right in ((fast.in_sample, slow.in_sample), (fast.out_of_sample, slow.out_of_sample)):
             assert left.trades == right.trades > 0
-            np.testing.assert_allclose([left.total_return_pct, left.sharpe], [right.total_return_pct, right.sharpe], rtol=1e-6)
+            np.testing.assert_allclose(
+                [left.total_return_pct, left.sharpe], [right.total_return_pct, right.sharpe], rtol=1e-6
+            )
 
 
 # --- The grid ------------------------------------------------------------------------------------
@@ -163,7 +172,10 @@ def test_sweep_runs_every_combination_on_both_periods(frames):
     assert report.ticker == "AAA" and report.split.index == 1050
     assert [cell.values for cell in report.cells] == grid(axes)
     assert all(cell.periods is not None and cell.error is None for cell in report.cells)
-    assert [(item.spec.label, item.spec.default) for item in report.parameters] == [("Oversold level", 10.0), ("Distance", 2.0)]
+    assert [(item.spec.label, item.spec.default) for item in report.parameters] == [
+        ("Oversold level", 10.0),
+        ("Distance", 2.0),
+    ]
 
     # A cell is exactly the backtest of its combination, split the same way.
     cell = report.cells[4]  # oversold 20, target 2R
@@ -207,7 +219,10 @@ def test_sweep_settings_entry_and_account(frames):
         (_axis("trend_period", (100, 150.5)), "whole number"),
         (_axis("targets_r", (1, 2), SweepTarget.SETTINGS, "risk"), "not a single number"),
         (_axis("offset_atr", (0.1, 0.2), SweepTarget.EXIT, "limit"), "'limit' exit is not part of this backtest"),
-        (_axis("period", (50, 100), SweepTarget.FILTER, "trend"), r"'trend' filter is not part of this backtest \(its filters: none\)"),
+        (
+            _axis("period", (50, 100), SweepTarget.FILTER, "trend"),
+            r"'trend' filter is not part of this backtest \(its filters: none\)",
+        ),
         (_axis("fresh_bars", (1, 2), SweepTarget.SETTINGS, "scan"), "account, risk, backtest"),
         (_axis("oos_pct", (20, 30), SweepTarget.SETTINGS, "backtest"), "out-of-sample split"),
         (_axis(owner="target"), "takes no owner"),
@@ -255,7 +270,11 @@ def test_sweep_on_worker_processes_matches_one_process(frames):
 def test_backtest_reports_both_periods_for_every_engine(frames):
     pytest.importorskip("backtrader")
     request = BacktestRequest(
-        ticker="AAA", signal="connors_rsi2_long", engines=("vectorized", "cerebro"), settings={"backtest": {"oos_pct": 20}}, period="max"
+        ticker="AAA",
+        signal="connors_rsi2_long",
+        engines=("vectorized", "cerebro"),
+        settings={"backtest": {"oos_pct": 20}},
+        period="max",
     )
     report = _use_cases(frames).backtest.run(request)
     assert report.split is not None and report.split.index == 1200 and report.config.oos_pct == 20

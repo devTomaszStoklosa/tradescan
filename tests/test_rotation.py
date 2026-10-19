@@ -138,7 +138,9 @@ def test_a_ticker_that_drops_out_is_sold_and_only_the_differences_trade():
 def test_fills_take_the_slippage_and_the_commission():
     config = BacktestConfig(commission_pct=0.1, slippage_pct=0.1)
     # Only January rebalances: February would trim a share, since the costs left less equity.
-    result = _run(_levels(100, 200, 300, 400, length=40), RotationConfig(holdings=1, absolute_lookback=0), config=config)
+    result = _run(
+        _levels(100, 200, 300, 400, length=40), RotationConfig(holdings=1, absolute_lookback=0), config=config
+    )
     trade = result.trades[0].trade
     assert trade.entry_price == pytest.approx(400.4) and trade.size == 250
     fee = 0.001 * 250 * 400.4
@@ -191,12 +193,16 @@ def test_inverse_volatility_gives_the_calmer_pick_the_larger_share():
     setup = prepare({"CALM": calm, "WILD": wild}, NO_COSTS, rotation, CloseRank(), InverseVolatilityWeight(lookback=10))
     picks = targets(setup, rotation, JANUARY).picks
     assert [pick.ticker for pick in picks] == ["CALM", "WILD"]
-    assert picks[0].weight_pct == pytest.approx(200 / 3, rel=0.02) and picks[1].weight_pct == pytest.approx(100 / 3, rel=0.02)
+    assert picks[0].weight_pct == pytest.approx(200 / 3, rel=0.02) and picks[1].weight_pct == pytest.approx(
+        100 / 3, rel=0.02
+    )
 
 
 def test_the_run_starts_at_the_first_rebalance_with_a_ranking():
     frames = {"A": _ticker(closes=np.linspace(100, 130, 60)), "B": _ticker(closes=np.linspace(100, 110, 60))}
-    result = _run(frames, RotationConfig(holdings=1, absolute_lookback=0), ranking=MomentumPriority(lookback=30, skip=0))
+    result = _run(
+        frames, RotationConfig(holdings=1, absolute_lookback=0), ranking=MomentumPriority(lookback=30, skip=0)
+    )
     assert result.equity.index[0] == pd.Timestamp("2020-02-28") and result.rebalances == 1
     assert [item.ticker for item in result.trades] == ["A"]
 
@@ -224,7 +230,14 @@ def walks():
 def test_the_equity_is_the_initial_equity_plus_every_holdings_pnl(walks, rebalance):
     rotation = RotationConfig(holdings=3, absolute_lookback=126, rebalance=rebalance, safe_asset="SAFE")
     safe = random_walk(1500, seed=99, volatility=0.005)
-    result = _run(walks, rotation, ranking=MomentumPriority(), weighting=InverseVolatilityWeight(), config=BacktestConfig(), safe=safe)
+    result = _run(
+        walks,
+        rotation,
+        ranking=MomentumPriority(),
+        weighting=InverseVolatilityWeight(),
+        config=BacktestConfig(),
+        safe=safe,
+    )
     assert result.equity.iloc[-1] - 100_000.0 == pytest.approx(sum(item.trade.pnl for item in result.trades))
     assert result.holdings.max() <= 4 and result.unfilled == 0
     shares = contributions(result, 100_000.0)
@@ -236,14 +249,21 @@ def test_decisions_only_read_the_bars_up_to_their_close(walks):
     rotation = RotationConfig(holdings=2, absolute_lookback=126)
     full = _run(walks, rotation, ranking=MomentumPriority(), config=BacktestConfig())
     cut = pd.Timestamp("2016-06-15")
-    early = _run({ticker: df.loc[:cut] for ticker, df in walks.items()}, rotation, ranking=MomentumPriority(), config=BacktestConfig())
+    early = _run(
+        {ticker: df.loc[:cut] for ticker, df in walks.items()},
+        rotation,
+        ranking=MomentumPriority(),
+        config=BacktestConfig(),
+    )
     pd.testing.assert_series_equal(early.equity, full.equity.loc[: early.equity.index[-1]])
 
 
 def test_periods_trade_before_and_from_the_split_with_fresh_equity(walks):
     rotation = RotationConfig(holdings=2, absolute_lookback=0)
     split = pd.Timestamp("2016-01-04")
-    periods = run_rotation_periods(VectorizedRotationEngine(), walks, BacktestConfig(), rotation, MomentumPriority(), EqualWeight(), None, split)
+    periods = run_rotation_periods(
+        VectorizedRotationEngine(), walks, BacktestConfig(), rotation, MomentumPriority(), EqualWeight(), None, split
+    )
     assert periods.in_sample.equity.index[-1] < split
     assert periods.out_of_sample.equity.index[0] >= split
     assert periods.out_of_sample.equity.iloc[0] == 100_000.0
@@ -257,7 +277,9 @@ def test_metrics_compare_the_benchmark_and_report_how_the_rotation_traded(walks)
     report = rotation_metrics(result, benchmark, 252)
     dates = result.equity.index
     assert report.metrics.buy_hold_pct == pytest.approx((benchmark[dates[-1]] / benchmark[dates[0]] - 1) * 100)
-    assert math.isnan(report.metrics.expectancy_r) and report.metrics.trades == sum(t.trade.is_closed for t in result.trades)
+    assert math.isnan(report.metrics.expectancy_r) and report.metrics.trades == sum(
+        t.trade.is_closed for t in result.trades
+    )
     stats = report.stats
     assert stats.rebalances == result.rebalances and stats.max_holdings == 2
     assert stats.average_cash_pct == pytest.approx(100.0 - stats.average_exposure_pct)
@@ -289,7 +311,9 @@ def test_the_use_case_runs_the_watchlist_with_a_safe_asset_and_both_periods(mark
             settings={"rotation": {"holdings": 2, "absolute_lookback": 63}},
         )
     )
-    assert report.rotation == RotationConfig(holdings=2, absolute_lookback=63, rebalance=Rebalance.WEEKLY, safe_asset="TLT")
+    assert report.rotation == RotationConfig(
+        holdings=2, absolute_lookback=63, rebalance=Rebalance.WEEKLY, safe_asset="TLT"
+    )
     assert report.weighting == InverseVolatilityWeight(lookback=20) and report.benchmark == "SPY"
     assert report.benchmark_close.index.equals(report.result.equity.index)
     assert report.split is not None and report.in_sample is not None and report.out_of_sample is not None
