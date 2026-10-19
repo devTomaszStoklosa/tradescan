@@ -19,6 +19,7 @@ import {
   signals,
 } from "../test/fixtures";
 import { ComparePage } from "./ComparePage";
+import { requestUrl } from "../test/fetch";
 
 vi.mock("../components/charts/EquityChart", () => ({
   EquityChart: ({ series, label }: { series: { label: string }[]; label: string }) => (
@@ -52,7 +53,7 @@ function pin(runs: PinnedRun[]) {
 
 function renderPage() {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-    const url = String(input);
+    const url = requestUrl(input);
     const body = url.endsWith("/config") ? config : url.endsWith("/signals") ? signals : null;
     return new Response(JSON.stringify(body), {
       status: body ? 200 : 404,

@@ -107,7 +107,7 @@ export function ComparePage() {
               accept="application/json,.json"
               aria-label="Runs file to import"
               className="hidden"
-              onChange={onImport}
+              onChange={(event) => void onImport(event)}
             />
             <Button onClick={() => fileInput.current?.click()}>Import JSON</Button>
             <Button onClick={onExport} disabled={!runs.length}>

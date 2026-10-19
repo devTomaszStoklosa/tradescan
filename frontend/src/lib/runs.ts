@@ -206,7 +206,8 @@ export function snapshotPortfolioRun(
   };
 }
 
-const sortedEntries = (record: object) => Object.entries(record).sort(([left], [right]) => left.localeCompare(right));
+const sortedEntries = <T>(record: Record<string, T>): [string, T][] =>
+  Object.entries(record).sort(([left], [right]) => left.localeCompare(right));
 
 const ruleKey = ({ name, params }: AppliedRuleOut) => [name, sortedEntries(params)];
 

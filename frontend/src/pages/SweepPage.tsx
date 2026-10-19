@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type SubmitEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
-import type { ConfigOut, SignalOut, SweepOut } from "../api/client";
+import type { ConfigOut, SignalOut, SweepCellOut, SweepOut } from "../api/client";
 import { useConfig, useSignals, useSweep } from "../api/hooks";
 import { METRICS, MetricsTable } from "../components/BacktestResults";
 import { BacktestSetupFields } from "../components/BacktestSetupFields";
@@ -78,7 +78,7 @@ function SweepFormPanel({
   const changes = setupChanges(draft, config);
   const invalid = hasSetupProblems(draft, config, signals) || sweepBody(draft, params, limits) === null;
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: SubmitEvent) => {
     event.preventDefault();
     if (!invalid) onSubmit(draft);
   };
@@ -160,8 +160,9 @@ function SweepView({
 
   const metricLabel = METRICS.find((item) => item.key === metric)?.label ?? metric;
   const errors = cells.filter((cell) => cell.error);
-  const value = (index: number | null, period: Period) =>
-    index === null ? DASH : cellText(cells[index]!, period, metric);
+  const bestOut = best === null ? undefined : cells[best];
+  const value = (target: SweepCellOut | undefined, period: Period) =>
+    target ? cellText(target, period, metric) : DASH;
   const medianText = (period: Period) => {
     const middle = median(periodValues(cells, period, metric));
     return middle === null ? DASH : fmtNumber(middle);
@@ -186,7 +187,7 @@ function SweepView({
       </div>
       {errors.length > 0 && (
         <Notice>
-          {plural(errors.length, "combination")} could not run, e.g. {errors[0]!.error}
+          {plural(errors.length, "combination")} could not run, e.g. {errors[0]?.error}
         </Notice>
       )}
       <div className="flex flex-wrap items-end gap-3">
@@ -203,13 +204,13 @@ function SweepView({
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <StatTile
           label={`Best in-sample ${metricLabel}`}
-          value={value(best, "in_sample")}
-          sub={best === null ? undefined : describeCombination(axes, cells[best]!.values)}
+          value={value(bestOut, "in_sample")}
+          sub={bestOut && describeCombination(axes, bestOut.values)}
         />
         <StatTile
           label="Same setting out-of-sample"
-          value={value(best, "out_of_sample")}
-          sub={best === null ? undefined : `${cells[best]!.out_of_sample?.trades ?? 0} trades`}
+          value={value(bestOut, "out_of_sample")}
+          sub={bestOut && `${bestOut.out_of_sample?.trades ?? 0} trades`}
         />
         <StatTile
           label={`Median ${metricLabel}`}
@@ -344,7 +345,7 @@ export function SweepPage() {
         </EmptyState>
       )}
       {sweep.isLoading && <Loading message="Running every combination in-sample and out-of-sample…" />}
-      {sweep.isError && <ErrorBox error={sweep.error} onRetry={() => sweep.refetch()} />}
+      {sweep.isError && <ErrorBox error={sweep.error} onRetry={() => void sweep.refetch()} />}
       {sweep.data && (
         <SweepView
           result={sweep.data}

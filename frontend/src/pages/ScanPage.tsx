@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type SubmitEvent } from "react";
 import { useSearchParams } from "react-router";
 
 import type { ConfigOut, HitOut, ScanOut, SignalOut, WatchlistOut } from "../api/client";
@@ -88,7 +88,7 @@ function ScanFormPanel({
     hasProblems(draft.settings, sectionSpecs(sections)) ||
     hasProblems(draft.signalParams, signalSpecs(signals));
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: SubmitEvent) => {
     event.preventDefault();
     if (!invalid) onSubmit(draft);
   };
@@ -255,12 +255,12 @@ export function ScanPage() {
         </EmptyState>
       )}
       {scan.isLoading && <Loading message={loadingMessage} />}
-      {scan.isError && <ErrorBox error={scan.error} onRetry={() => scan.refetch()} />}
+      {scan.isError && <ErrorBox error={scan.error} onRetry={() => void scan.refetch()} />}
       {scan.data && (
         <ScanResults
           data={scan.data}
           refreshing={scan.isFetching}
-          onRefresh={() => scan.refetch()}
+          onRefresh={() => void scan.refetch()}
           onSelect={setSelected}
           selectedKey={selected ? hitKey(selected) : null}
         />

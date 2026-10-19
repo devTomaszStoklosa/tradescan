@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type SubmitEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import type {
@@ -91,7 +91,7 @@ function WalkForwardFormPanel({
   const section = config.sections.find((item) => item.name === WALK_FORWARD_SECTION);
   const tooMany = runs !== null && (runs.combinations > config.sweep.max_combinations || runs.runs > limits.max_runs);
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: SubmitEvent) => {
     event.preventDefault();
     if (!invalid) onSubmit(draft);
   };
@@ -387,7 +387,7 @@ function WalkForwardView({
       {result.errors.length > 0 && (
         <Notice>
           {plural(result.errors.length, "combination")} could not run and were never picked, e.g.{" "}
-          {result.errors[0]!.error}
+          {result.errors[0]?.error}
         </Notice>
       )}
       {few > 0 && (
@@ -496,7 +496,7 @@ export function WalkForwardPage() {
         </EmptyState>
       )}
       {run.isLoading && <Loading message="Sweeping every in-sample window and trading each pick…" />}
-      {run.isError && <ErrorBox error={run.error} onRetry={() => run.refetch()} />}
+      {run.isError && <ErrorBox error={run.error} onRetry={() => void run.refetch()} />}
       {run.data && <WalkForwardView result={run.data} form={form} params={sweepable} config={defaults} />}
     </>
   );

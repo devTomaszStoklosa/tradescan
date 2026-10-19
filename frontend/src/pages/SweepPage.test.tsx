@@ -7,12 +7,13 @@ import { describe, expect, it, vi } from "vitest";
 import { AccountProvider } from "../state/account";
 import { config, signals, sweepResult } from "../test/fixtures";
 import { SweepPage } from "./SweepPage";
+import { requestBody, requestUrl } from "../test/fetch";
 
 const RESPONSES: Record<string, unknown> = { "/config": config, "/signals": signals, "/sweep": sweepResult };
 
 function renderPage(path: string) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-    const url = String(input);
+    const url = requestUrl(input);
     const body = Object.entries(RESPONSES).find(([route]) => url.endsWith(route))?.[1] ?? null;
     return new Response(JSON.stringify(body), {
       status: body ? 200 : 404,
@@ -39,8 +40,8 @@ function renderPage(path: string) {
 const sweepBodies = () =>
   vi
     .mocked(globalThis.fetch)
-    .mock.calls.filter(([input]) => String(input).endsWith("/sweep"))
-    .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>);
+    .mock.calls.filter(([input]) => requestUrl(input).endsWith("/sweep"))
+    .map(([, init]) => requestBody(init) as Record<string, unknown>);
 
 const SWEEP_URL =
   "/sweep?ticker=SPY&signal=connors_rsi2_long&ax1=signal.oversold&ax1v=5:15:5&ax2=exit.target.target_r&ax2v=2:3:1";

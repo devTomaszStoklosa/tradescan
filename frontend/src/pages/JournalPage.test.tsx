@@ -10,6 +10,7 @@ import { PinnedRunsProvider } from "../state/pinnedRuns";
 import { makeRun } from "../test/fixtures";
 import { MemoryRunStore } from "../test/runStore";
 import { JournalPage } from "./JournalPage";
+import { requestBody, requestUrl } from "../test/fetch";
 
 const baseline = makeRun(1, {}, { name: "baseline" });
 
@@ -58,10 +59,10 @@ let summary: JournalSummaryOut = SUMMARY;
 const sent = (method: string) =>
   vi
     .mocked(globalThis.fetch)
-    .mock.calls.filter(([input, init]) => String(input).includes("/journal/trades") && init?.method === method)
+    .mock.calls.filter(([input, init]) => requestUrl(input).includes("/journal/trades") && init?.method === method)
     .map(([input, init]) => ({
-      url: String(input),
-      body: init?.body ? (JSON.parse(String(init.body)) as JournalTradeIn) : null,
+      url: requestUrl(input),
+      body: init?.body ? (requestBody(init) as JournalTradeIn) : null,
     }));
 
 const json = (body: unknown, status = 200) =>
@@ -69,11 +70,11 @@ const json = (body: unknown, status = 200) =>
 
 function renderPage(path = "/journal", store = new MemoryRunStore([baseline])) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-    const url = String(input);
+    const url = requestUrl(input);
     const method = init?.method ?? "GET";
     if (url.endsWith("/api/journal")) return json({ trades, summary });
     if (method === "POST") {
-      const body = JSON.parse(String(init?.body)) as JournalTradeIn;
+      const body = requestBody(init) as JournalTradeIn;
       if (body.stop != null && body.stop >= body.entry_price)
         return json({ detail: "The stop of a long trade must be below the entry price" }, 400);
       trades = [tradeOut(trades.length + 1, body), ...trades];
@@ -81,9 +82,7 @@ function renderPage(path = "/journal", store = new MemoryRunStore([baseline])) {
     }
     const id = Number(url.split("/").at(-1));
     if (method === "PUT") {
-      trades = trades.map((trade) =>
-        trade.id === id ? tradeOut(id, JSON.parse(String(init?.body)) as JournalTradeIn) : trade,
-      );
+      trades = trades.map((trade) => (trade.id === id ? tradeOut(id, requestBody(init) as JournalTradeIn) : trade));
       return json(trades.find((trade) => trade.id === id));
     }
     if (method === "DELETE") {
@@ -226,7 +225,7 @@ describe("JournalPage", () => {
         closed: "2026-03-20",
         exit_price: 530,
         fees: 2,
-        run: JSON.parse(JSON.stringify(suggestingRun(baseline))),
+        run: JSON.parse(JSON.stringify(suggestingRun(baseline))) as unknown,
       },
     });
     const spy = await within(table).findByRole("row", { name: /SPY/ });

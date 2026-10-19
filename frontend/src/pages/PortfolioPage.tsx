@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type SubmitEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import type {
@@ -109,7 +109,7 @@ function PortfolioFormPanel({
   // direction's signals; the traded signal's parameters are the setup's.
   const scoreSections = pickSections(config.sections, prioritySections(draft.priority, config));
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: SubmitEvent) => {
     event.preventDefault();
     if (!invalid) onSubmit(counted);
   };
@@ -544,7 +544,7 @@ export function PortfolioPage() {
           }
         />
       )}
-      {run.isError && <ErrorBox error={run.error} onRetry={() => run.refetch()} />}
+      {run.isError && <ErrorBox error={run.error} onRetry={() => void run.refetch()} />}
       {run.data && <PortfolioView result={run.data} form={form} config={defaults} />}
     </>
   );

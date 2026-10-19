@@ -117,31 +117,29 @@ export function PinnedRunsProvider({ children, store = serverRunStore }: { child
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    const abort = new AbortController();
     (async () => {
       let loaded: PinnedRun[];
       try {
         loaded = await store.load();
       } catch (problem) {
-        if (!cancelled) setError(`Pinned runs could not be read from the server (${reason(problem)}).`);
+        if (!abort.signal.aborted) setError(`Pinned runs could not be read from the server (${reason(problem)}).`);
         return;
       }
-      if (cancelled) return;
+      abort.signal.throwIfAborted(); // the .catch below ignores what an aborted load throws
       const moved = await moveBrowserRuns(store, loaded);
-      if (cancelled) return;
+      abort.signal.throwIfAborted();
       setRuns(moved.runs);
       setNotice(moved.notice);
       setError(moved.error);
     })()
       .catch((problem: unknown) => {
-        if (!cancelled) setError(`Pinned runs could not be read from the server (${reason(problem)}).`);
+        if (!abort.signal.aborted) setError(`Pinned runs could not be read from the server (${reason(problem)}).`);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!abort.signal.aborted) setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
+    return () => abort.abort();
   }, [store]);
 
   /** Show what the server has; keeps the last error, since a reload follows a failed change. */

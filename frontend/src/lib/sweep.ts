@@ -338,21 +338,21 @@ export function shade(value: number | null, scale: HeatScale | null): Shade | nu
 
 /** Position of the highest value in a period; ties go to the first. Null when no cell has a value. */
 export function bestCell(cells: SweepCellOut[], metric: MetricKey, period: Period = "in_sample"): number | null {
-  let best: number | null = null;
-  cells.forEach((cell, index) => {
+  let best: { index: number; value: number } | null = null;
+  for (const [index, cell] of cells.entries()) {
     const value = cellValue(cell, period, metric);
-    if (value === null) return;
-    const current = best === null ? null : cellValue(cells[best]!, period, metric);
-    if (current === null || value > current) best = index;
-  });
-  return best;
+    if (value !== null && (best === null || value > best.value)) best = { index, value };
+  }
+  return best ? best.index : null;
 }
 
 export function median(values: number[]): number | null {
   const sorted = values.filter(Number.isFinite).sort((left, right) => left - right);
-  if (!sorted.length) return null;
   const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
+  const upper = sorted[middle];
+  if (upper === undefined) return null;
+  const lower = sorted[middle - 1];
+  return sorted.length % 2 || lower === undefined ? upper : (lower + upper) / 2;
 }
 
 export const periodValues = (cells: SweepCellOut[], period: Period, metric: MetricKey): number[] =>
@@ -392,7 +392,9 @@ export function neighbourAverage(
   metric: MetricKey,
 ): number | null {
   const values = neighbours(index, counts)
-    .map((position) => cellValue(cells[position]!, period, metric))
+    .map((position) => cells[position])
+    .filter((cell) => cell !== undefined)
+    .map((cell) => cellValue(cell, period, metric))
     .filter((value): value is number => value !== null && Number.isFinite(value));
   return values.length ? values.reduce((total, value) => total + value, 0) / values.length : null;
 }

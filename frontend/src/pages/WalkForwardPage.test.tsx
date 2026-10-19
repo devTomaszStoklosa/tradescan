@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AccountProvider } from "../state/account";
 import { config, signals, walkForwardResult } from "../test/fixtures";
 import { WalkForwardPage } from "./WalkForwardPage";
+import { requestBody, requestUrl } from "../test/fetch";
 
 vi.mock("../components/charts/EquityChart", () => ({ EquityChart: () => null }));
 
@@ -18,7 +19,7 @@ const RESPONSES: Record<string, unknown> = {
 
 function renderPage(path: string) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-    const url = String(input);
+    const url = requestUrl(input);
     const body = Object.entries(RESPONSES).find(([route]) => url.endsWith(route))?.[1] ?? null;
     return new Response(JSON.stringify(body), {
       status: body ? 200 : 404,
@@ -45,8 +46,8 @@ function renderPage(path: string) {
 const requestBodies = () =>
   vi
     .mocked(globalThis.fetch)
-    .mock.calls.filter(([input]) => String(input).endsWith("/walk-forward"))
-    .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>);
+    .mock.calls.filter(([input]) => requestUrl(input).endsWith("/walk-forward"))
+    .map(([, init]) => requestBody(init) as Record<string, unknown>);
 
 const URL =
   "/walk-forward?ticker=SPY&signal=connors_rsi2_long&ax1=signal.oversold&ax1v=5:15:5&ax2=exit.target.target_r&ax2v=2:3:1";

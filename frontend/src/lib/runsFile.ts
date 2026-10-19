@@ -35,7 +35,7 @@ export function encodeRun({ equity, ...run }: PinnedRun): StoredRun {
       time: equity.map((point) => point.time),
       value: equity.map((point) => Math.round(point.value * 100) / 100),
     },
-  } as StoredRun;
+  };
 }
 
 export function encodeRuns(runs: PinnedRun[]): RunsFile {
@@ -230,8 +230,11 @@ function decodeRun(value: unknown, index: number): PinnedRun {
   }
   // Only known fields are kept, so nothing unexpected reaches storage again.
   const run = Object.fromEntries(Object.keys(fields).map((field) => [field, value[field]])) as StoredRun;
-  const points = run.equity.time.map((time, at) => ({ time, value: run.equity.value[at] as number }));
-  return { ...run, equity: points } as PinnedRun;
+  const points = run.equity.time.flatMap((time, at) => {
+    const value = run.equity.value[at];
+    return value === undefined ? [] : [{ time, value }];
+  });
+  return { ...run, equity: points };
 }
 
 // --- Version 1: every run used a next-open entry, a target and a time exit, set in `config` ------------

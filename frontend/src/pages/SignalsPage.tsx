@@ -6,7 +6,7 @@ import { DataTable, type Column } from "../components/DataTable";
 import { FAMILY_LABELS, SignalChip } from "../components/SignalChip";
 import { FamilyPicker } from "../components/UniverseFilters";
 import { DirectionBadge, ErrorBox, Field, Input, Loading, PageHeader, Panel } from "../components/ui";
-import { fmtNumber } from "../lib/format";
+import { fmtNumber, fmtParam } from "../lib/format";
 
 const columns: Column<SignalOut>[] = [
   {
@@ -41,7 +41,7 @@ const columns: Column<SignalOut>[] = [
       <ul>
         {s.params.map((spec) => (
           <li key={spec.name} title={spec.help || undefined}>
-            {spec.label}: <span className="num text-fg">{String(spec.default)}</span>
+            {spec.label}: <span className="num text-fg">{fmtParam(spec.default)}</span>
             {spec.unit && ` ${spec.unit}`}{" "}
             <span className="num">
               ({spec.minimum}–{spec.maximum})
@@ -68,7 +68,7 @@ export function SignalsPage() {
     );
   }, [signals.data, query, families]);
 
-  if (signals.isError) return <ErrorBox error={signals.error} onRetry={() => signals.refetch()} />;
+  if (signals.isError) return <ErrorBox error={signals.error} onRetry={() => void signals.refetch()} />;
   if (!signals.data || !config.data) return <Loading message="Loading signals…" />;
 
   return (

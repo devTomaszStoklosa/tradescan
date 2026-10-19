@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AccountProvider } from "../state/account";
 import { config, signals, watchlistResult, watchlists } from "../test/fixtures";
 import { WatchlistPage } from "./WatchlistPage";
+import { requestBody, requestUrl } from "../test/fetch";
 
 const RESPONSES: Record<string, unknown> = {
   "/config": config,
@@ -17,7 +18,7 @@ const RESPONSES: Record<string, unknown> = {
 
 function renderPage(path: string) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-    const url = String(input);
+    const url = requestUrl(input);
     const body = Object.entries(RESPONSES).find(([route]) => url.endsWith(route))?.[1] ?? null;
     return new Response(JSON.stringify(body), {
       status: body ? 200 : 404,
@@ -44,8 +45,8 @@ function renderPage(path: string) {
 const bodies = () =>
   vi
     .mocked(globalThis.fetch)
-    .mock.calls.filter(([input]) => String(input).endsWith("/watchlist-backtest"))
-    .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>);
+    .mock.calls.filter(([input]) => requestUrl(input).endsWith("/watchlist-backtest"))
+    .map(([, init]) => requestBody(init) as Record<string, unknown>);
 
 const RESULT_URL = "/watchlist?w=us_large&signal=connors_rsi2_long&filter=market";
 

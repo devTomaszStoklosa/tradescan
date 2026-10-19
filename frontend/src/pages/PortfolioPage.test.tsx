@@ -9,6 +9,7 @@ import { PinnedRunsProvider } from "../state/pinnedRuns";
 import { MemoryRunStore } from "../test/runStore";
 import { config, makePortfolioRun, portfolioResult, signals, watchlists } from "../test/fixtures";
 import { PortfolioPage } from "./PortfolioPage";
+import { requestBody, requestUrl } from "../test/fetch";
 
 vi.mock("../components/charts/EquityChart", () => ({ EquityChart: () => null }));
 
@@ -25,7 +26,7 @@ function renderPage(path: string) {
     "/portfolio-backtest": result,
   };
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-    const url = String(input);
+    const url = requestUrl(input);
     const body = Object.entries(responses).find(([route]) => url.endsWith(route))?.[1] ?? null;
     return new Response(JSON.stringify(body), {
       status: body ? 200 : 404,
@@ -55,8 +56,8 @@ function renderPage(path: string) {
 const bodies = () =>
   vi
     .mocked(globalThis.fetch)
-    .mock.calls.filter(([input]) => String(input).endsWith("/portfolio-backtest"))
-    .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>);
+    .mock.calls.filter(([input]) => requestUrl(input).endsWith("/portfolio-backtest"))
+    .map(([, init]) => requestBody(init) as Record<string, unknown>);
 
 const RESULT_URL =
   "/portfolio?w=us_large&signal=connors_rsi2_long&eng=vectorized&filter=market&set.portfolio.max_positions=5&prio=momentum";

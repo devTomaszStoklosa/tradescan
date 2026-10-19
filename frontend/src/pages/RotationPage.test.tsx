@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AccountProvider } from "../state/account";
 import { config, rotationResult, watchlists } from "../test/fixtures";
 import { RotationPage } from "./RotationPage";
+import { requestBody, requestUrl } from "../test/fetch";
 
 vi.mock("../components/charts/EquityChart", () => ({ EquityChart: () => null }));
 
@@ -17,7 +18,7 @@ function renderPage(path: string) {
     "/rotation-backtest": rotationResult,
   };
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-    const url = String(input);
+    const url = requestUrl(input);
     const body = Object.entries(responses).find(([route]) => url.endsWith(route))?.[1] ?? null;
     return new Response(JSON.stringify(body), {
       status: body ? 200 : 404,
@@ -38,8 +39,8 @@ function renderPage(path: string) {
 const bodies = () =>
   vi
     .mocked(globalThis.fetch)
-    .mock.calls.filter(([input]) => String(input).endsWith("/rotation-backtest"))
-    .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>);
+    .mock.calls.filter(([input]) => requestUrl(input).endsWith("/rotation-backtest"))
+    .map(([, init]) => requestBody(init) as Record<string, unknown>);
 
 describe("RotationPage", () => {
   it("runs the default watchlist with the chosen ranking, weights, rebalance, holdings and safe asset", async () => {

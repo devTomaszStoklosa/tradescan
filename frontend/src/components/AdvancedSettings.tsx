@@ -4,6 +4,7 @@ import { countChanges, describeSignal, withOwner, withValue, type Overrides, typ
 import { ParamFields, SectionFields } from "./ParamFields";
 import { SignalChip } from "./SignalChip";
 import { Button } from "./ui";
+import { omit } from "../lib/records";
 
 const SCORING = "scoring";
 const SIGNAL_WEIGHTS = "signal_weights";
@@ -73,9 +74,7 @@ function SignalParameters({
 
   const setWeight = (name: string, value: number | null) => {
     if (!weightsSpec) return;
-    const next = { ...weights };
-    if (value === null) delete next[name];
-    else next[name] = value;
+    const next = value === null ? omit(weights, name) : { ...weights, [name]: value };
     onSettingsChange(withOwner(settings, SCORING, withValue(settings[SCORING] ?? {}, weightsSpec, next)));
   };
 
@@ -188,7 +187,7 @@ export function AdvancedSettings({
               />
             </section>
           ))}
-        {signals && (onSignalParamsChange || scoring) && (
+        {signals && (onSignalParamsChange ?? scoring) && (
           <SignalParameters
             signals={signals}
             params={signalParams}

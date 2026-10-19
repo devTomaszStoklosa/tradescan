@@ -5,6 +5,7 @@
  */
 import type { ConfigOut, FilterRuleOut, RuleOut } from "../api/client";
 import { describeSignal, hasProblems, withOwner, type Overrides, type Values } from "./overrides";
+import { omit } from "./records";
 
 export type RuleDefaults = Pick<ConfigOut, "default_entry" | "default_exits">;
 export type RuleSpecs = Pick<ConfigOut, "entry_rules" | "exit_rules" | "filter_rules">;
@@ -73,14 +74,15 @@ export const defaultRules = (defaults: RuleDefaults): TradeRulesForm => ({
 export const needsBenchmark = (filters: readonly string[], rules: FilterRuleOut[]): boolean =>
   filters.some((name) => findRule(rules, name)?.needs_benchmark);
 
+const allFound = <T>(rules: (T | undefined)[]): rules is T[] => rules.every((rule) => rule !== undefined);
+
 /** True when a rule is unknown or a parameter is invalid. */
 export function hasRuleProblems(form: TradeRulesForm, specs: RuleSpecs): boolean {
   const entry = findRule(specs.entry_rules, form.entry);
   const exits = form.exits.map((name) => findRule(specs.exit_rules, name));
   const filters = form.filters.map((name) => findRule(specs.filter_rules, name));
-  if (!entry || exits.some((rule) => !rule) || filters.some((rule) => !rule)) return true;
-  const specsOf = (rules: (RuleOut | undefined)[]) =>
-    Object.fromEntries(rules.map((rule) => [rule!.name, rule!.params]));
+  if (!entry || !allFound(exits) || !allFound(filters)) return true;
+  const specsOf = (rules: RuleOut[]) => Object.fromEntries(rules.map((rule) => [rule.name, rule.params]));
   return (
     hasProblems({ [entry.name]: form.entryParams }, { [entry.name]: entry.params }) ||
     hasProblems(form.exitParams, specsOf(exits)) ||
@@ -99,12 +101,12 @@ export function moveLegacyExitSettings(
   settings: Overrides,
   exitParams: Overrides,
 ): { settings: Overrides; exitParams: Overrides } {
-  const backtest = { ...settings.backtest };
+  let backtest = { ...settings.backtest };
   let params = exitParams;
   for (const [name, rule] of Object.entries(LEGACY_EXIT_SETTINGS)) {
     const value = backtest[name];
     if (value === undefined) continue;
-    delete backtest[name];
+    backtest = omit(backtest, name);
     params = withOwner(params, rule, { [name]: value, ...params[rule] });
   }
   return { settings: withOwner(settings, "backtest", backtest), exitParams: params };

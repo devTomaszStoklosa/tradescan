@@ -93,7 +93,10 @@ export class ApiError extends Error {
   }
 }
 
-type ValidationIssue = { loc?: (string | number)[]; msg?: string };
+interface ValidationIssue {
+  loc?: (string | number)[];
+  msg?: string;
+}
 
 function describe(detail: unknown, fallback: string): string {
   if (typeof detail === "string") return detail;
@@ -108,12 +111,12 @@ function describe(detail: unknown, fallback: string): string {
   return fallback;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: Pick<RequestInit, "method" | "body">): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`/api${path}`, {
       ...init,
-      headers: { "Content-Type": "application/json", ...init?.headers },
+      headers: { "Content-Type": "application/json" },
     });
   } catch {
     throw new ApiError(0, "Cannot reach the tradescan server. Is `tradescan serve` running?");
@@ -153,12 +156,12 @@ export const api = {
   pinRun: (body: PinnedRunIn) => post<PinnedRunOut>("/runs", body),
   updateRun: (id: string, body: PinnedRunPatchIn) =>
     send<PinnedRunOut>("PATCH", `/runs/${encodeURIComponent(id)}`, body),
-  unpinRun: (id: string) => send<void>("DELETE", `/runs/${encodeURIComponent(id)}`),
-  clearRuns: () => send<void>("DELETE", "/runs"),
+  unpinRun: (id: string) => send<undefined>("DELETE", `/runs/${encodeURIComponent(id)}`),
+  clearRuns: () => send<undefined>("DELETE", "/runs"),
   journal: () => request<JournalOut>("/journal"),
   logTrade: (body: JournalTradeIn) => post<JournalTradeOut>("/journal/trades", body),
   replaceTrade: (id: number, body: JournalTradeIn) => send<JournalTradeOut>("PUT", `/journal/trades/${id}`, body),
-  deleteTrade: (id: number) => send<void>("DELETE", `/journal/trades/${id}`),
+  deleteTrade: (id: number) => send<undefined>("DELETE", `/journal/trades/${id}`),
 };
 
 export type Api = typeof api;

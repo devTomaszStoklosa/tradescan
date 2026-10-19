@@ -94,7 +94,7 @@ type SpreadField = "median" | "p25" | "p75" | "minimum" | "maximum";
 
 /** A spread value; the API sends an infinite one (a profit factor without losers) as null with tickers left in. */
 export function spreadValue(spread: MetricSpreadOut | undefined, field: SpreadField): number | null {
-  if (!spread || !spread.tickers) return null;
+  if (!spread?.tickers) return null;
   return spread[field] ?? Infinity;
 }
 

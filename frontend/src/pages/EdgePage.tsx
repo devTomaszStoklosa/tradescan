@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type SubmitEvent } from "react";
 import { useSearchParams } from "react-router";
 
 import type { EdgeOut, Family, SignalOut, WatchlistOut } from "../api/client";
@@ -65,7 +65,7 @@ function EdgeFormPanel({
   useEffect(() => setDraft(withUniverse(initial)), [initial, watchlists]);
   const invalid = !edgeBody(draft) || hasProblems(draft.signalParams, signalSpecs(signals));
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: SubmitEvent) => {
     event.preventDefault();
     if (!invalid) onSubmit(draft);
   };
@@ -174,7 +174,7 @@ export function EdgePage() {
           }
         />
       )}
-      {edge.isError && <ErrorBox error={edge.error} onRetry={() => edge.refetch()} />}
+      {edge.isError && <ErrorBox error={edge.error} onRetry={() => void edge.refetch()} />}
       {edge.data && (
         <div className="space-y-3">
           {edge.data.missing.length > 0 && <Notice>No data for: {edge.data.missing.join(", ")}</Notice>}

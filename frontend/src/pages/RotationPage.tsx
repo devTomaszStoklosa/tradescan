@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type SubmitEvent } from "react";
 import { useSearchParams } from "react-router";
 
 import type { ConfigOut, PickOut, RotationOut, TickerContributionOut, WatchlistOut } from "../api/client";
@@ -69,7 +69,7 @@ function RotationFormPanel({
   const rotation = config.sections.find((section) => section.name === ROTATION_SECTION);
   const costs = config.sections.find((section) => section.name === "backtest");
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: SubmitEvent) => {
     event.preventDefault();
     if (!invalid) onSubmit(draft);
   };
@@ -486,7 +486,7 @@ export function RotationPage() {
           }
         />
       )}
-      {run.isError && <ErrorBox error={run.error} onRetry={() => run.refetch()} />}
+      {run.isError && <ErrorBox error={run.error} onRetry={() => void run.refetch()} />}
       {run.data && <RotationView result={run.data} />}
     </>
   );

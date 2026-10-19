@@ -5,7 +5,6 @@ import {
   createSeriesMarkers,
   type ISeriesApi,
   type PriceFormat,
-  type Time,
 } from "lightweight-charts";
 import { useEffect, useRef } from "react";
 
@@ -83,7 +82,7 @@ export function EquityChart({
         priceScaleId: item.axis ?? "right",
         priceFormat: PRICE_FORMATS[format],
       });
-      line.setData(item.points.map((point) => ({ time: point.time as Time, value: point.value })));
+      line.setData(item.points.map((point) => ({ time: point.time, value: point.value })));
       lines.push(line);
     }
     const [first] = lines;
@@ -91,7 +90,7 @@ export function EquityChart({
       createSeriesMarkers(
         first,
         events.map((event) => ({
-          time: event.time as Time,
+          time: event.time,
           position: "aboveBar" as const,
           shape: "arrowDown" as const,
           color: palette.muted,

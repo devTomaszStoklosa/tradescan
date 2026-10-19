@@ -6,15 +6,22 @@ import { DirectionBadge } from "./ui";
 
 export const hitKey = (hit: HitOut) => `${hit.ticker}:${hit.direction}`;
 
-const TREND_ICON: Record<string, { icon: string; className: string }> = {
+interface TrendIcon {
+  icon: string;
+  className: string;
+}
+
+const NEUTRAL: TrendIcon = { icon: "■", className: "text-muted" };
+
+const TREND_ICON: Record<string, TrendIcon> = {
   up: { icon: "▲", className: "text-up" },
   down: { icon: "▼", className: "text-down" },
-  neutral: { icon: "■", className: "text-muted" },
+  neutral: NEUTRAL,
 };
 
 function TrendPair({ daily, weekly }: { daily: string; weekly: string }) {
   const render = (trend: string, label: string) => {
-    const style = TREND_ICON[trend] ?? TREND_ICON.neutral!;
+    const style = TREND_ICON[trend] ?? NEUTRAL;
     return (
       <span className={style.className} title={`${label} trend: ${trend}`}>
         {label}

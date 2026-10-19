@@ -14,7 +14,9 @@ import {
   type ParamValue,
   type Values,
 } from "../lib/overrides";
+import { fmtParam } from "../lib/format";
 import { Input, NumberInput } from "./ui";
+import { omit } from "../lib/records";
 
 const cx = (...classes: (string | false | null | undefined)[]) => classes.filter(Boolean).join(" ");
 
@@ -79,7 +81,7 @@ function NumberParam({
         min={spec.minimum}
         max={spec.maximum}
         step={String(spec.step)}
-        placeholder={String(spec.default)}
+        placeholder={fmtParam(spec.default)}
         invalid={problem !== null}
         onChange={onChange}
       />
@@ -155,9 +157,7 @@ function WeightsParam({
   const current = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const keys = spec.keys ?? Object.keys(defaults);
   const setKey = (key: string, weight: number | null) => {
-    const next = { ...current };
-    if (weight === null || weight === defaults[key]) delete next[key];
-    else next[key] = weight;
+    const next = weight === null || weight === defaults[key] ? omit(current, key) : { ...current, [key]: weight };
     onChange(Object.keys(next).length ? next : null);
   };
   return (

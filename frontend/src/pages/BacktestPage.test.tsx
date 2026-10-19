@@ -10,6 +10,7 @@ import { MemoryRunStore } from "../test/runStore";
 import { ThemeProvider } from "../state/theme";
 import { appliedRule, backtestResult, config, filterRules, signals } from "../test/fixtures";
 import { BacktestPage } from "./BacktestPage";
+import { requestBody, requestUrl } from "../test/fetch";
 
 vi.mock("../components/charts/EquityChart", () => ({ EquityChart: () => null }));
 vi.mock("../components/charts/PriceChart", () => ({ PriceChart: () => null }));
@@ -26,7 +27,7 @@ let store = new MemoryRunStore();
 function renderPage(path: string) {
   store = new MemoryRunStore();
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-    const url = String(input);
+    const url = requestUrl(input);
     const body = Object.entries(RESPONSES).find(([route]) => url.endsWith(route))?.[1] ?? null;
     return new Response(JSON.stringify(body), {
       status: body ? 200 : 404,
@@ -51,8 +52,8 @@ function renderPage(path: string) {
 const backtestBodies = () =>
   vi
     .mocked(globalThis.fetch)
-    .mock.calls.filter(([input]) => String(input).endsWith("/backtest"))
-    .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>);
+    .mock.calls.filter(([input]) => requestUrl(input).endsWith("/backtest"))
+    .map(([, init]) => requestBody(init) as Record<string, unknown>);
 
 const storedRuns = () => store.runs();
 

@@ -106,6 +106,20 @@ function PeriodValue({ metrics, metricKey }: { metrics: MetricsOut; metricKey: M
   );
 }
 
+function SplitCells({ split }: { split: NonNullable<PinnedRun["split"]> }) {
+  return (
+    <>
+      <td className="num px-3 py-1.5 whitespace-nowrap text-muted">
+        {split.out_of_sample_start} ({split.oos_pct}%)
+      </td>
+      {CHECKED.flatMap((key) => [
+        <PeriodValue key={`${key}-in`} metrics={split.in_sample} metricKey={key} />,
+        <PeriodValue key={`${key}-out`} metrics={split.out_of_sample} metricKey={key} />,
+      ])}
+    </>
+  );
+}
+
 /** One row per pinned run: key metrics in-sample next to out-of-sample. */
 export function OutOfSampleTable({ runs }: { runs: PinnedRun[] }) {
   const labels = CHECKED.map((key) => METRICS.find((metric) => metric.key === key)?.label ?? key);
@@ -151,15 +165,7 @@ export function OutOfSampleTable({ runs }: { runs: PinnedRun[] }) {
                   <RunLabel run={run} />
                 </th>
                 {run.split ? (
-                  <>
-                    <td className="num px-3 py-1.5 whitespace-nowrap text-muted">
-                      {run.split.out_of_sample_start} ({run.split.oos_pct}%)
-                    </td>
-                    {CHECKED.flatMap((key) => [
-                      <PeriodValue key={`${key}-in`} metrics={run.split!.in_sample} metricKey={key} />,
-                      <PeriodValue key={`${key}-out`} metrics={run.split!.out_of_sample} metricKey={key} />,
-                    ])}
-                  </>
+                  <SplitCells split={run.split} />
                 ) : (
                   <td colSpan={1 + CHECKED.length * 2} className="px-3 py-1.5 text-muted">
                     No split: pinned before out-of-sample results or with too short a history.

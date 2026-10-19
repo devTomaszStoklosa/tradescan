@@ -67,7 +67,7 @@ export function PriceChart({
       wickDownColor: palette.down,
       borderVisible: false,
     });
-    price.setData(candles.map(({ time, open, high, low, close }) => ({ time: time as Time, open, high, low, close })));
+    price.setData(candles.map(({ time, open, high, low, close }) => ({ time, open, high, low, close })));
 
     const volume = chart.addSeries(HistogramSeries, {
       priceScaleId: "volume",
@@ -78,7 +78,7 @@ export function PriceChart({
     chart.priceScale("volume").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
     volume.setData(
       candles.map((candle) => ({
-        time: candle.time as Time,
+        time: candle.time,
         value: candle.volume,
         color: withAlpha(candle.close >= candle.open ? palette.up : palette.down, 0.35),
       })),
@@ -96,14 +96,14 @@ export function PriceChart({
         priceLineVisible: false,
         crosshairMarkerVisible: false,
       });
-      line.setData(points.map((point) => ({ time: point.time as Time, value: point.value })));
+      line.setData(points.map((point) => ({ time: point.time, value: point.value })));
     }
 
     if (markers?.length) {
       const sorted: SeriesMarker<Time>[] = [...markers]
         .sort((a, b) => a.time.localeCompare(b.time))
         .map((marker) => ({
-          time: marker.time as Time,
+          time: marker.time,
           position: marker.position,
           shape: marker.shape,
           color: toneColor(palette, marker.tone),

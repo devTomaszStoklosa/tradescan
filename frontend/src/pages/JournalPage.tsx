@@ -77,7 +77,7 @@ export function JournalPage() {
   const edit = (trade: JournalTradeOut) => {
     save.reset();
     setEditing(trade);
-    document.getElementById(FORM_ID)?.scrollIntoView?.({ behavior: "smooth" });
+    document.getElementById(FORM_ID)?.scrollIntoView({ behavior: "smooth" });
   };
   const onDelete = (trade: JournalTradeOut) => {
     if (window.confirm(`Delete the ${trade.ticker} trade of ${trade.opened}? This cannot be undone.`))
@@ -110,7 +110,7 @@ export function JournalPage() {
       {save.isError && <ErrorBox error={save.error} />}
       {remove.isError && <ErrorBox error={remove.error} />}
       {journal.isLoading && <Loading message="Loading the journal…" />}
-      {journal.isError && <ErrorBox error={journal.error} onRetry={() => journal.refetch()} />}
+      {journal.isError && <ErrorBox error={journal.error} onRetry={() => void journal.refetch()} />}
       {journal.data && (
         <div className="space-y-3">
           <SummaryTiles summary={journal.data.summary} />

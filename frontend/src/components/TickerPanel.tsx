@@ -99,7 +99,7 @@ export function TickerPanel({
 
         <section className="rounded-xl border border-line bg-panel p-3">
           {chart.isLoading && <Loading message="Loading chart…" />}
-          {chart.isError && <ErrorBox error={chart.error} onRetry={() => chart.refetch()} />}
+          {chart.isError && <ErrorBox error={chart.error} onRetry={() => void chart.refetch()} />}
           {chart.data && (
             <PriceChart
               label={`${hit.ticker} price chart with signal events and trade levels`}
@@ -182,7 +182,7 @@ export function TickerPanel({
               ))}
           </div>
           {edge.isLoading && <Loading message="Computing historical edge…" />}
-          {edge.isError && <ErrorBox error={edge.error} onRetry={() => edge.refetch()} />}
+          {edge.isError && <ErrorBox error={edge.error} onRetry={() => void edge.refetch()} />}
           {edge.data && <EdgeTable rows={edge.data.rows} horizons={edge.data.horizons} />}
         </section>
       </aside>

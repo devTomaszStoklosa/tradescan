@@ -42,6 +42,15 @@ export function fmtSize(value: Maybe): string {
   return Number.isInteger(value) ? value.toLocaleString("en-US") : fmtNumber(value, 4);
 }
 
+/** A parameter's value as settings hold it: a number, a list of numbers or numbers by key. */
+export function fmtParam(value: number | number[] | Record<string, number>): string {
+  if (typeof value === "number") return String(value);
+  if (Array.isArray(value)) return value.join(", ");
+  return Object.entries(value)
+    .map(([key, item]) => `${key}: ${item}`)
+    .join(", ");
+}
+
 /** Tailwind text class for a signed value. */
 export function tone(value: Maybe): string {
   if (isMissing(value) || value === 0) return "";

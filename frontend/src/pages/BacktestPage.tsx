@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type SubmitEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import type { BacktestOut, ConfigOut, SignalOut } from "../api/client";
@@ -59,7 +59,7 @@ function BacktestFormPanel({
   const invalid = !draft.engines.length || hasSetupProblems(draft, config, signals, BACKTEST_PAGE_SECTIONS);
   const monteCarlo = config.sections.find((section) => section.name === MONTE_CARLO_SECTION);
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: SubmitEvent) => {
     event.preventDefault();
     if (!invalid) onSubmit(draft);
   };
@@ -221,7 +221,7 @@ function BacktestView({ result, form, config }: { result: BacktestOut; form: Bac
       <Panel>
         <h2 className="mb-2 text-sm font-semibold">Trades on the chart</h2>
         {chart.isLoading && <Loading message="Loading chart…" />}
-        {chart.isError && <ErrorBox error={chart.error} onRetry={() => chart.refetch()} />}
+        {chart.isError && <ErrorBox error={chart.error} onRetry={() => void chart.refetch()} />}
         {chart.data && (
           <PriceChart
             label={`${result.ticker} with ${result.signal} trades`}
@@ -291,7 +291,7 @@ export function BacktestPage() {
         </EmptyState>
       )}
       {backtest.isLoading && <Loading message="Downloading history and running the backtest…" />}
-      {backtest.isError && <ErrorBox error={backtest.error} onRetry={() => backtest.refetch()} />}
+      {backtest.isError && <ErrorBox error={backtest.error} onRetry={() => void backtest.refetch()} />}
       {backtest.data && <BacktestView result={backtest.data} form={form} config={defaults} />}
     </>
   );

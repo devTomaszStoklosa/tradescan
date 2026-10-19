@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { api, ApiError } from "./client";
+import { requestBody } from "../test/fetch";
 
 const respond = (status: number, body: unknown) =>
   vi
@@ -14,7 +15,7 @@ describe("api client", () => {
     const [url, init] = fetch.mock.calls[0]!;
     expect(url).toBe("/api/scan");
     expect(init?.method).toBe("POST");
-    expect(JSON.parse(String(init?.body))).toEqual({ watchlist: "etf" });
+    expect(requestBody(init)).toEqual({ watchlist: "etf" });
   });
 
   it("surfaces the server's error detail", async () => {
@@ -50,14 +51,14 @@ describe("api client", () => {
     await api.chart(body);
     const [url, init] = fetch.mock.calls[0]!;
     expect(url).toBe("/api/chart");
-    expect(JSON.parse(String(init?.body))).toEqual(body);
+    expect(requestBody(init)).toEqual(body);
   });
 
   it("patches and deletes a pinned run by its id", async () => {
     const fetch = respond(200, {});
     await api.updateRun("a/b", { hidden: true });
     const [url, init] = fetch.mock.calls[0]!;
-    expect([url, init?.method, JSON.parse(String(init?.body))]).toEqual(["/api/runs/a%2Fb", "PATCH", { hidden: true }]);
+    expect([url, init?.method, requestBody(init)]).toEqual(["/api/runs/a%2Fb", "PATCH", { hidden: true }]);
 
     fetch.mockResolvedValue(new Response(null, { status: 204 }));
     await expect(api.unpinRun("a/b")).resolves.toBeUndefined();

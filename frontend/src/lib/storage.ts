@@ -11,7 +11,7 @@ export function readStorage<T>(key: string, fallback: T): T {
 }
 
 /** False when the value could not be saved (storage full or blocked). */
-export function writeStorage<T>(key: string, value: T): boolean {
+export function writeStorage(key: string, value: unknown): boolean {
   try {
     localStorage.setItem(key, JSON.stringify(value));
     return true;

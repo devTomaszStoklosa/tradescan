@@ -24,12 +24,20 @@ export default defineConfig([
       // `onClick={() => setOpen(false)}` is the React idiom, and numbers print fine in a template.
       "@typescript-eslint/no-confusing-void-expression": ["error", { ignoreArrowShorthand: true }],
       "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true }],
+      // `const { kind: _kind, ...rest } = run` drops a field on purpose.
+      "@typescript-eslint/no-unused-vars": ["error", { ignoreRestSiblings: true, varsIgnorePattern: "^_" }],
+      // An empty URL parameter or a false flag falls back on purpose: `params.get("entry") || defaultEntry`.
+      "@typescript-eslint/prefer-nullish-coalescing": ["error", { ignorePrimitives: { string: true, boolean: true } }],
     },
   },
   {
-    // A test that reaches for an element or a fixture it expects should fail loudly when it is missing.
     files: ["src/**/*.test.{ts,tsx}", "src/test/**/*.{ts,tsx}"],
-    rules: { "@typescript-eslint/no-non-null-assertion": "off" },
+    rules: {
+      // A test that reaches for an element or a fixture it expects should fail loudly when it is missing.
+      "@typescript-eslint/no-non-null-assertion": "off",
+      // Test doubles implement async interfaces without awaiting anything.
+      "@typescript-eslint/require-await": "off",
+    },
   },
   // Formatting is Prettier's job.
   prettier,

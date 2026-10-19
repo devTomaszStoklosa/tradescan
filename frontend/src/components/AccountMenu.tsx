@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { ParamSpecOut } from "../api/client";
 import { useConfig } from "../api/hooks";
-import { fmtCompact, fmtNumber } from "../lib/format";
+import { fmtCompact, fmtNumber, fmtParam } from "../lib/format";
 import { problemOf } from "../lib/overrides";
 import { useAccount, type Account } from "../state/account";
 import { Button, Field, NumberInput } from "./ui";
@@ -84,7 +84,7 @@ export function AccountMenu() {
                   min={fieldSpec.minimum}
                   max={fieldSpec.maximum}
                   step={String(fieldSpec.step)}
-                  placeholder={String(fieldSpec.default)}
+                  placeholder={fmtParam(fieldSpec.default)}
                   invalid={problem !== null}
                   onChange={(next) => setDraft({ ...draft, [key]: next })}
                 />

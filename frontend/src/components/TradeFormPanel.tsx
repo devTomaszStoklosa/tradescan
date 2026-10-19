@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type SubmitEvent } from "react";
 
 import type { Direction, JournalTradeIn } from "../api/client";
 import { suggestedBy, tradeBody, type TradeForm } from "../lib/journal";
@@ -54,7 +54,7 @@ export function TradeFormPanel({
     set("run", value === KEPT ? initial.run : pinned ? suggestingRun(pinned) : null);
   };
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: SubmitEvent) => {
     event.preventDefault();
     if (body) onSubmit(body);
   };

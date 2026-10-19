@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { config } from "../test/fixtures";
 import { toCsv, tradeRow } from "./csv";
-import { DASH, fmtPct, fmtPrice, fmtSigned, fmtSize, tone } from "./format";
+import { DASH, fmtParam, fmtPct, fmtPrice, fmtSigned, fmtSize, tone } from "./format";
 import {
   backtestBody,
   edgeBody,
@@ -31,6 +31,12 @@ describe("format", () => {
     expect(tone(1)).toBe("text-up");
     expect(tone(-1)).toBe("text-down");
     expect(tone(null)).toBe("");
+  });
+
+  it("writes a parameter's number, list or numbers by key", () => {
+    expect(fmtParam(2.5)).toBe("2.5");
+    expect(fmtParam([63, 126])).toBe("63, 126");
+    expect(fmtParam({ trend: 1, breakout: 1.5 })).toBe("trend: 1, breakout: 1.5");
   });
 });
 

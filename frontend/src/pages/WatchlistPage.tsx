@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type SubmitEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import type {
@@ -82,7 +82,7 @@ function WatchlistFormPanel({
   const invalid = !watchlistBody(draft) || hasSetupProblems(draft, config, signals);
   const watchlistBenchmark = watchlists.find((item) => item.name === draft.universe.watchlist)?.benchmark;
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: SubmitEvent) => {
     event.preventDefault();
     if (!invalid) onSubmit(draft);
   };
@@ -232,7 +232,7 @@ function TickerTable({
           </span>
         ),
       },
-      valueColumn("full", `${label}`),
+      valueColumn("full", label),
       valueColumn("in_sample", "In-sample"),
       valueColumn("out_of_sample", "Out-of-sample"),
       {
@@ -295,10 +295,10 @@ function WatchlistView({
 }) {
   const label = metricLabel(metric);
   const used = result.config;
-  const periods = Object.fromEntries(result.periods.map((period) => [period.period, period])) as Record<
-    Period,
-    PeriodSummaryOut
-  >;
+  // A history too short to split has no in-sample or out-of-sample period.
+  const periods: Partial<Record<Period, PeriodSummaryOut>> = Object.fromEntries(
+    result.periods.map((period) => [period.period, period]),
+  );
   const median = (period: Period) => formatMetric(metric, spreadValue(spreadOf(result, period, metric), "median"));
   const oosSpread = spreadOf(result, "out_of_sample", metric);
   const few = result.rows.filter((row) => row.metrics.trades < MIN_TRADES).length;
@@ -458,7 +458,7 @@ export function WatchlistPage() {
           }
         />
       )}
-      {run.isError && <ErrorBox error={run.error} onRetry={() => run.refetch()} />}
+      {run.isError && <ErrorBox error={run.error} onRetry={() => void run.refetch()} />}
       {run.data && (
         <WatchlistView
           result={run.data}

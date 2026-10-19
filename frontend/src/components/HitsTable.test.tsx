@@ -19,7 +19,7 @@ describe("HitsTable", () => {
   ];
 
   it("sorts by score, then by any sortable column", async () => {
-    render(<HitsTable hits={hits} onSelect={() => {}} selectedKey={null} />);
+    render(<HitsTable hits={hits} onSelect={vi.fn()} selectedKey={null} />);
     expect(tickersInOrder()).toEqual(["HIGH", "MID", "LOW"]);
 
     await userEvent.click(screen.getByRole("button", { name: /Ticker/ }));
