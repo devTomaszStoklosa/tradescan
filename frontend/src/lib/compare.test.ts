@@ -10,6 +10,8 @@ import {
   makeMonteCarlo,
   makePortfolioPin,
   makeRun,
+  makeScanInputs,
+  makeScorePin,
   priorityRules,
   signals,
 } from "../test/fixtures";
@@ -124,9 +126,31 @@ describe("parameterRows", () => {
     expect(rows.find((row) => row.key === "kind")).toMatchObject({ values: ["Portfolio", "Portfolio"], differs: false });
   });
 
+  it("tells score priority runs apart by the scanner settings and signal parameters they read", () => {
+    const base = makeScorePin(1);
+    const changed = makeScorePin(2, makeScanInputs({ trend_bonus: 2.5 }, 55));
+    // The third run's momentum priority reads nothing of the scanner.
+    const rows = parameterRows([base, changed, makePortfolioPin(3)], config.sections, signals, config);
+    const WEIGHTS = "trend 1, momentum 1, breakout 1.5, mean_reversion 1, volume 1, pattern 0.5";
+
+    expect(differing(rows).filter((row) => /^(scan|score_params)\./.test(row.key))).toEqual([
+      { key: "scan.scoring.trend_bonus", label: "Scoring · Daily trend bonus", unit: "", values: ["1", "2.5", "–"], differs: true },
+      { key: "scan.scoring.family_weights", label: "Scoring · Family weights", unit: "", values: [WEIGHTS, WEIGHTS, "–"], differs: true },
+      { key: "scan.scoring.signal_weights", label: "Scoring · Signal weights", unit: "", values: ["none", "none", "–"], differs: true },
+      { key: "scan.trend.fast_period", label: "Trend & relative strength · Daily trend: fast SMA", unit: "bars", values: ["50", "50", "–"], differs: true },
+      { key: "scan.scan.fresh_bars", label: "Scan · Fresh within", unit: "bars", values: ["3", "3", "–"], differs: true },
+      { key: "score_params.donchian_breakout.period", label: "Score · donchian_breakout · Channel length", unit: "bars", values: ["20", "55", "–"], differs: true },
+    ]);
+  });
+
+  it("shows only the differing scanner inputs of score priority runs", () => {
+    const rows = differing(parameterRows([makeScorePin(1), makeScorePin(2, makeScanInputs({ trend_bonus: 2.5 }))], config.sections, signals, config));
+    expect(rows.map((row) => row.key)).toEqual(["scan.scoring.trend_bonus"]);
+  });
+
   it("adds no portfolio rows when only backtest runs are compared", () => {
     const keys = parameterRows([makeRun(1), makeRun(2)], config.sections, signals, config).map((row) => row.key);
-    expect(keys.filter((key) => ["kind", "universe", "tickers", "priority"].includes(key) || /^(portfolio|priority)\./.test(key))).toEqual([]);
+    expect(keys.filter((key) => ["kind", "universe", "tickers", "priority"].includes(key) || /^(portfolio|priority|scan|score_params)\./.test(key))).toEqual([]);
   });
 
   it("shows the data range so runs on different days are told apart", () => {

@@ -57,6 +57,7 @@ export type RotationStatsOut = Schemas["RotationStatsOut"];
 export type RuleIn = Schemas["RuleIn"];
 export type RuleOut = Schemas["RuleOut"];
 export type ScanIn = Schemas["ScanIn"];
+export type ScanInputsOut = Schemas["ScanInputsOut"];
 export type ScanOut = Schemas["ScanOut"];
 export type SettingsSectionOut = Schemas["SettingsSectionOut"];
 export type SignalOut = Schemas["SignalOut"];

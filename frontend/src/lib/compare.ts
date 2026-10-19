@@ -23,7 +23,7 @@ export interface ParamRow {
   differs: boolean;
 }
 
-type Raw = number | number[] | string | undefined;
+type Raw = number | number[] | Record<string, number> | string | undefined;
 type Params = Record<string, number | number[]>;
 
 function humanize(name: string): string {
@@ -35,6 +35,7 @@ function display(value: Raw): string {
   if (value === undefined) return DASH;
   if (typeof value === "number") return value.toLocaleString("en-US", { maximumFractionDigits: 6 });
   if (Array.isArray(value)) return value.map((item) => display(item)).join(", ");
+  if (typeof value === "object") return Object.entries(value).map(([key, item]) => `${key} ${display(item)}`).join(", ") || "none";
   return value;
 }
 
@@ -121,10 +122,45 @@ function priorityRows(runs: PinnedRun[], portfolios: (PinnedPortfolioRun | undef
 }
 
 /**
+ * What a portfolio's priority read of the scanner: its settings, labelled like the Portfolio page's fields, and the
+ * parameters of the signals the score counted besides the traded one.
+ */
+function scanRows(
+  runs: PinnedRun[],
+  portfolios: (PinnedPortfolioRun | undefined)[],
+  sections: SettingsSectionOut[],
+  signals: SignalOut[],
+): ParamRow[] {
+  const scans = portfolios.map((run) => run?.scan ?? undefined);
+  const present = scans.filter((scan) => scan !== undefined);
+  const rows: ParamRow[] = [];
+  for (const name of keysOf(present.map((scan) => scan.settings))) {
+    const section = sections.find((item) => item.name === name);
+    const settings = scans.map((scan) => scan?.settings[name]);
+    for (const param of keysOf(settings.filter((item) => item !== undefined))) {
+      const spec = section?.params.find((item) => item.name === param);
+      const label = `${section?.label ?? humanize(name)} · ${spec?.label ?? humanize(param)}`;
+      rows.push(row(`scan.${name}.${param}`, label, spec?.unit ?? "", settings.map((item) => item?.[param])));
+    }
+  }
+  rows.push(
+    ...ownedRows(
+      "score_params",
+      keysOf(present.map((scan) => scan.signal_params)),
+      (signal) => `Score · ${signal}`,
+      (signal) => signals.find((item) => item.name === signal)?.params ?? [],
+      (run, signal) => asPortfolio(run)?.scan?.signal_params[signal],
+      runs,
+    ),
+  );
+  return rows;
+}
+
+/**
  * Every input of the runs as rows: what was tested (a ticker, or a portfolio's universe), the data range, the stop,
  * costs and account, a portfolio's max positions and max exposure, the Monte Carlo settings, the entry filters
  * (and the benchmark they compared), the entry and exit rules with their parameters, a portfolio's priority rule
- * with its parameters, and the signal parameters.
+ * with its parameters and what it read of the scanner, and the signal parameters.
  */
 export function parameterRows(
   runs: PinnedRun[],
@@ -195,6 +231,7 @@ export function parameterRows(
     ),
   );
   rows.push(...priorityRows(runs, portfolios, rules));
+  rows.push(...scanRows(runs, portfolios, sections, signals));
 
   rows.push(
     ...ownedRows(

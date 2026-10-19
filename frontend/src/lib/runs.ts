@@ -13,6 +13,7 @@ import type {
   Point,
   PortfolioOut,
   PortfolioStatsOut,
+  ScanInputsOut,
   SplitOut,
 } from "../api/client";
 import { MONTE_CARLO_SETTINGS } from "./monteCarlo";
@@ -88,6 +89,11 @@ export interface PortfolioSnapshot extends RunBase {
   portfolio: PortfolioOut["portfolio"];
   /** The rule that ranked the signals when more fired than fit, with its parameters. */
   priority: AppliedRuleOut;
+  /**
+   * The scanner's settings and the other signals' parameters the priority read; null when it does not read the
+   * scanner, or for runs pinned before they were reported.
+   */
+  scan: ScanInputsOut | null;
   stats: PortfolioRunStats;
   /** Reopens the run on the Portfolio page. */
   form: PortfolioForm;
@@ -159,6 +165,7 @@ export function snapshotPortfolioRun(result: PortfolioOut, engine: string, form:
     missing: result.missing,
     portfolio: result.portfolio,
     priority: result.priority,
+    scan: result.scan,
     stats: { full: run.full.stats, in_sample: periods?.in_sample.stats ?? null, out_of_sample: periods?.out_of_sample.stats ?? null },
     signal: result.signal,
     direction: result.direction,
@@ -185,6 +192,12 @@ const sortedEntries = (record: object) => Object.entries(record).sort(([left], [
 
 const ruleKey = ({ name, params }: AppliedRuleOut) => [name, sortedEntries(params)];
 
+const scanKey = (scan: ScanInputsOut | null) =>
+  scan && [
+    sortedEntries(scan.settings).map(([section, values]) => [section, sortedEntries(values)]),
+    sortedEntries(scan.signal_params).map(([signal, params]) => [signal, sortedEntries(params)]),
+  ];
+
 /** What only one kind of run has; a new kind of run adds its entry here. */
 interface KindSpec<S extends RunSnapshot> {
   /** What the run tested: a ticker or a universe. */
@@ -203,7 +216,7 @@ const KINDS: { [K in RunKind]: KindSpec<SnapshotOf<K>> } = {
   portfolio: {
     subject: (run) => run.universe,
     // The members are part of the key: a watchlist's file can change between two runs.
-    keyParts: (run) => [run.universe, [...run.tickers].sort(), sortedEntries(run.portfolio), ruleKey(run.priority)],
+    keyParts: (run) => [run.universe, [...run.tickers].sort(), sortedEntries(run.portfolio), ruleKey(run.priority), scanKey(run.scan)],
   },
 };
 

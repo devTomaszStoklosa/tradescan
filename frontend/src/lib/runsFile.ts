@@ -6,14 +6,14 @@
  * Older runs are upgraded when read: version 1 is from
  * before entry and exit rules, version 2 from before out-of-sample results, version 3 from before entry filters,
  * version 4 from before Monte Carlo results, version 5 from before portfolio runs, version 6 from before the score
- * priority's signal parameters.
+ * priority's signal parameters, version 7 from before portfolio results reported what the score read of the scanner.
  */
 import type { AppliedRuleOut, MetricsOut, PinnedRunIn, PinnedRunOut, SuggestingRun } from "../api/client";
 import { formatTemplate, type Overrides } from "./overrides";
 import { moveLegacyExitSettings } from "./rules";
 import { MAX_RUNS, type PinnedBacktestRun, type PinnedPortfolioRun, type PinnedRun, type RunKind } from "./runs";
 
-export const RUNS_FILE_VERSION = 7;
+export const RUNS_FILE_VERSION = 8;
 
 interface StoredEquity {
   time: string[];
@@ -129,6 +129,9 @@ const appliedRule: Check = (value) =>
 
 const portfolioSettings: Check = (value) => isRecord(value) && finite(value.max_positions) && finite(value.max_exposure_pct);
 
+const scanInputs: Check = (value) =>
+  isRecord(value) && recordOf(recordOf(paramValue))(value.settings) && recordOf(recordOf(oneOf(finite, arrayOf(finite))))(value.signal_params);
+
 const portfolioStats: Check = (value) =>
   isRecord(value) &&
   ["average_positions", "average_exposure_pct", "max_exposure_pct"].every((key) => optionalNumber(value[key])) &&
@@ -180,6 +183,7 @@ const KIND_FIELDS: { [K in RunKind]: Record<Exclude<keyof Extract<StoredRun, { k
     missing: arrayOf(text),
     portfolio: portfolioSettings,
     priority: appliedRule,
+    scan: oneOf((value) => value === null, scanInputs),
     stats: periodStats,
     form: portfolioForm,
   },
@@ -251,13 +255,18 @@ const upgradeV5 = (value: unknown): unknown => (isRecord(value) ? { ...value, ki
 const upgradeV6 = (value: unknown): unknown =>
   isRecord(value) && value.kind === "portfolio" && isRecord(value.form) ? { ...value, form: { ...value.form, scoreSignalParams: {} } } : value;
 
+// --- Version 7: portfolio results did not report what the score read of the scanner -----------------
+
+const upgradeV7 = (value: unknown): unknown => (isRecord(value) && value.kind === "portfolio" ? { ...value, scan: null } : value);
+
 const UPGRADES: Record<number, (value: unknown) => unknown> = {
-  1: (value) => upgradeV6(upgradeV5(upgradeV4(upgradeV3(upgradeV2(upgradeV1(value)))))),
-  2: (value) => upgradeV6(upgradeV5(upgradeV4(upgradeV3(upgradeV2(value))))),
-  3: (value) => upgradeV6(upgradeV5(upgradeV4(upgradeV3(value)))),
-  4: (value) => upgradeV6(upgradeV5(upgradeV4(value))),
-  5: (value) => upgradeV6(upgradeV5(value)),
-  6: upgradeV6,
+  1: (value) => upgradeV7(upgradeV6(upgradeV5(upgradeV4(upgradeV3(upgradeV2(upgradeV1(value))))))),
+  2: (value) => upgradeV7(upgradeV6(upgradeV5(upgradeV4(upgradeV3(upgradeV2(value)))))),
+  3: (value) => upgradeV7(upgradeV6(upgradeV5(upgradeV4(upgradeV3(value))))),
+  4: (value) => upgradeV7(upgradeV6(upgradeV5(upgradeV4(value)))),
+  5: (value) => upgradeV7(upgradeV6(upgradeV5(value))),
+  6: (value) => upgradeV7(upgradeV6(value)),
+  7: upgradeV7,
   [RUNS_FILE_VERSION]: (value) => value,
 };
 

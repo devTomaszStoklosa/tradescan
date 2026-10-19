@@ -1438,6 +1438,8 @@ export interface components {
             end: string;
             portfolio: components["schemas"]["PortfolioConfigOut"];
             priority: components["schemas"]["AppliedRuleOut"];
+            /** @description What the priority read of the scanner besides the bars; null when it does not read the scanner */
+            scan: components["schemas"]["ScanInputsOut"] | null;
             /**
              * Buy Hold Benchmark
              * @description The benchmark buy & hold compares
@@ -1882,6 +1884,29 @@ export interface components {
             benchmark?: string | null;
             /** Period */
             period?: string | null;
+        };
+        /** ScanInputsOut */
+        ScanInputsOut: {
+            /**
+             * Settings
+             * @description The scanner's settings the score read, by section as a request's settings name them: every scoring and trend parameter and scan.fresh_bars
+             */
+            settings: {
+                [key: string]: {
+                    [key: string]: number | number[] | {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /**
+             * Signal Params
+             * @description Parameters of the signals the score counted besides the traded one, by signal name
+             */
+            signal_params: {
+                [key: string]: {
+                    [key: string]: number | number[];
+                };
+            };
         };
         /** ScanOut */
         ScanOut: {
