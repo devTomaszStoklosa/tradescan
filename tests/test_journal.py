@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Any
 
 import pytest
 
@@ -9,8 +10,14 @@ OPENED = date(2026, 3, 2)
 CLOSED = date(2026, 3, 20)
 
 
-def trade(**changes) -> TradeEntry:
-    values = {"ticker": "AAPL", "direction": Direction.LONG, "opened": OPENED, "entry_price": 100.0, "quantity": 10.0}
+def trade(**changes: Any) -> TradeEntry:
+    values: dict[str, Any] = {
+        "ticker": "AAPL",
+        "direction": Direction.LONG,
+        "opened": OPENED,
+        "entry_price": 100.0,
+        "quantity": 10.0,
+    }
     return TradeEntry(**(values | changes))
 
 

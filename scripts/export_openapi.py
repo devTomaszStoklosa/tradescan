@@ -7,15 +7,18 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
+
+import pandas as pd
 
 from tradescan.api.app import create_app
 from tradescan.config import Settings
 
 
 class _NoData:
-    def history(self, tickers, period, interval):  # pragma: no cover - never called
-        return {}
+    def history(self, tickers: Sequence[str], period: str, interval: str) -> dict[str, pd.DataFrame]:
+        return {}  # pragma: no cover - never called
 
 
 def main() -> int:

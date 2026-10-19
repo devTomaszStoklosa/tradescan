@@ -11,6 +11,8 @@ hold several units of up to `max_position_pct` of equity each.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pandas as pd
 
 try:
@@ -20,7 +22,7 @@ except ImportError as error:  # pragma: no cover - depends on the optional extra
 
 from tradescan.backtest.base import BacktestConfig, BacktestResult, ExitReason, Fill, Trade
 from tradescan.backtest.entries import OrderType
-from tradescan.backtest.exits import ExitOrders, OpenTrade
+from tradescan.backtest.exits import ExitOrders, ExitTracker, OpenTrade
 from tradescan.backtest.pyramid import Pyramiding, Units
 from tradescan.backtest.rules import Bars
 from tradescan.backtest.trade_rules import EntryPlan, PreparedRules, TradeRules
@@ -64,12 +66,13 @@ class TickerOrders:
         self._plan: EntryPlan | None = None
         self._signal: tuple[int, pd.Timestamp] | None = None  # (bar index, date)
         self._fills: list[tuple[pd.Timestamp, float, float, float]] = []  # (date, price, size, commission) per unit
-        self._tracker = None
+        self._tracker: ExitTracker | None = None
         self._units: Units | None = None
-        self._exit_orders: list = []
+        self._exit_orders: list[Any] = []  # backtrader orders
         self._exit_reasons: dict[int, str] = {}
-        self._add_order = None
-        self._levels: tuple | None = None  # the levels and reasons of the live exit orders, the add level and the size
+        self._add_order: Any = None  # a backtrader order
+        # The levels and reasons of the live exit orders, the add level and the size.
+        self._levels: tuple[object, ...] | None = None
         self._closing = False
 
     @property

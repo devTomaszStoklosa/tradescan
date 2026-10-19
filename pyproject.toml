@@ -74,10 +74,12 @@ plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 # Tests are checked for type errors in their bodies, without requiring annotations on every test function.
+# They reach into optional results and concrete rule types on purpose; running them checks those accesses.
 module = ["tests.*"]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 disallow_untyped_calls = false
+disable_error_code = ["union-attr", "attr-defined", "comparison-overlap"]
 
 [[tool.mypy.overrides]]
 # Neither ships type information.

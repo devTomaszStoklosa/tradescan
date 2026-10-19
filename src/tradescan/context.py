@@ -14,6 +14,7 @@ from enum import StrEnum
 import numpy as np
 import pandas as pd
 
+from tradescan.data.schema import bar_dates
 from tradescan.indicators import adx, atr, rate_of_change, sma
 
 # IBD-style relative strength: the latest quarter counts double.
@@ -119,7 +120,8 @@ class ContextBuilder:
         slow = sma(close, self._slow_period).to_numpy(dtype=float)
         up = (last > slow) & (fast > slow)
         down = (last < slow) & (fast < slow)
-        return up.astype(int) - down.astype(int)
+        trends: np.ndarray = up.astype(int) - down.astype(int)
+        return trends
 
     def weekly_trends(self, close: pd.Series) -> np.ndarray:
         """The weekly trend at each bar as 1 (up), -1 (down) or 0, with the bar's own week partial: it closes at
@@ -129,7 +131,8 @@ class ContextBuilder:
         trends = np.zeros(len(values), dtype=int)
         if not len(values):
             return trends
-        weeks = close.index.to_period("W-FRI").asi8  # the bins of resample("W-FRI")
+        # The bins of resample("W-FRI"); pandas-stubs does not declare PeriodIndex.asi8.
+        weeks = bar_dates(close).to_period("W-FRI").asi8  # type: ignore[attr-defined]
         starts = np.r_[True, weeks[1:] != weeks[:-1]]
         week = np.cumsum(starts) - 1  # each bar's week among the weeks with a bar
         weekly = pd.Series(values[np.r_[np.flatnonzero(starts)[1:] - 1, len(values) - 1]])  # each week's last close

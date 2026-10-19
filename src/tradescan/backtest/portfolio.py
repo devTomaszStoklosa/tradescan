@@ -32,6 +32,7 @@ from tradescan.backtest.priority import PriorityInputs, PriorityRule
 from tradescan.backtest.rules import Bars
 from tradescan.backtest.trade_rules import PreparedRules, TradeRules
 from tradescan.backtest.vectorized import FillModel, find_entry, find_exit, pnl_path
+from tradescan.data.schema import bar_dates
 from tradescan.signals.base import Direction, Signal
 
 
@@ -73,7 +74,7 @@ class PortfolioEngine(Protocol):
 
 def shared_calendar(frames: Iterable[pd.DataFrame]) -> pd.DatetimeIndex:
     """Every date on which at least one ticker has a bar."""
-    return reduce(lambda calendar, df: calendar.union(df.index), frames, pd.DatetimeIndex([], name="date"))
+    return reduce(lambda calendar, df: calendar.union(bar_dates(df)), frames, pd.DatetimeIndex([], name="date"))
 
 
 @dataclass(frozen=True, eq=False)

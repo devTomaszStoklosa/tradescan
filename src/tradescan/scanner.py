@@ -141,7 +141,8 @@ def rs_percentiles(raw: Mapping[str, float]) -> dict[str, float]:
     values = pd.Series(raw, dtype=float).dropna()
     if values.empty:
         return {}
-    return (values.rank(pct=True) * 100.0).to_dict()
+    ranks = values.rank(pct=True) * 100.0
+    return {str(ticker): float(rank) for ticker, rank in ranks.items()}
 
 
 def filter_hits(

@@ -184,7 +184,8 @@ class MomentumPriority(TickerPriorityRule):
             raise ValueError(f"{self.name}: skip ({self.skip}) must be below the lookback ({self.lookback})")
 
     def strength(self, bars: Bars) -> np.ndarray:
-        return _shifted(bars.close, self.skip) / _shifted(bars.close, self.lookback) - 1.0
+        change: np.ndarray = _shifted(bars.close, self.skip) / _shifted(bars.close, self.lookback) - 1.0
+        return change
 
 
 @priority_rules.register

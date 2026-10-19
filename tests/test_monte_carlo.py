@@ -1,3 +1,5 @@
+from typing import Any
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -93,7 +95,10 @@ def test_methods_have_names_and_labels():
 
 def test_backtest_simulates_every_engine_run_with_the_run_settings():
     use_cases = build_use_cases(Settings(), FakeProvider({"AAA": random_walk(1500, seed=1)}))
-    settings = {"account": {"risk_pct": 2.0}, "monte_carlo": {"simulations": 200, "ruin_drawdown_pct": 30, "seed": 3}}
+    settings: dict[str, dict[str, Any]] = {
+        "account": {"risk_pct": 2.0},
+        "monte_carlo": {"simulations": 200, "ruin_drawdown_pct": 30, "seed": 3},
+    }
     report = use_cases.backtest.run(BacktestRequest(ticker="AAA", signal="connors_rsi2_long", settings=settings))
     run = report.runs[0]
     result = run.monte_carlo

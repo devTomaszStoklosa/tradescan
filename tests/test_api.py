@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -819,7 +820,7 @@ def test_static_ui_with_spa_fallback(watchlists, tmp_path):
 SNAPSHOT = {"kind": "backtest", "ticker": "SPY", "equity": {"time": ["2026-01-02"], "value": [100000.0]}}
 
 
-def pinned_run(slot: int, run_id: str | None = None) -> dict:
+def pinned_run(slot: int, run_id: str | None = None) -> dict[str, Any]:
     return {
         "id": run_id or f"run-{slot}",
         "slot": slot,

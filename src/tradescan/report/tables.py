@@ -14,6 +14,7 @@ from tradescan.backtest.portfolio import PortfolioTrade
 from tradescan.backtest.portfolio_metrics import TickerContribution
 from tradescan.backtest.rotation import Targets
 from tradescan.backtest.tickers import Period
+from tradescan.data.schema import bar_dates
 from tradescan.scanner import ScanHit
 from tradescan.scoring import Scorer
 from tradescan.services import (
@@ -190,7 +191,7 @@ def _dates(index: pd.DatetimeIndex, first: int, last: int) -> str:
 def walk_forward_windows_frame(report: WalkForwardReport) -> pd.DataFrame:
     """One row per window: its in-sample and out-of-sample dates, the bars its pick traded, the pick and its
     in-sample metric, and the out-of-sample metric, trades and return of the bars it traded."""
-    index, metric = report.close.index, report.metric
+    index, metric = bar_dates(report.close), report.metric
     records = []
     for number, item in enumerate(report.windows, start=1):
         window, pick, segment, out = item.window, item.pick, item.segment, item.out_of_sample
@@ -224,7 +225,7 @@ def walk_forward_metrics_frame(report: WalkForwardReport) -> pd.DataFrame:
 
 def walk_forward_pick(report: WalkForwardReport, pick: WindowPick) -> str:
     """A window's pick with the dates of the in-sample window that picked it."""
-    return f"{_picked(report, pick)} (in-sample {_dates(report.close.index, pick.span.start, pick.span.end - 1)})"
+    return f"{_picked(report, pick)} (in-sample {_dates(bar_dates(report.close), pick.span.start, pick.span.end - 1)})"
 
 
 def walk_forward_export_frame(report: WalkForwardReport) -> pd.DataFrame:

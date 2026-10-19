@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter
 
 from tradescan.api import schemas
@@ -9,7 +11,9 @@ from tradescan.api.context import ApiContext
 from tradescan.api.mappers import journal_out, journal_trade_out
 from tradescan.journal import SuggestedBy, TradeEntry
 
-_NOT_FOUND = {404: {"model": schemas.ErrorOut, "description": "No trade in the journal has this id"}}
+_NOT_FOUND: dict[int | str, dict[str, Any]] = {
+    404: {"model": schemas.ErrorOut, "description": "No trade in the journal has this id"}
+}
 
 
 def _trade_entry(body: schemas.JournalTradeIn) -> TradeEntry:

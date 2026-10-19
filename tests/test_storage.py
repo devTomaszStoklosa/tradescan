@@ -1,6 +1,7 @@
 import sqlite3
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -13,8 +14,8 @@ from tradescan.storage.trades import TradeJournal
 SNAPSHOT = {"kind": "backtest", "ticker": "SPY", "equity": {"time": ["2026-01-02"], "value": [100000.0]}}
 
 
-def pinned(slot: int, run_id: str | None = None, **changes) -> PinnedRun:
-    values = {
+def pinned(slot: int, run_id: str | None = None, **changes: Any) -> PinnedRun:
+    values: dict[str, Any] = {
         "id": run_id or f"run-{slot}",
         "slot": slot,
         "name": f"run {slot}",
@@ -26,8 +27,8 @@ def pinned(slot: int, run_id: str | None = None, **changes) -> PinnedRun:
     return PinnedRun(**(values | changes))
 
 
-def entry(**changes) -> TradeEntry:
-    values = {
+def entry(**changes: Any) -> TradeEntry:
+    values: dict[str, Any] = {
         "ticker": "SPY",
         "direction": Direction.LONG,
         "opened": date(2026, 3, 2),

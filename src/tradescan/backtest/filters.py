@@ -151,4 +151,5 @@ class AtrPercentFilter(EntryFilter):
         bars = inputs.bars
         with np.errstate(divide="ignore", invalid="ignore"):
             pct = 100.0 * bars.atr / bars.close
-        return (pct >= self.min_pct) & (pct <= self.max_pct)
+        allowed: np.ndarray = (pct >= self.min_pct) & (pct <= self.max_pct)
+        return allowed

@@ -90,12 +90,12 @@ def test_edge_samples_pool_events_in_signal_direction():
     outcome = forward_returns(df, 1)
     long_stats = _pooled([df, df], FixedSignal(positions=(1, 3)), 1)
     assert long_stats.events == 4
-    assert long_stats.mean_return == pytest.approx(outcome.iloc[[1, 3]].mean() * 100)
+    assert long_stats.mean_return == pytest.approx(outcome.take([1, 3]).mean() * 100)
     assert long_stats.baseline_return == pytest.approx(outcome.dropna().mean() * 100)
     assert long_stats.edge == pytest.approx(long_stats.mean_return - long_stats.baseline_return)
 
     short_stats = _pooled([df], FixedSignal(positions=(1, 3), side=Direction.SHORT), 1)
-    assert short_stats.mean_return == pytest.approx(-outcome.iloc[[1, 3]].mean() * 100)
+    assert short_stats.mean_return == pytest.approx(-outcome.take([1, 3]).mean() * 100)
 
     empty = _pooled([df], FixedSignal(positions=()), 1)
     assert empty.events == 0

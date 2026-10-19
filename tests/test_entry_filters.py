@@ -33,7 +33,8 @@ def _bars(close, volume=1_000.0, start="2024-01-01") -> Bars:
 
 
 def _allows(rule, bars, direction=Direction.LONG, benchmark=None) -> list[bool]:
-    return rule.allows(FilterInputs(bars, benchmark), direction).tolist()
+    allowed: list[bool] = rule.allows(FilterInputs(bars, benchmark), direction).tolist()
+    return allowed
 
 
 def test_registry_lists_every_filter_and_only_the_market_filter_reads_the_benchmark():

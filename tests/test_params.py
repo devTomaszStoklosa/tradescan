@@ -97,14 +97,15 @@ def test_signal_overrides_are_validated_and_leave_the_default_untouched():
     assert isinstance(changed.rsi_period, int)
     assert changed.describe().startswith("RSI(3) < 15 while price is above SMA(200)")
     assert signal.oversold == 10.0
-    for values, message in [
+    invalid: list[tuple[dict[str, object], str]] = [
         ({"oversold": 0}, "between 1 and 50"),
         ({"rsi_period": 2.5}, "whole number"),
         ({"oversold": "x"}, "must be a number"),
         ({"oversold": True}, "must be a number"),
         ({"oversold": float("nan")}, "must be a number"),
         ({"overbought": 90}, "unknown or fixed"),
-    ]:
+    ]
+    for values, message in invalid:
         with pytest.raises(ValueError, match=message):
             with_overrides(signal, values, owner="connors_rsi2_long")
 
@@ -136,13 +137,14 @@ def test_list_and_weight_parameters():
     assert settings.scoring.family_weights["trend"] == 1.0
     assert settings.scoring.signal_weights == {"golden_cross": 2.0}
     assert Settings().scoring.family_weights["breakout"] == 1.5
-    for overrides, message in [
+    invalid: list[tuple[dict[str, dict[str, object]], str]] = [
         ({"trend": {"rs_periods": [10.5, 20], "rs_weights": [0.5, 0.5]}}, "whole number"),
         ({"risk": {"targets_r": []}}, "at least one"),
         ({"risk": {"targets_r": [2, 99]}}, "between"),
         ({"scoring": {"family_weights": {"nope": 1}}}, "unknown key"),
         ({"scoring": {"family_weights": 2}}, "mapping"),
-    ]:
+    ]
+    for overrides, message in invalid:
         with pytest.raises(ValueError, match=message):
             Settings().with_overrides(overrides)
 

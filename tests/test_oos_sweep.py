@@ -14,6 +14,7 @@ from tradescan.backtest.sweep import MAX_COMBINATIONS, SweepAxis, SweepJob, Swee
 from tradescan.backtest.trade_rules import RuleChoice, TradeRules
 from tradescan.backtest.vectorized import VectorizedEngine
 from tradescan.config import Settings
+from tradescan.data.schema import bar_dates
 from tradescan.parallel import ProcessRunner
 from tradescan.services import BacktestRequest, SweepRequest, build_use_cases
 from tradescan.signals import default_registry
@@ -45,7 +46,7 @@ def test_split_needs_enough_bars_in_both_periods():
 
 
 def test_split_history_reports_both_date_ranges():
-    dates = random_walk(400).index
+    dates = bar_dates(random_walk(400))
     split = split_history(dates, 25)
     assert split is not None
     assert split.index == 300

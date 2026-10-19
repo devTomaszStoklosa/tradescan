@@ -1,6 +1,6 @@
 import math
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import numpy as np
 import pandas as pd
@@ -198,9 +198,12 @@ def _signals(direction: Direction) -> list[Signal]:
     return default_registry.select(directions={direction})
 
 
+def _scan(frames, direction=Direction.LONG, scorer=SCORER, fresh_bars=5) -> ScanScore:
+    return ScanScore.build(frames, _signals(direction), direction, scorer, ContextBuilder(), fresh_bars)
+
+
 def _score(frames, direction=Direction.LONG, scorer=SCORER, fresh_bars=5) -> ScorePriority:
-    scan = ScanScore.build(frames, _signals(direction), direction, scorer, ContextBuilder(), fresh_bars)
-    return ScorePriority().with_scan(scan)
+    return ScorePriority().with_scan(_scan(frames, direction, scorer, fresh_bars))
 
 
 def test_the_context_at_every_bar_is_what_build_reports_on_the_history_up_to_it():
@@ -281,7 +284,7 @@ def test_the_score_priority_needs_the_scan_score_of_its_direction():
     assert priority_rules.create("score") == ScorePriority()
     assert ScorePriority.needs_scan
     assert not RelativeStrengthPriority.needs_scan
-    assert RelativeStrengthPriority().with_scan(None) == RelativeStrengthPriority()
+    assert RelativeStrengthPriority().with_scan(_scan(frames)) == RelativeStrengthPriority()
     with pytest.raises(ValueError, match="needs the scanner's settings"):
         ScorePriority().scores(_inputs(frames))
     with pytest.raises(ValueError, match="holds short signals"):
@@ -292,7 +295,7 @@ def test_the_score_priority_needs_the_scan_score_of_its_direction():
 
 def test_the_portfolio_use_case_scores_with_the_runs_settings_and_every_signal_of_the_direction():
     frames = {name: random_walk(800, seed=seed) for seed, name in enumerate(["AAA", "BBB", "CCC", "SPY"], start=1)}
-    overrides = {
+    overrides: dict[str, dict[str, Any]] = {
         "scoring": {"signal_weights": {"connors_rsi2_long": 3.0}},
         "trend": {"fast_period": 20},
         "scan": {"fresh_bars": 7},
@@ -343,7 +346,7 @@ def test_the_portfolio_use_case_scores_the_other_signals_with_the_runs_score_sig
         return portfolio.run(request).priority.scan
 
     # The traded signal's parameters come from the setup, so its entry changes nothing.
-    params = {"donchian_breakout": {"period": 5}, "connors_rsi2_long": {"oversold": 30.0}}
+    params: dict[str, dict[str, Any]] = {"donchian_breakout": {"period": 5}, "connors_rsi2_long": {"oversold": 30.0}}
     overridden, defaults = scan(params), scan({})
     traded = default_registry.create("connors_rsi2_long", {"oversold": 5.0})
     signals = [

@@ -85,7 +85,7 @@ class VectorizedEngine:
         trades: list[Trade] = []
         equity = config.initial_equity
         next_free = 0
-        for signal_index in np.flatnonzero(events):
+        for signal_index in np.flatnonzero(events).tolist():
             if signal_index < next_free or signal_index + 1 >= len(bars):
                 continue
             plan = prepared.plan(signal_index, equity, config)

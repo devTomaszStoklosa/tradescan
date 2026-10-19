@@ -77,6 +77,7 @@ from tradescan.config import Settings, WalkForwardSettings
 from tradescan.context import ContextBuilder
 from tradescan.data.cache import CachedProvider
 from tradescan.data.provider import DataProvider
+from tradescan.data.schema import bar_dates
 from tradescan.data.yfinance_provider import YFinanceProvider
 from tradescan.indicators import sma
 from tradescan.parallel import SequentialRunner, TaskRunner
@@ -550,7 +551,7 @@ class BacktestUseCase:
         ticker = request.ticker.upper()
         period = request.period or resolved.settings.backtest.period
         df, rules = _load_setup(self._market_data, ticker, resolved, period, request.interval)
-        split = split_history(df.index, config.oos_pct)
+        split = split_history(bar_dates(df), config.oos_pct)
         monte_carlo = build_monte_carlo_config(resolved.settings)
 
         runs = []
@@ -740,7 +741,7 @@ class SweepUseCase:
     def run(self, request: SweepRequest) -> SweepReport:
         sweep = self._grids.build(request.setup, request.axes, NOT_SWEEPABLE)
         ticker, df, config = sweep.ticker, sweep.df, sweep.base.config
-        split = split_history(df.index, config.oos_pct)
+        split = split_history(bar_dates(df), config.oos_pct)
         if split is None:
             raise ValueError(
                 f"{ticker} has {len(df)} bars: too few to split at {config.oos_pct:g}% "
@@ -1353,7 +1354,7 @@ class RotationUseCase:
             )
         close = loaded.frames[benchmark]["close"]
         bars_per_year = config.bars_per_year
-        split = split_history(result.equity.index, config.oos_pct)
+        split = split_history(bar_dates(result.equity), config.oos_pct)
         periods = (
             run_rotation_periods(
                 self._engine, frames, config, rotation, ranking, weighting, safe_frame, split.out_of_sample[0]

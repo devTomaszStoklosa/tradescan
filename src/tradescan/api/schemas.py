@@ -25,13 +25,13 @@ ParamValueIn = float | list[float] | dict[str, float]
 SettingsIn = dict[str, dict[str, ParamValueIn]]
 SignalParamsIn = dict[str, float | list[float]]
 
-_SETTINGS = Field(
+_SETTINGS: SettingsIn = Field(
     default_factory=dict,
     description=(
         'Per-run overrides by settings section, e.g. {"risk": {"atr_mult": 3}}; see /api/config for every parameter'
     ),
 )
-_SIGNAL_PARAMS = Field(
+_SIGNAL_PARAMS: dict[str, SignalParamsIn] = Field(
     default_factory=dict,
     description='Per-run signal parameters by signal name, e.g. {"connors_rsi2_long": {"oversold": 15}}',
 )
