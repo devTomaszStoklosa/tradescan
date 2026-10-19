@@ -3,7 +3,7 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from synthetic import FakeProvider, FixedSignal, random_walk
+from tests.synthetic import FakeProvider, FixedSignal, random_walk
 
 from tradescan.backtest.base import BacktestConfig
 from tradescan.backtest.exits import TargetExit, TimeExit

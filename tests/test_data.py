@@ -1,6 +1,6 @@
 import pandas as pd
 import pytest
-from synthetic import FakeProvider, make_ohlcv
+from tests.synthetic import FakeProvider, make_ohlcv
 
 from tradescan.data.cache import CachedProvider
 from tradescan.data.schema import normalize_ohlcv

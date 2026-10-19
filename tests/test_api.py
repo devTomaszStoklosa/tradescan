@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from synthetic import FakeProvider, random_walk
+from tests.synthetic import FakeProvider, random_walk
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402

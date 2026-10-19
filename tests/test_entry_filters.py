@@ -6,7 +6,7 @@ from dataclasses import replace
 import numpy as np
 import pandas as pd
 import pytest
-from synthetic import FakeProvider, make_ohlcv, random_walk
+from tests.synthetic import FakeProvider, make_ohlcv, random_walk
 
 from tradescan.backtest.base import BacktestConfig
 from tradescan.backtest.filters import (

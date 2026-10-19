@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
-from synthetic import FakeProvider, random_walk
+from tests.synthetic import FakeProvider, random_walk
 
 from tradescan.backtest.base import ExitReason, Trade
 from tradescan.backtest.monte_carlo import METHODS, MonteCarloConfig, closed_r_multiples, simulate

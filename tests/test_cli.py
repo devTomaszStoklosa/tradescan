@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
-from synthetic import FakeProvider, random_walk
+from tests.synthetic import FakeProvider, random_walk
 
 from tradescan import cli
 

@@ -3,7 +3,7 @@ from dataclasses import fields
 from pathlib import Path
 
 import pytest
-from synthetic import random_walk
+from tests.synthetic import random_walk
 
 from tradescan.backtest.entries import entry_rules
 from tradescan.backtest.exits import exit_rules

@@ -6,7 +6,7 @@ import math
 import numpy as np
 import pandas as pd
 import pytest
-from synthetic import random_walk
+from tests.synthetic import random_walk
 
 from tradescan.backtest.exits import (
     BreakevenStop,

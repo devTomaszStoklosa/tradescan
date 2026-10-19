@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
-from synthetic import make_ohlcv, random_walk
+from tests.synthetic import make_ohlcv, random_walk
 
 from tradescan import indicators as ind
 

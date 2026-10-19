@@ -3,7 +3,7 @@ import math
 import numpy as np
 import pandas as pd
 import pytest
-from synthetic import FixedSignal, make_ohlcv
+from tests.synthetic import FixedSignal, make_ohlcv
 
 from tradescan.backtest.edge import combine_samples, edge_samples, forward_returns
 from tradescan.context import ContextBuilder, Trend

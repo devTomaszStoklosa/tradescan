@@ -5,7 +5,7 @@ from typing import ClassVar
 import numpy as np
 import pandas as pd
 import pytest
-from synthetic import FakeProvider, random_walk
+from tests.synthetic import FakeProvider, random_walk
 
 from tradescan.backtest.allocation import Candidate, PortfolioConfig, allocate, fit, rank
 from tradescan.backtest.base import BacktestConfig, ExitReason

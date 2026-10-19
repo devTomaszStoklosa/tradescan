@@ -3,7 +3,7 @@ from dataclasses import replace
 import numpy as np
 import pandas as pd
 import pytest
-from synthetic import FixedSignal, RatchetStop, random_walk
+from tests.synthetic import FixedSignal, RatchetStop, random_walk
 
 from tradescan.backtest.base import BacktestConfig, ExitReason, Fill
 from tradescan.backtest.entries import LimitEntry, StopEntry

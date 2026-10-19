@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pandas as pd
 import pytest
-from synthetic import FakeProvider, FixedSignal, random_walk
+from tests.synthetic import FakeProvider, FixedSignal, random_walk
 
 import tradescan.services as services
 from tradescan.backtest.base import BacktestConfig, ExitReason

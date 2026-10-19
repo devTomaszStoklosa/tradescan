@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
-from synthetic import AdverseCloseExit, FixedSignal, RatchetStop, random_walk
+from tests.synthetic import AdverseCloseExit, FixedSignal, RatchetStop, random_walk
 
 from tradescan.backtest.base import BacktestConfig, ExitReason
 from tradescan.backtest.entries import LimitEntry, NextOpenEntry, StopEntry, entry_rules

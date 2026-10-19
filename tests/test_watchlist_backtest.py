@@ -4,7 +4,7 @@ from dataclasses import astuple, replace
 
 import numpy as np
 import pytest
-from synthetic import FakeProvider, random_walk
+from tests.synthetic import FakeProvider, random_walk
 
 from tradescan.backtest.base import BacktestConfig
 from tradescan.backtest.pooled import BREAK_EVEN, pool_trades, spread

@@ -1,4 +1,4 @@
-from synthetic import FakeProvider, random_walk
+from tests.synthetic import FakeProvider, random_walk
 
 from tradescan.backtest.edge import EdgeSampler, combine_samples, edge_samples
 from tradescan.config import Settings
