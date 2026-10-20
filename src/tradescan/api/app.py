@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import mimetypes
+from collections.abc import Sequence
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import Response
 from starlette.types import Scope
 
@@ -48,6 +50,9 @@ ROUTERS = (
     portfolio, rotation, chart, runs, journal,
 )  # fmt: skip
 
+# Host header values for this machine; IPv6 literals keep their brackets, as Starlette compares them that way.
+LOCAL_HOSTS = ("localhost", "127.0.0.1", "[::1]")
+
 
 class SpaStaticFiles(StaticFiles):
     """Serves the built UI and falls back to index.html so client-side routes survive a reload."""
@@ -74,8 +79,13 @@ def create_app(
     runner: TaskRunner | None = None,
     portfolio_engines: dict[str, PortfolioEngineFactory] | None = None,
     database: Database | None = None,
+    allowed_hosts: Sequence[str] = LOCAL_HOSTS,
 ) -> FastAPI:
-    """Without a `database`, pinned runs and journal trades last only as long as the app."""
+    """Without a `database`, pinned runs and journal trades last only as long as the app.
+
+    Requests whose Host header is not in `allowed_hosts` get 400, so a web page that rebinds its own name to
+    127.0.0.1 (DNS rebinding) cannot reach the API from the user's browser.
+    """
     database = database or Database.in_memory()
     context = ApiContext(
         settings=settings,
@@ -87,6 +97,7 @@ def create_app(
         journal=TradeJournal(database),
     )
     app = FastAPI(title="tradescan", version=__version__, description="Trading signal scanner API")
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
     @app.exception_handler(ValueError)
     async def value_error(_: Request, error: ValueError) -> JSONResponse:

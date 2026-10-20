@@ -12,6 +12,8 @@ from tradescan.api.app import create_app
 from tradescan.config import Settings
 from tradescan.storage.database import Database
 
+LOCAL = "http://localhost"  # TestClient's default host, testserver, is not one the app answers
+
 
 @pytest.fixture
 def watchlists(tmp_path: Path) -> Path:
@@ -22,7 +24,7 @@ def watchlists(tmp_path: Path) -> Path:
 @pytest.fixture
 def client(watchlists: Path) -> TestClient:
     frames = {name: random_walk(1500, seed=seed) for seed, name in enumerate(["AAA", "BBB", "CCC", "SPY"], start=1)}
-    return TestClient(create_app(Settings(), FakeProvider(frames), watchlists))
+    return TestClient(create_app(Settings(), FakeProvider(frames), watchlists), base_url=LOCAL)
 
 
 def test_meta_endpoints(client):
@@ -807,12 +809,24 @@ def test_static_ui_with_spa_fallback(watchlists, tmp_path):
     dist.mkdir()
     (dist / "index.html").write_text("<html>ui</html>")
     (dist / "app.js").write_text("export {};")
-    client = TestClient(create_app(Settings(), FakeProvider({}), watchlists, static_dir=dist))
+    client = TestClient(create_app(Settings(), FakeProvider({}), watchlists, static_dir=dist), base_url=LOCAL)
     assert client.get("/").text == "<html>ui</html>"
     assert client.get("/app.js").headers["content-type"].startswith("text/javascript")
     assert client.get("/backtest").text == "<html>ui</html>"
     assert client.get("/api/health").status_code == 200
     assert client.get("/api/missing").status_code == 404
+
+
+@pytest.mark.parametrize("host", ["localhost", "localhost:5173", "127.0.0.1:8000", "[::1]", "[::1]:8000"])
+def test_requests_to_this_machine_are_answered(client, host):
+    assert client.get("/api/health", headers={"host": host}).status_code == 200
+
+
+@pytest.mark.parametrize("host", ["evil.example", "evil.example:8000", "localhost.evil.example", "testserver"])
+def test_requests_for_another_host_are_refused(client, host):
+    """A page that rebinds its name to 127.0.0.1 still sends its own name as the Host (DNS rebinding)."""
+    refused = client.get("/api/health", headers={"host": host})
+    assert (refused.status_code, refused.text) == (400, "Invalid host header")
 
 
 # --- Pinned runs and the trade journal ----------------------------------------------------------------
@@ -866,10 +880,11 @@ def test_run_conflicts_and_unknown_runs(client):
 
 def test_runs_are_kept_in_the_database_given(watchlists, tmp_path):
     database = Database(tmp_path / "tradescan.db")
-    first = TestClient(create_app(Settings(), FakeProvider({}), watchlists, database=database))
+    first = TestClient(create_app(Settings(), FakeProvider({}), watchlists, database=database), base_url=LOCAL)
     first.post("/api/runs", json=pinned_run(1))
     second = TestClient(
-        create_app(Settings(), FakeProvider({}), watchlists, database=Database(tmp_path / "tradescan.db"))
+        create_app(Settings(), FakeProvider({}), watchlists, database=Database(tmp_path / "tradescan.db")),
+        base_url=LOCAL,
     )
     assert [run["id"] for run in second.get("/api/runs").json()] == ["run-1"]
 
