@@ -47,12 +47,12 @@ export function UniversePicker({
           />
         </Field>
       ) : (
-        <Field label="Tickers">
+        <FieldGroup label="Tickers">
           <p className="truncate py-2 text-sm font-normal text-fg" title={selected?.tickers.join(", ")}>
             {selected?.tickers.join(", ")}
             {selected?.benchmark && <span className="text-muted"> · benchmark {selected.benchmark}</span>}
           </p>
-        </Field>
+        </FieldGroup>
       )}
     </div>
   );
