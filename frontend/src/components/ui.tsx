@@ -1,11 +1,12 @@
 /** Small presentational building blocks shared by every page. */
-import type {
-  ComponentProps,
-  CSSProperties,
-  InputHTMLAttributes,
-  ReactNode,
-  SelectHTMLAttributes,
-  TextareaHTMLAttributes,
+import {
+  useId,
+  type ComponentProps,
+  type CSSProperties,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
 } from "react";
 
 import type { Direction } from "../api/client";
@@ -53,13 +54,27 @@ export function Button({
   );
 }
 
+const fieldLayout = "flex min-w-0 flex-col gap-1 text-xs font-medium text-muted";
+
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
-    <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted">
+    <label className={fieldLayout}>
       <span>{label}</span>
       {children}
       {hint && <span className="font-normal">{hint}</span>}
     </label>
+  );
+}
+
+/** A `Field` for buttons or plain text: a caption, not a label, so clicking it presses nothing. */
+export function FieldGroup({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
+  const id = useId();
+  return (
+    <div role="group" aria-labelledby={id} className={fieldLayout}>
+      <span id={id}>{label}</span>
+      {children}
+      {hint && <span className="font-normal">{hint}</span>}
+    </div>
   );
 }
 
