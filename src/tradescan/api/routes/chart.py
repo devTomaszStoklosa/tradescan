@@ -7,7 +7,7 @@ from fastapi import APIRouter
 from tradescan.api import schemas
 from tradescan.api.context import ApiContext
 from tradescan.api.mappers import chart_out
-from tradescan.services import ChartRequest
+from tradescan.services.chart import ChartRequest
 
 
 def build_router(context: ApiContext) -> APIRouter:

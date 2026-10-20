@@ -558,7 +558,7 @@ The code follows SOLID; each extension point is a new class, not an edit to exis
 - **New data source:** implement the `DataProvider` protocol (`history(tickers, period, interval)`);
   `CachedProvider` wraps any provider.
 - **New backtest engine:** implement `BacktestEngine.run` and add it to `default_engines()` in
-  `services.py`; the CLI, the API and the UI's engine picker pick it up.
+  `services/composition.py`; the CLI, the API and the UI's engine picker pick it up.
 - **New export format:** add a writer to `_WRITERS` in `report/export.py`.
 - **New API endpoint:** add a router module under `api/routes/` with `build_router(context)` and list
   it in `ROUTERS` in `api/app.py`.
@@ -566,8 +566,9 @@ The code follows SOLID; each extension point is a new class, not an edit to exis
   connections from the shared `Database`, and append the tables it needs as a new migration to `_MIGRATIONS`
   in `storage/database.py` (never edit an existing one: files written by older versions are upgraded from it).
 
-The use cases in `services.py` (scan, market, edge, backtest, chart) hold the workflow; `cli.py` and
-`api/` only translate input and output. `build_use_cases` and `create_app` wire concrete classes.
+The use cases in `services/`, one module each (scan, market, edge, backtest, sweep, walk-forward, watchlist
+backtest, portfolio, rotation, chart), hold the workflow; `cli.py` and `api/` only translate input and output.
+`build_use_cases` (in `services/composition.py`) and `create_app` wire concrete classes.
 
 ## Limitations
 

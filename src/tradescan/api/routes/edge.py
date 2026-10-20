@@ -7,7 +7,7 @@ from fastapi import APIRouter
 from tradescan.api import schemas
 from tradescan.api.context import ApiContext
 from tradescan.api.mappers import edge_out
-from tradescan.services import EdgeRequest
+from tradescan.services.edge import EdgeRequest
 
 
 def build_router(context: ApiContext) -> APIRouter:

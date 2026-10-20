@@ -26,7 +26,8 @@ from tradescan.backtest.rules import Bars
 from tradescan.backtest.trade_rules import RuleChoice
 from tradescan.backtest.weighting import EqualWeight, InverseVolatilityWeight, book_weights, weight_rules
 from tradescan.config import Settings
-from tradescan.services import RotationRequest, build_use_cases
+from tradescan.services.composition import build_use_cases
+from tradescan.services.rotation import RotationRequest
 from tradescan.watchlist import Watchlist
 
 NO_COSTS = BacktestConfig(commission_pct=0.0, slippage_pct=0.0)

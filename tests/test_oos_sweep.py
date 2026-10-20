@@ -16,7 +16,9 @@ from tradescan.backtest.vectorized import VectorizedEngine
 from tradescan.config import Settings
 from tradescan.data.schema import bar_dates
 from tradescan.parallel import ProcessRunner
-from tradescan.services import BacktestRequest, SweepRequest, build_use_cases
+from tradescan.services.backtest import BacktestRequest
+from tradescan.services.composition import build_use_cases
+from tradescan.services.sweep import SweepRequest
 from tradescan.signals import default_registry
 
 CONFIG = BacktestConfig(commission_pct=0.1, slippage_pct=0.05)

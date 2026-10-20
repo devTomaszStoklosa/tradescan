@@ -8,7 +8,7 @@ from tradescan.api import schemas
 from tradescan.api.context import ApiContext
 from tradescan.api.mappers import portfolio_out
 from tradescan.api.routes.backtest import backtest_request, rule_choice
-from tradescan.services import PortfolioRequest
+from tradescan.services.portfolio import PortfolioRequest
 
 
 def build_router(context: ApiContext) -> APIRouter:

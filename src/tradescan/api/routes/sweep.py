@@ -9,7 +9,7 @@ from tradescan.api.context import ApiContext
 from tradescan.api.mappers import sweep_out
 from tradescan.api.routes.backtest import backtest_request
 from tradescan.backtest.sweep import SweepAxis
-from tradescan.services import SweepRequest
+from tradescan.services.sweep import SweepRequest
 
 
 def build_router(context: ApiContext) -> APIRouter:

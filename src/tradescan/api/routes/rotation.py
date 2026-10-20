@@ -8,7 +8,7 @@ from tradescan.api import schemas
 from tradescan.api.context import ApiContext
 from tradescan.api.mappers import rotation_out
 from tradescan.api.routes.backtest import rule_choice
-from tradescan.services import RotationRequest
+from tradescan.services.rotation import RotationRequest
 
 
 def build_router(context: ApiContext) -> APIRouter:

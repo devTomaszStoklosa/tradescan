@@ -14,7 +14,8 @@ from tradescan.backtest.priority import DEFAULT_PRIORITY
 from tradescan.backtest.rotation import DEFAULT_RANKING, Rebalance
 from tradescan.backtest.weighting import DEFAULT_WEIGHTING
 from tradescan.config import adjustable_sections
-from tradescan.services import NOT_SWEEPABLE, NOT_WALKABLE, SWEEP_SECTIONS
+from tradescan.services.sweep import NOT_SWEEPABLE, SWEEP_SECTIONS
+from tradescan.services.walk_forward import NOT_WALKABLE
 from tradescan.signals.base import Family
 
 

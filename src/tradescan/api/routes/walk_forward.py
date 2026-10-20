@@ -9,7 +9,7 @@ from tradescan.api.context import ApiContext
 from tradescan.api.mappers import walk_forward_out
 from tradescan.api.routes.backtest import backtest_request
 from tradescan.api.routes.sweep import sweep_axes
-from tradescan.services import WalkForwardRequest
+from tradescan.services.walk_forward import WalkForwardRequest
 
 
 def build_router(context: ApiContext) -> APIRouter:

@@ -31,21 +31,16 @@ from tradescan.params import ParamSpec, parameters_of
 from tradescan.regime import MarketRegime
 from tradescan.scanner import ScanHit
 from tradescan.scoring import Scorer
-from tradescan.services import (
-    BacktestReport,
-    ChartData,
-    EdgeReport,
-    MarketReport,
-    PortfolioReport,
-    RotationReport,
-    ScanInputs,
-    ScanReport,
-    SweepReport,
-    SweptParameter,
-    WalkForwardReport,
-    WatchlistBacktestReport,
-    WindowPick,
-)
+from tradescan.services.backtest import BacktestReport
+from tradescan.services.chart import ChartData
+from tradescan.services.edge import EdgeReport
+from tradescan.services.market import MarketReport
+from tradescan.services.portfolio import PortfolioReport, ScanInputs
+from tradescan.services.rotation import RotationReport
+from tradescan.services.scan import ScanReport
+from tradescan.services.sweep import SweepReport, SweptParameter
+from tradescan.services.walk_forward import WalkForwardReport, WindowPick
+from tradescan.services.watchlist_backtest import WatchlistBacktestReport
 from tradescan.signals.base import Signal
 from tradescan.storage.runs import PinnedRun
 from tradescan.watchlist import Watchlist

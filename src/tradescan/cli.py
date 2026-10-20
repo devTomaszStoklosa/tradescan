@@ -50,25 +50,24 @@ from tradescan.report.tables import (
     watchlist_export_frame,
     watchlist_rows_frame,
 )
-from tradescan.services import (
-    SWEEP_SECTIONS,
-    BacktestRequest,
-    EdgeRequest,
-    MarketRequest,
-    PortfolioRequest,
-    RotationRequest,
-    ScanRequest,
-    SignalFilter,
-    SweepRequest,
+from tradescan.services.backtest import BacktestRequest
+from tradescan.services.builders import build_scorer
+from tradescan.services.composition import (
     UseCases,
-    WalkForwardRequest,
-    WatchlistBacktestRequest,
-    build_scorer,
     build_use_cases,
     default_engines,
     default_portfolio_engines,
     default_provider,
 )
+from tradescan.services.edge import EdgeRequest
+from tradescan.services.market import MarketRequest
+from tradescan.services.market_data import SignalFilter
+from tradescan.services.portfolio import PortfolioRequest
+from tradescan.services.rotation import RotationRequest
+from tradescan.services.scan import ScanRequest
+from tradescan.services.sweep import SWEEP_SECTIONS, SweepRequest
+from tradescan.services.walk_forward import WalkForwardRequest
+from tradescan.services.watchlist_backtest import WatchlistBacktestRequest
 from tradescan.signals import Direction, Family, default_registry
 from tradescan.storage.database import Database
 from tradescan.universes import SOURCES, update_universe

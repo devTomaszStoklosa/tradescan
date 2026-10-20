@@ -17,17 +17,13 @@ from tradescan.backtest.tickers import Period
 from tradescan.data.schema import bar_dates
 from tradescan.scanner import ScanHit
 from tradescan.scoring import Scorer
-from tradescan.services import (
-    METRIC_NAMES,
-    EdgeRow,
-    EngineRun,
-    PortfolioReport,
-    RotationReport,
-    SweepReport,
-    WalkForwardReport,
-    WatchlistBacktestReport,
-    WindowPick,
-)
+from tradescan.services.backtest import EngineRun
+from tradescan.services.edge import EdgeRow
+from tradescan.services.portfolio import PortfolioReport
+from tradescan.services.rotation import RotationReport
+from tradescan.services.sweep import SweepReport
+from tradescan.services.walk_forward import WalkForwardReport, WindowPick
+from tradescan.services.watchlist_backtest import METRIC_NAMES, WatchlistBacktestReport
 from tradescan.signals.base import Signal
 
 SCAN_COLUMNS: tuple[str, ...] = (

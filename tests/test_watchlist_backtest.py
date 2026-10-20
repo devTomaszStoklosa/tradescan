@@ -12,7 +12,9 @@ from tradescan.backtest.tickers import Period, TickerJob
 from tradescan.backtest.trade_rules import RuleChoice, TradeRules
 from tradescan.config import Settings
 from tradescan.parallel import ProcessRunner
-from tradescan.services import BacktestRequest, WatchlistBacktestRequest, build_use_cases
+from tradescan.services.backtest import BacktestRequest
+from tradescan.services.composition import build_use_cases
+from tradescan.services.watchlist_backtest import WatchlistBacktestRequest
 from tradescan.signals import default_registry
 from tradescan.watchlist import Watchlist
 
