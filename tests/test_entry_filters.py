@@ -22,7 +22,8 @@ from tradescan.backtest.rules import Bars
 from tradescan.backtest.trade_rules import RuleCatalog, RuleChoice, TradeRules
 from tradescan.config import Settings
 from tradescan.indicators import adx
-from tradescan.services import BacktestRequest, build_use_cases
+from tradescan.services.backtest import BacktestRequest
+from tradescan.services.composition import build_use_cases
 from tradescan.signals import Direction
 
 CONFIG = BacktestConfig()

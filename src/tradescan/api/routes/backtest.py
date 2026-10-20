@@ -4,18 +4,18 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from tradescan.api import schemas
 from tradescan.api.context import ApiContext
-from tradescan.api.mappers import backtest_out
+from tradescan.api.mappers.backtest import backtest_out
+from tradescan.api.schemas.backtest import BacktestIn, BacktestOut, BacktestRulesIn, RuleIn
 from tradescan.backtest.trade_rules import RuleChoice
-from tradescan.services import BacktestRequest
+from tradescan.services.backtest import BacktestRequest
 
 
 def build_router(context: ApiContext) -> APIRouter:
     router = APIRouter(tags=["backtest"])
 
-    @router.post("/backtest", response_model=schemas.BacktestOut)
-    def backtest(body: schemas.BacktestIn) -> schemas.BacktestOut:
+    @router.post("/backtest", response_model=BacktestOut)
+    def backtest(body: BacktestIn) -> BacktestOut:
         context.check_signals([body.signal])
         report = context.use_cases.backtest.run(backtest_request(body, body.ticker, tuple(body.engines)))
         return backtest_out(report)
@@ -23,7 +23,7 @@ def build_router(context: ApiContext) -> APIRouter:
     return router
 
 
-def backtest_request(body: schemas.BacktestRulesIn, ticker: str, engines: tuple[str, ...]) -> BacktestRequest:
+def backtest_request(body: BacktestRulesIn, ticker: str, engines: tuple[str, ...]) -> BacktestRequest:
     return BacktestRequest(
         ticker=ticker,
         signal=body.signal,
@@ -38,5 +38,5 @@ def backtest_request(body: schemas.BacktestRulesIn, ticker: str, engines: tuple[
     )
 
 
-def rule_choice(rule: schemas.RuleIn) -> RuleChoice:
+def rule_choice(rule: RuleIn) -> RuleChoice:
     return RuleChoice(name=rule.name, params=rule.params)

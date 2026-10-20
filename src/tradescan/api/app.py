@@ -34,7 +34,10 @@ from tradescan.api.routes import (
 from tradescan.config import Settings
 from tradescan.data.provider import DataProvider
 from tradescan.parallel import TaskRunner
-from tradescan.services import EngineFactory, PortfolioEngineFactory, build_scorer, build_use_cases
+from tradescan.services.backtest import EngineFactory
+from tradescan.services.builders import build_scorer
+from tradescan.services.composition import build_use_cases
+from tradescan.services.portfolio import PortfolioEngineFactory
 from tradescan.signals.registry import SignalRegistry, default_registry
 from tradescan.storage.database import ConflictError, Database, NotFoundError
 from tradescan.storage.runs import PinnedRunStore

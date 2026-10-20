@@ -8,10 +8,11 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-from tradescan.api.schemas import SignalFilterIn, UniverseIn
+from tradescan.api.schemas.common import SignalFilterIn, UniverseIn
 from tradescan.config import Settings
 from tradescan.scoring import Scorer
-from tradescan.services import SignalFilter, UseCases
+from tradescan.services.composition import UseCases
+from tradescan.services.market_data import SignalFilter
 from tradescan.signals.registry import SignalRegistry
 from tradescan.storage.runs import PinnedRunStore
 from tradescan.storage.trades import TradeJournal

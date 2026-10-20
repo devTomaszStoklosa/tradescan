@@ -6,17 +6,18 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from tradescan.api import schemas
 from tradescan.api.context import ApiContext
-from tradescan.api.mappers import journal_out, journal_trade_out
+from tradescan.api.mappers.journal import journal_out, journal_trade_out
+from tradescan.api.schemas.common import ErrorOut
+from tradescan.api.schemas.journal import JournalOut, JournalTradeIn, JournalTradeOut
 from tradescan.journal import SuggestedBy, TradeEntry
 
 _NOT_FOUND: dict[int | str, dict[str, Any]] = {
-    404: {"model": schemas.ErrorOut, "description": "No trade in the journal has this id"}
+    404: {"model": ErrorOut, "description": "No trade in the journal has this id"}
 }
 
 
-def _trade_entry(body: schemas.JournalTradeIn) -> TradeEntry:
+def _trade_entry(body: JournalTradeIn) -> TradeEntry:
     run = body.run
     return TradeEntry(
         ticker=body.ticker.strip(),
@@ -37,16 +38,16 @@ def build_router(context: ApiContext) -> APIRouter:
     router = APIRouter(tags=["journal"])
     journal = context.journal
 
-    @router.get("/journal", response_model=schemas.JournalOut)
-    def list_trades() -> schemas.JournalOut:
+    @router.get("/journal", response_model=JournalOut)
+    def list_trades() -> JournalOut:
         return journal_out(journal.trades())
 
-    @router.post("/journal/trades", response_model=schemas.JournalTradeOut, status_code=201)
-    def log_trade(body: schemas.JournalTradeIn) -> schemas.JournalTradeOut:
+    @router.post("/journal/trades", response_model=JournalTradeOut, status_code=201)
+    def log_trade(body: JournalTradeIn) -> JournalTradeOut:
         return journal_trade_out(journal.add(_trade_entry(body)))
 
-    @router.put("/journal/trades/{trade_id}", response_model=schemas.JournalTradeOut, responses=_NOT_FOUND)
-    def replace_trade(trade_id: int, body: schemas.JournalTradeIn) -> schemas.JournalTradeOut:
+    @router.put("/journal/trades/{trade_id}", response_model=JournalTradeOut, responses=_NOT_FOUND)
+    def replace_trade(trade_id: int, body: JournalTradeIn) -> JournalTradeOut:
         return journal_trade_out(journal.replace(trade_id, _trade_entry(body)))
 
     @router.delete("/journal/trades/{trade_id}", status_code=204, responses=_NOT_FOUND)

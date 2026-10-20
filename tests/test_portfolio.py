@@ -32,7 +32,10 @@ from tradescan.context import ContextBuilder, Trend
 from tradescan.risk import RiskPlanner
 from tradescan.scanner import Scanner
 from tradescan.scoring import Scorer
-from tradescan.services import BacktestRequest, PortfolioRequest, build_context_builder, build_scorer, build_use_cases
+from tradescan.services.backtest import BacktestRequest
+from tradescan.services.builders import build_context_builder, build_scorer
+from tradescan.services.composition import build_use_cases
+from tradescan.services.portfolio import PortfolioRequest
 from tradescan.signals import Direction, default_registry
 from tradescan.signals.base import Family, Signal
 from tradescan.watchlist import Watchlist

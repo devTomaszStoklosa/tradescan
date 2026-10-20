@@ -4,6 +4,7 @@ import pytest
 
 from tests.synthetic import FakeProvider, random_walk
 from tradescan import cli
+from tradescan.cli import inputs, wiring
 
 
 @pytest.fixture
@@ -15,7 +16,7 @@ def provider(monkeypatch):
         "SPY": random_walk(1500, seed=4),
     }
     fake = FakeProvider(frames)
-    monkeypatch.setattr(cli, "_provider", lambda settings, args: fake)
+    monkeypatch.setattr(wiring, "provider", lambda settings, args: fake)
     return fake
 
 
@@ -106,7 +107,7 @@ def test_backtest_filter_options(provider, capsys):
     assert "(benchmark BBB)" in output
     assert provider.calls[-1][0] == ("AAA", "BBB")
     assert cli.main(["backtest", "AAA", "connors_rsi2_long", "--filters", "nope"]) == 2
-    assert cli._axis("filter.trend.period=100:200:50").key == "filter.trend.period"
+    assert inputs.axis("filter.trend.period=100:200:50").key == "filter.trend.period"
 
 
 def test_backtest_out_of_sample_option(provider, capsys):
@@ -310,7 +311,7 @@ def test_sweep_axis_errors(provider, axis):
 
 
 def test_sweep_float_ranges_have_no_rounding_noise():
-    assert cli._axis("settings.risk.atr_mult=0.1:0.7:0.2").values == (0.1, 0.3, 0.5, 0.7)
+    assert inputs.axis("settings.risk.atr_mult=0.1:0.7:0.2").values == (0.1, 0.3, 0.5, 0.7)
 
 
 def test_errors_are_reported_not_raised(provider):

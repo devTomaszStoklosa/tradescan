@@ -4,19 +4,19 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from tradescan.api import schemas
 from tradescan.api.context import ApiContext
-from tradescan.api.mappers import walk_forward_out
+from tradescan.api.mappers.walk_forward import walk_forward_out
 from tradescan.api.routes.backtest import backtest_request
 from tradescan.api.routes.sweep import sweep_axes
-from tradescan.services import WalkForwardRequest
+from tradescan.api.schemas.walk_forward import WalkForwardIn, WalkForwardOut
+from tradescan.services.walk_forward import WalkForwardRequest
 
 
 def build_router(context: ApiContext) -> APIRouter:
     router = APIRouter(tags=["backtest"])
 
-    @router.post("/walk-forward", response_model=schemas.WalkForwardOut)
-    def walk_forward(body: schemas.WalkForwardIn) -> schemas.WalkForwardOut:
+    @router.post("/walk-forward", response_model=WalkForwardOut)
+    def walk_forward(body: WalkForwardIn) -> WalkForwardOut:
         context.check_signals([body.signal])
         request = WalkForwardRequest(
             setup=backtest_request(body, body.ticker, ()),

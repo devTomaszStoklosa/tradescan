@@ -6,7 +6,7 @@ from itertools import pairwise
 import pandas as pd
 import pytest
 
-import tradescan.services as services
+import tradescan.services.walk_forward as walk_forward_service
 from tests.synthetic import FakeProvider, FixedSignal, random_walk
 from tradescan.backtest.base import BacktestConfig, ExitReason
 from tradescan.backtest.exits import TimeExit
@@ -29,7 +29,9 @@ from tradescan.backtest.walk_forward import (
 )
 from tradescan.config import Settings
 from tradescan.parallel import ProcessRunner
-from tradescan.services import BacktestRequest, WalkForwardRequest, build_use_cases
+from tradescan.services.backtest import BacktestRequest
+from tradescan.services.composition import build_use_cases
+from tradescan.services.walk_forward import WalkForwardRequest
 
 # --- Windows -----------------------------------------------------------------------------------------
 
@@ -324,7 +326,7 @@ def test_walk_forward_limits(frames, monkeypatch):
         _use_cases(frames).walk_forward.run(_request(replace(SETUP, ticker="TINY")))
     with pytest.raises(ValueError, match="windows must be between 2 and 20"):
         _use_cases(frames).walk_forward.run(_request(windows=1))
-    monkeypatch.setattr(services, "MAX_RUNS", 40)
+    monkeypatch.setattr(walk_forward_service, "MAX_RUNS", 40)
     with pytest.raises(
         ValueError, match=r"8 combinations on 6 in-sample windows .* 48 backtests; a walk-forward runs at most 40"
     ):

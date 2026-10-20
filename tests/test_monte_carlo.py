@@ -8,7 +8,8 @@ from tests.synthetic import FakeProvider, random_walk
 from tradescan.backtest.base import ExitReason, Trade
 from tradescan.backtest.monte_carlo import METHODS, MonteCarloConfig, closed_r_multiples, simulate
 from tradescan.config import Settings
-from tradescan.services import BacktestRequest, build_use_cases
+from tradescan.services.backtest import BacktestRequest
+from tradescan.services.composition import build_use_cases
 from tradescan.signals.base import Direction
 
 R = np.array([2.0, -1.0, -1.0, 3.0, -1.0, 0.5, -1.0, -1.0, -1.0, 2.5] * 4)

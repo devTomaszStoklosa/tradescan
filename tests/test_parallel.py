@@ -4,7 +4,9 @@ from tests.synthetic import FakeProvider, random_walk
 from tradescan.backtest.edge import EdgeSampler, combine_samples, edge_samples
 from tradescan.config import Settings
 from tradescan.parallel import ProcessRunner, SequentialRunner
-from tradescan.services import EdgeRequest, ScanRequest, build_use_cases
+from tradescan.services.composition import build_use_cases
+from tradescan.services.edge import EdgeRequest
+from tradescan.services.scan import ScanRequest
 from tradescan.signals import default_registry
 from tradescan.watchlist import Watchlist
 
