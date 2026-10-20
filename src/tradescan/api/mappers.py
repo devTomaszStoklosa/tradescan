@@ -25,6 +25,7 @@ from tradescan.backtest.tickers import PeriodRun
 from tradescan.backtest.trade_rules import TradeRules
 from tradescan.backtest.vectorized import VectorizedEngine
 from tradescan.config import SettingsSection
+from tradescan.data.schema import bar_dates
 from tradescan.journal import JournalTrade, summarize
 from tradescan.params import ParamSpec, parameters_of
 from tradescan.regime import MarketRegime
@@ -63,7 +64,10 @@ def day(timestamp: pd.Timestamp) -> str:
 
 def points(series: pd.Series) -> list[schemas.Point]:
     clean = series.dropna()
-    return [schemas.Point(time=day(index), value=float(value)) for index, value in clean.items()]
+    return [
+        schemas.Point(time=day(date), value=float(value))
+        for date, value in zip(bar_dates(clean), clean.to_numpy(), strict=True)
+    ]
 
 
 def _value(value: object) -> object:
@@ -82,7 +86,7 @@ def param_spec_out(spec: ParamSpec) -> schemas.ParamSpecOut:
         label=spec.label,
         unit=spec.unit,
         help=spec.help,
-        default=_value(spec.default),  # type: ignore[arg-type]
+        default=_value(spec.default),
         minimum=spec.minimum,
         maximum=spec.maximum,
         step=spec.step,
@@ -120,7 +124,9 @@ def priority_rule_out(rule: type[PriorityRule]) -> schemas.PriorityRuleOut:
 
 
 def applied_rule_out(rule: Rule) -> schemas.AppliedRuleOut:
-    return schemas.AppliedRuleOut(name=rule.name, label=rule.label, description=rule.describe(), params=signal_params(rule))
+    return schemas.AppliedRuleOut(
+        name=rule.name, label=rule.label, description=rule.describe(), params=signal_params(rule)
+    )
 
 
 def signal_out(signal: Signal, scorer: Scorer) -> schemas.SignalOut:
@@ -273,7 +279,9 @@ def trade_out(trade: Trade) -> schemas.TradeOut:
 
 
 def percentiles_out(percentiles: Percentiles) -> schemas.PercentilesOut:
-    return schemas.PercentilesOut(**{item.name: finite(getattr(percentiles, item.name)) for item in fields(percentiles)})
+    return schemas.PercentilesOut(
+        **{item.name: finite(getattr(percentiles, item.name)) for item in fields(percentiles)}
+    )
 
 
 def path_out(path: PathStats) -> schemas.MonteCarloPathOut:
@@ -351,7 +359,7 @@ def backtest_out(report: BacktestReport) -> schemas.BacktestOut:
     close = report.close
     buy_hold = close / close.iloc[0] * report.config.initial_equity
     return schemas.BacktestOut(
-        **_setup_out(report.ticker, report.signal, report.config, report.rules, report.benchmark, close),  # type: ignore[arg-type]
+        **_setup_out(report.ticker, report.signal, report.config, report.rules, report.benchmark, close),
         split=split_out(report.split) if report.split else None,
         buy_hold=points(buy_hold),
         runs=[
@@ -372,7 +380,7 @@ def backtest_out(report: BacktestReport) -> schemas.BacktestOut:
 def sweep_out(report: SweepReport) -> schemas.SweepOut:
     base = report.base
     return schemas.SweepOut(
-        **_setup_out(report.ticker, base.signal, base.config, base.rules, base.benchmark, report.close),  # type: ignore[arg-type]
+        **_setup_out(report.ticker, base.signal, base.config, base.rules, base.benchmark, report.close),
         engine=VectorizedEngine.name,
         split=split_out(report.split),
         axes=_axes_out(report.parameters),
@@ -398,7 +406,7 @@ def _axes_out(parameters: tuple[SweptParameter, ...]) -> list[schemas.SweepAxisO
             label=item.spec.label,
             unit=item.spec.unit,
             kind=item.spec.kind,
-            current=item.spec.default,  # type: ignore[arg-type]
+            current=item.spec.default,
             values=list(item.axis.values),
         )
         for item in parameters
@@ -427,7 +435,7 @@ def walk_forward_out(report: WalkForwardReport) -> schemas.WalkForwardOut:
         segment = item.segment
         windows.append(
             schemas.WalkForwardWindowOut(
-                **_pick_fields(report, item.pick),  # type: ignore[arg-type]
+                **_pick_fields(report, item.pick),
                 out_of_sample_start=day(index[item.window.out_of_sample.start]),
                 out_of_sample_end=day(index[item.window.out_of_sample.end - 1]),
                 traded_from=day(index[segment.start]) if segment.traded else None,
@@ -436,7 +444,7 @@ def walk_forward_out(report: WalkForwardReport) -> schemas.WalkForwardOut:
             )
         )
     return schemas.WalkForwardOut(
-        **_setup_out(report.ticker, base.signal, base.config, base.rules, base.benchmark, report.close),  # type: ignore[arg-type]
+        **_setup_out(report.ticker, base.signal, base.config, base.rules, base.benchmark, report.close),
         engine=VectorizedEngine.name,
         scheme=plan.scheme,
         metric=report.metric,
@@ -456,7 +464,7 @@ def walk_forward_out(report: WalkForwardReport) -> schemas.WalkForwardOut:
         ],
         out_of_sample_start=day(index[start]),
         windows=windows,
-        next=schemas.WindowPickOut(**_pick_fields(report, report.next_pick)),  # type: ignore[arg-type]
+        next=schemas.WindowPickOut(**_pick_fields(report, report.next_pick)),
         metrics=metrics_out(report.metrics),
         unchanged=metrics_out(report.unchanged_metrics),
         efficiency=finite(report.efficiency),
@@ -498,7 +506,7 @@ def watchlist_backtest_out(report: WatchlistBacktestReport) -> schemas.Watchlist
         return metrics_out(run.metrics) if run else None
 
     return schemas.WatchlistBacktestOut(
-        **_rules_out(base.signal, base.config, base.rules, base.benchmark),  # type: ignore[arg-type]
+        **_rules_out(base.signal, base.config, base.rules, base.benchmark),
         universe=report.universe.name,
         engine=VectorizedEngine.name,
         rows=[
@@ -555,8 +563,9 @@ def contribution_out(row: TickerContribution) -> schemas.TickerContributionOut:
 
 def scan_inputs_out(scan: ScanInputs) -> schemas.ScanInputsOut:
     return schemas.ScanInputsOut(
-        settings={  # type: ignore[arg-type]
-            section: {name: _value(value) for name, value in values.items()} for section, values in scan.settings.items()
+        settings={
+            section: {name: _value(value) for name, value in values.items()}
+            for section, values in scan.settings.items()
         },
         signal_params={signal.name: signal_params(signal) for signal in scan.signals},
     )
@@ -567,7 +576,7 @@ def portfolio_out(report: PortfolioReport) -> schemas.PortfolioOut:
     close = report.benchmark_close.dropna()
     buy_hold = close / close.iloc[0] * base.config.initial_equity if len(close) else close
     return schemas.PortfolioOut(
-        **_rules_out(base.signal, base.config, base.rules, base.benchmark),  # type: ignore[arg-type]
+        **_rules_out(base.signal, base.config, base.rules, base.benchmark),
         universe=report.universe.name,
         start=day(report.calendar[0]),
         end=day(report.calendar[-1]),
@@ -663,7 +672,10 @@ def rotation_out(report: RotationReport) -> schemas.RotationOut:
         equity=points(result.equity),
         holdings=points(result.holdings.astype(float)),
         targets=targets_out(result.targets),
-        trades=[schemas.PortfolioTradeOut(ticker=item.ticker, **trade_out(item.trade).model_dump()) for item in result.trades],
+        trades=[
+            schemas.PortfolioTradeOut(ticker=item.ticker, **trade_out(item.trade).model_dump())
+            for item in result.trades
+        ],
         tickers=[contribution_out(row) for row in report.contributions],
         missing=report.missing,
     )
@@ -674,8 +686,10 @@ def chart_out(data: ChartData) -> schemas.ChartOut:
     return schemas.ChartOut(
         ticker=data.ticker,
         candles=[
-            schemas.Candle(time=day(index), open=row.open, high=row.high, low=row.low, close=row.close, volume=row.volume)
-            for index, row in zip(bars.index, bars.itertuples(index=False))
+            schemas.Candle(
+                time=day(index), open=row.open, high=row.high, low=row.low, close=row.close, volume=row.volume
+            )
+            for index, row in zip(bars.index, bars.itertuples(index=False), strict=True)
         ],
         sma_fast=points(data.sma_fast),
         sma_slow=points(data.sma_slow),

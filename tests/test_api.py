@@ -1,14 +1,16 @@
 from pathlib import Path
+from typing import Any
 
 import pytest
-from synthetic import FakeProvider, random_walk
+
+from tests.synthetic import FakeProvider, random_walk
 
 pytest.importorskip("fastapi")
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi.testclient import TestClient
 
-from tradescan.api.app import create_app  # noqa: E402
-from tradescan.config import Settings  # noqa: E402
-from tradescan.storage.database import Database  # noqa: E402
+from tradescan.api.app import create_app
+from tradescan.config import Settings
+from tradescan.storage.database import Database
 
 
 @pytest.fixture
@@ -26,7 +28,9 @@ def client(watchlists: Path) -> TestClient:
 def test_meta_endpoints(client):
     assert client.get("/api/health").json()["status"] == "ok"
     config = client.get("/api/config").json()
-    sections = {section["name"]: {param["name"]: param for param in section["params"]} for section in config["sections"]}
+    sections = {
+        section["name"]: {param["name"]: param for param in section["params"]} for section in config["sections"]
+    }
     assert set(sections) == {
         "account", "risk", "scan", "scoring", "trend", "regime", "backtest", "pyramid", "monte_carlo", "portfolio",
         "rotation", "walk_forward",
@@ -34,19 +38,40 @@ def test_meta_endpoints(client):
     assert [(name, spec["default"]) for name, spec in sections["walk_forward"].items()] == [
         ("windows", 5), ("in_sample_ratio", 3.0), ("min_trades", 10),
     ]  # fmt: skip
-    assert [name for name in sections["rotation"]] == ["holdings", "absolute_lookback"]
-    assert [(name, spec["default"]) for name, spec in sections["pyramid"].items()] == [("max_units", 1), ("add_every_atr", 0.5)]
-    assert [name for name in sections["monte_carlo"]] == ["simulations", "ruin_drawdown_pct", "seed"]
-    assert [name for name in sections["portfolio"]] == ["max_positions", "max_exposure_pct"]
+    assert list(sections["rotation"]) == ["holdings", "absolute_lookback"]
+    assert [(name, spec["default"]) for name, spec in sections["pyramid"].items()] == [
+        ("max_units", 1),
+        ("add_every_atr", 0.5),
+    ]
+    assert list(sections["monte_carlo"]) == ["simulations", "ruin_drawdown_pct", "seed"]
+    assert list(sections["portfolio"]) == ["max_positions", "max_exposure_pct"]
     assert sections["account"]["equity"]["default"] == 100_000
-    assert sections["risk"]["targets_r"] | {"kind": "float_list", "default": [2.0, 3.0]} == sections["risk"]["targets_r"]
-    assert sections["scoring"]["family_weights"]["keys"] == ["trend", "momentum", "breakout", "mean_reversion", "volume", "pattern"]
+    assert (
+        sections["risk"]["targets_r"] | {"kind": "float_list", "default": [2.0, 3.0]} == sections["risk"]["targets_r"]
+    )
+    assert sections["scoring"]["family_weights"]["keys"] == [
+        "trend",
+        "momentum",
+        "breakout",
+        "mean_reversion",
+        "volume",
+        "pattern",
+    ]
     assert "cache_dir" not in str(config["sections"])
     assert set(config["engines"]) == {"vectorized", "cerebro"}
     assert [rule["name"] for rule in config["entry_rules"]] == ["next_open", "stop", "limit"]
     assert [rule["name"] for rule in config["exit_rules"]] == [
-        "target", "time", "trailing", "channel", "breakeven", "rsi", "sma_revert", "sma_trend", "supertrend",
-        "failed_breakout", "no_progress",
+        "target",
+        "time",
+        "trailing",
+        "channel",
+        "breakeven",
+        "rsi",
+        "sma_revert",
+        "sma_trend",
+        "supertrend",
+        "failed_breakout",
+        "no_progress",
     ]
     assert (config["default_entry"], config["default_exits"]) == ("next_open", ["target", "time"])
     assert [(rule["name"], rule["needs_benchmark"]) for rule in config["filter_rules"]] == [
@@ -55,7 +80,8 @@ def test_meta_endpoints(client):
     assert config["filter_rules"][0]["description"] == "Close above SMA(200) for longs, below it for shorts"
     limit = config["entry_rules"][2]
     assert [param["name"] for param in limit["params"]] == ["offset_atr", "valid_bars"]
-    assert limit["description"].startswith("Buy-limit 0.5 ATR") and "{offset_atr:g}" in limit["template"]
+    assert limit["description"].startswith("Buy-limit 0.5 ATR")
+    assert "{offset_atr:g}" in limit["template"]
     assert "target_r" not in str(config["sections"])
     assert [(rule["name"], rule["needs_scan"]) for rule in config["priority_rules"]] == [
         ("relative_strength", False), ("momentum", False), ("score", True),
@@ -71,11 +97,15 @@ def test_meta_endpoints(client):
     assert config["rebalances"] == ["weekly", "monthly"]
 
     signals = client.get("/api/signals").json()
-    assert len(signals) == 38 and {"name", "family", "direction", "weight", "description", "template", "params"} <= set(signals[0])
+    assert len(signals) == 38
+    assert {"name", "family", "direction", "weight", "description", "template", "params"} <= set(signals[0])
     rsi2 = next(signal for signal in signals if signal["name"] == "connors_rsi2_long")
     assert [param["name"] for param in rsi2["params"]] == ["rsi_period", "trend_period", "oversold"]
-    assert rsi2["description"].startswith("RSI(2) < 10 while") and "{oversold:g}" in rsi2["template"]
-    assert client.get("/api/watchlists").json() == [{"name": "demo", "tickers": ["AAA", "BBB", "CCC"], "benchmark": "SPY"}]
+    assert rsi2["description"].startswith("RSI(2) < 10 while")
+    assert "{oversold:g}" in rsi2["template"]
+    assert client.get("/api/watchlists").json() == [
+        {"name": "demo", "tickers": ["AAA", "BBB", "CCC"], "benchmark": "SPY"}
+    ]
 
 
 def test_scan_returns_scored_hits_without_nan(client):
@@ -83,14 +113,16 @@ def test_scan_returns_scored_hits_without_nan(client):
     response = client.post("/api/scan", json={"watchlist": "demo", "settings": settings})
     assert response.status_code == 200, response.text
     data = response.json()
-    assert data["universe"] == "demo" and data["regime"]["benchmark"] == "SPY"
+    assert data["universe"] == "demo"
+    assert data["regime"]["benchmark"] == "SPY"
     assert data["hits"], "synthetic data should produce setups"
     hit = data["hits"][0]
     assert {"ticker", "direction", "fired", "score", "risk", "edge"} <= set(hit)
     assert hit["risk"]["risk_amount"] <= 50_000 * 0.005 + 1e-6
     scores = [item["score"]["total"] for item in data["hits"]]
     assert scores == sorted(scores, reverse=True)
-    assert data["fresh_bars"] == 10 and data["min_score"] == -10
+    assert data["fresh_bars"] == 10
+    assert data["min_score"] == -10
 
 
 def test_scan_filters_and_validation(client):
@@ -104,13 +136,19 @@ def test_scan_filters_and_validation(client):
     assert client.post("/api/scan", json={"tickers": ["AAA"], "signals": ["bogus"]}).status_code == 400
     # Removed one-off fields are rejected rather than silently ignored; paths never parse as parameters.
     assert client.post("/api/scan", json={"tickers": ["AAA"], "min_score": 1}).status_code == 422
-    assert client.post("/api/scan", json={"tickers": ["AAA"], "settings": {"data": {"cache_dir": "C:/"}}}).status_code == 422
+    assert (
+        client.post("/api/scan", json={"tickers": ["AAA"], "settings": {"data": {"cache_dir": "C:/"}}}).status_code
+        == 422
+    )
 
 
 def test_scan_reports_the_weights_this_run_used(client):
     settings = {"scan": {"fresh_bars": 30, "min_score": -10}, "scoring": {"family_weights": {"breakout": 4}}}
-    hits = client.post("/api/scan", json={"watchlist": "demo", "families": ["breakout"], "settings": settings}).json()["hits"]
-    assert hits and {item["weight"] for hit in hits for item in hit["fired"]} == {4}
+    hits = client.post("/api/scan", json={"watchlist": "demo", "families": ["breakout"], "settings": settings}).json()[
+        "hits"
+    ]
+    assert hits
+    assert {item["weight"] for hit in hits for item in hit["fired"]} == {4}
 
 
 def test_market_and_edge(client):
@@ -119,7 +157,8 @@ def test_market_and_edge(client):
     edge = client.post("/api/edge", json={"watchlist": "demo", "families": ["breakout"], "horizons": [5, 10]})
     assert edge.status_code == 200, edge.text
     data = edge.json()
-    assert data["horizons"] == [5, 10] and data["tickers"] == 3
+    assert data["horizons"] == [5, 10]
+    assert data["tickers"] == 3
     assert {row["family"] for row in data["rows"]} == {"breakout"}
     assert all(len(row["stats"]) == 2 for row in data["rows"])
     assert client.post("/api/edge", json={"watchlist": "demo", "horizons": [0]}).status_code == 400
@@ -128,7 +167,9 @@ def test_market_and_edge(client):
 def test_signal_parameters_change_results(client):
     base = {"watchlist": "demo", "signals": ["connors_rsi2_long"], "horizons": [5]}
     default = client.post("/api/edge", json=base).json()["rows"][0]
-    looser = client.post("/api/edge", json={**base, "signal_params": {"connors_rsi2_long": {"oversold": 30}}}).json()["rows"][0]
+    looser = client.post("/api/edge", json={**base, "signal_params": {"connors_rsi2_long": {"oversold": 30}}}).json()[
+        "rows"
+    ][0]
     assert looser["stats"][0]["events"] > default["stats"][0]["events"]
     assert looser["description"].startswith("RSI(2) < 30 while")
 
@@ -149,13 +190,22 @@ def test_signal_parameters_change_results(client):
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "params": {"fast": 300}}),
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "settings": {"backtest": {"period": 5}}}),
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "settings": {"backtest": {"target_r": 3}}}),
-        ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "settings": {"monte_carlo": {"simulations": 50}}}),
+        (
+            "/api/backtest",
+            {"ticker": "AAA", "signal": "golden_cross", "settings": {"monte_carlo": {"simulations": 50}}},
+        ),
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "settings": {"monte_carlo": {"seed": 1.5}}}),
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "entry": {"name": "nope"}}),
-        ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "entry": {"name": "limit", "params": {"valid_bars": 0}}}),
+        (
+            "/api/backtest",
+            {"ticker": "AAA", "signal": "golden_cross", "entry": {"name": "limit", "params": {"valid_bars": 0}}},
+        ),
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "exits": [{"name": "nope"}]}),
         ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "exits": [{"name": "time"}, {"name": "time"}]}),
-        ("/api/backtest", {"ticker": "AAA", "signal": "golden_cross", "exits": [{"name": "target", "params": {"max_hold_bars": 5}}]}),
+        (
+            "/api/backtest",
+            {"ticker": "AAA", "signal": "golden_cross", "exits": [{"name": "target", "params": {"max_hold_bars": 5}}]},
+        ),
         ("/api/chart", {"ticker": "AAA", "signals": ["golden_cross"], "signal_params": {"golden_cross": {"slow": 1}}}),
     ],
 )
@@ -171,13 +221,17 @@ def test_backtest_and_chart(client):
     )
     assert response.status_code == 200, response.text
     data = response.json()
-    assert data["ticker"] == "AAA" and len(data["runs"]) == 2
+    assert data["ticker"] == "AAA"
+    assert len(data["runs"]) == 2
     vectorized, cerebro = data["runs"]
     assert vectorized["metrics"]["trades"] == cerebro["metrics"]["trades"] > 0
     assert len(vectorized["equity"]) == len(data["buy_hold"]) == 1500
     assert client.post("/api/backtest", json={"ticker": "AAA", "signal": "nope"}).status_code == 400
     assert client.post("/api/backtest", json={"ticker": "ZZZ", "signal": "golden_cross"}).status_code == 400
-    assert client.post("/api/backtest", json={"ticker": "AAA", "signal": "golden_cross", "engines": ["x"]}).status_code == 400
+    assert (
+        client.post("/api/backtest", json={"ticker": "AAA", "signal": "golden_cross", "engines": ["x"]}).status_code
+        == 400
+    )
 
     chart = client.post("/api/chart", json={"ticker": "AAA", "signals": ["golden_cross", "death_cross"]}).json()
     assert len(chart["candles"]) == 1500
@@ -190,9 +244,16 @@ def test_backtest_and_chart(client):
 def test_backtest_and_chart_use_the_given_parameters(client):
     settings = {"risk": {"atr_mult": 3}, "account": {"max_position_pct": 50}}
     exits = [{"name": "time", "params": {"max_hold_bars": 7}}]
-    body = {"ticker": "AAA", "signal": "donchian_breakout", "params": {"period": 40}, "settings": settings, "exits": exits}
+    body = {
+        "ticker": "AAA",
+        "signal": "donchian_breakout",
+        "params": {"period": 40},
+        "settings": settings,
+        "exits": exits,
+    }
     data = client.post("/api/backtest", json=body).json()
-    assert data["params"] == {"period": 40} and "previous 40 bars" in data["description"]
+    assert data["params"] == {"period": 40}
+    assert "previous 40 bars" in data["description"]
     config = data["config"]
     assert (config["atr_mult"], config["max_position_pct"]) == (3, 50)
     assert data["entry"] == {
@@ -203,7 +264,8 @@ def test_backtest_and_chart_use_the_given_parameters(client):
     }
     assert [(rule["name"], rule["params"]) for rule in data["exits"]] == [("time", {"max_hold_bars": 7})]
     reasons = {trade["exit_reason"] for trade in data["runs"][0]["trades"]}
-    assert "target" not in reasons and "time" in reasons
+    assert "target" not in reasons
+    assert "time" in reasons
 
     def events(params):
         body = {"ticker": "AAA", "signals": ["donchian_breakout"], "signal_params": {"donchian_breakout": params}}
@@ -221,16 +283,21 @@ def test_backtest_entry_and_exit_rules(client):
     entry = {"name": "limit", "params": {"offset_atr": 1, "valid_bars": 3}}
     limit = client.post("/api/backtest", json={**body, "entry": entry, "exits": []}).json()
     assert limit["entry"]["params"] == {"offset_atr": 1.0, "valid_bars": 3}
-    assert limit["entry"]["description"].startswith("Buy-limit 1 ATR below") and limit["exits"] == []
+    assert limit["entry"]["description"].startswith("Buy-limit 1 ATR below")
+    assert limit["exits"] == []
     trades = limit["runs"][0]["trades"]
-    assert trades and {trade["exit_reason"] for trade in trades} <= {"stop", "open"}
+    assert trades
+    assert {trade["exit_reason"] for trade in trades} <= {"stop", "open"}
     assert all(trade["entry_date"] > trade["signal_date"] for trade in trades)
     assert [trade["entry_date"] for trade in trades] != [trade["entry_date"] for trade in default["runs"][0]["trades"]]
 
 
 def test_backtest_with_moving_stops(client):
     body = {"ticker": "AAA", "signal": "connors_rsi2_long"}
-    exits = [{"name": "trailing", "params": {"atr_mult": 1.5}}, {"name": "breakeven", "params": {"trigger_r": 2, "lock_r": 0.5}}]
+    exits = [
+        {"name": "trailing", "params": {"atr_mult": 1.5}},
+        {"name": "breakeven", "params": {"trigger_r": 2, "lock_r": 0.5}},
+    ]
     response = client.post("/api/backtest", json={**body, "exits": exits})
     assert response.status_code == 200, response.text
     data = response.json()
@@ -239,10 +306,12 @@ def test_backtest_with_moving_stops(client):
         "Once the gain reaches 2R from the fill, stop at 0.5R from the fill",
     ]
     reasons = {trade["exit_reason"] for trade in data["runs"][0]["trades"]}
-    assert "trailing" in reasons and reasons <= {"stop", "trailing", "breakeven", "open"}
+    assert "trailing" in reasons
+    assert reasons <= {"stop", "trailing", "breakeven", "open"}
 
     invalid = client.post("/api/backtest", json={**body, "exits": [{"name": "breakeven", "params": {"lock_r": 1}}]})
-    assert invalid.status_code == 400 and "must be below the trigger" in invalid.text
+    assert invalid.status_code == 400
+    assert "must be below the trigger" in invalid.text
 
 
 def test_backtest_with_indicator_exits(client):
@@ -255,13 +324,15 @@ def test_backtest_with_indicator_exits(client):
         "Exit at the next open once the close is below SMA(20) (above it for shorts)",
     ]
     reasons = {trade["exit_reason"] for trade in data["runs"][0]["trades"]}
-    assert "rsi" in reasons and reasons <= {"stop", "rsi", "sma_trend", "open"}
+    assert "rsi" in reasons
+    assert reasons <= {"stop", "rsi", "sma_trend", "open"}
 
 
 def test_backtest_with_entry_filters(client):
     body = {"ticker": "AAA", "signal": "connors_rsi2_long"}
     default = client.post("/api/backtest", json=body).json()
-    assert default["filters"] == [] and default["benchmark"] is None
+    assert default["filters"] == []
+    assert default["benchmark"] is None
 
     filters = [{"name": "market", "params": {"period": 100}}, {"name": "volume", "params": {"min_ratio": 1.2}}]
     response = client.post("/api/backtest", json={**body, "filters": filters})
@@ -285,7 +356,8 @@ def test_backtest_with_entry_filters(client):
 
     axes = [{"target": "filter", "owner": "market", "name": "period", "values": [100, 200]}]
     sweep = client.post("/api/sweep", json={**body, "filters": filters, "axes": axes}).json()
-    assert sweep["axes"][0]["key"] == "filter.market.period" and sweep["benchmark"] == "SPY"
+    assert sweep["axes"][0]["key"] == "filter.market.period"
+    assert sweep["benchmark"] == "SPY"
     assert all(cell["error"] is None for cell in sweep["cells"])
 
 
@@ -302,7 +374,8 @@ def test_backtest_with_pyramiding(client):
     assert (data["config"]["max_units"], data["config"]["add_every_atr"]) == (3, 1.0)
     vectorized, cerebro = (run["trades"] for run in data["runs"])
     pyramided = [trade for trade in vectorized if trade["adds"]]
-    assert pyramided and all(len(trade["adds"]) <= 2 for trade in vectorized)
+    assert pyramided
+    assert all(len(trade["adds"]) <= 2 for trade in vectorized)
     assert all(trade["adds"][0]["date"] > trade["entry_date"] for trade in pyramided)
     assert [[fill["date"] for fill in trade["adds"]] for trade in vectorized] == [
         [fill["date"] for fill in trade["adds"]] for trade in cerebro
@@ -315,16 +388,21 @@ def test_backtest_reports_the_split(client):
     data = client.post("/api/backtest", json=body).json()
     assert data["config"]["oos_pct"] == 20
     split = data["split"]
-    assert split["oos_pct"] == 20 and split["in_sample_start"] == data["start"] and split["out_of_sample_end"] == data["end"]
+    assert split["oos_pct"] == 20
+    assert split["in_sample_start"] == data["start"]
+    assert split["out_of_sample_end"] == data["end"]
     assert split["in_sample_end"] < split["out_of_sample_start"]
     run = data["runs"][0]
-    assert run["in_sample"]["trades"] > 0 and run["out_of_sample"]["trades"] > 0
+    assert run["in_sample"]["trades"] > 0
+    assert run["out_of_sample"]["trades"] > 0
     assert client.post("/api/backtest", json={**body, "settings": {"backtest": {"oos_pct": 60}}}).status_code == 400
 
 
 def test_backtest_reports_the_monte_carlo(client):
     settings = {"monte_carlo": {"simulations": 200, "ruin_drawdown_pct": 20, "seed": 5}, "account": {"risk_pct": 2}}
-    data = client.post("/api/backtest", json={"ticker": "AAA", "signal": "connors_rsi2_long", "settings": settings}).json()
+    data = client.post(
+        "/api/backtest", json={"ticker": "AAA", "signal": "connors_rsi2_long", "settings": settings}
+    ).json()
     run = data["runs"][0]
     result = run["monte_carlo"]
     assert (result["simulations"], result["ruin_drawdown_pct"], result["seed"], result["risk_pct"]) == (200, 20, 5, 2)
@@ -345,26 +423,37 @@ def test_sweep(client):
     response = client.post("/api/sweep", json={"ticker": "aaa", "signal": "connors_rsi2_long", "axes": axes})
     assert response.status_code == 200, response.text
     data = response.json()
-    assert data["ticker"] == "AAA" and data["engine"] == "vectorized" and data["split"]["oos_pct"] == 30
+    assert data["ticker"] == "AAA"
+    assert data["engine"] == "vectorized"
+    assert data["split"]["oos_pct"] == 30
     first, second = data["axes"]
     assert (first["key"], first["label"], first["kind"], first["current"], first["values"]) == (
         "signal.oversold", "Oversold level", "float", 10, [10, 20]
     )  # fmt: skip
     assert (second["key"], second["owner"], second["unit"]) == ("exit.target.target_r", "target", "R")
     assert [cell["values"] for cell in data["cells"]] == [[10, 1.5], [10, 2], [10, 3], [20, 1.5], [20, 2], [20, 3]]
-    assert all(cell["in_sample"]["trades"] > 0 and cell["out_of_sample"] and cell["error"] is None for cell in data["cells"])
+    assert all(
+        cell["in_sample"]["trades"] > 0 and cell["out_of_sample"] and cell["error"] is None for cell in data["cells"]
+    )
 
     # A cell is the backtest of its combination, out-of-sample metrics included.
-    body = {"ticker": "AAA", "signal": "connors_rsi2_long", "params": {"oversold": 20}, "exits": [{"name": "target"}, {"name": "time"}]}
+    body = {
+        "ticker": "AAA",
+        "signal": "connors_rsi2_long",
+        "params": {"oversold": 20},
+        "exits": [{"name": "target"}, {"name": "time"}],
+    }
     single = client.post("/api/backtest", json=body).json()["runs"][0]
     assert data["cells"][4]["out_of_sample"] == single["out_of_sample"]
     assert data["cells"][4]["in_sample"] == single["in_sample"]
 
     units = [{"target": "settings", "owner": "pyramid", "name": "max_units", "values": [1, 3]}]
     pyramid = client.post("/api/sweep", json={"ticker": "AAA", "signal": "donchian_breakout", "axes": units}).json()
-    assert pyramid["axes"][0]["key"] == "settings.pyramid.max_units" and pyramid["axes"][0]["label"] == "Max units"
+    assert pyramid["axes"][0]["key"] == "settings.pyramid.max_units"
+    assert pyramid["axes"][0]["label"] == "Max units"
     first, third = (cell["in_sample"] for cell in pyramid["cells"])
-    assert first["trades"] > 0 and first != third
+    assert first["trades"] > 0
+    assert first != third
 
 
 def test_watchlist_backtest(client):
@@ -374,24 +463,33 @@ def test_watchlist_backtest(client):
     data = response.json()
     assert (data["universe"], data["engine"], data["benchmark"], data["missing"]) == ("demo", "vectorized", "SPY", [])
     assert [row["ticker"] for row in data["rows"]] == ["AAA", "BBB", "CCC"]
-    assert data["filters"][0]["name"] == "market" and "ticker" not in data
+    assert data["filters"][0]["name"] == "market"
+    assert "ticker" not in data
 
     # A row is the backtest of that ticker alone.
     single = client.post("/api/backtest", json={**setup, "ticker": "BBB", "benchmark": "SPY"}).json()
     row = data["rows"][1]
-    assert row["metrics"] == single["runs"][0]["metrics"] and row["out_of_sample"] == single["runs"][0]["out_of_sample"]
-    assert row["split"] == single["split"] and (row["start"], row["end"]) == (single["start"], single["end"])
+    assert row["metrics"] == single["runs"][0]["metrics"]
+    assert row["out_of_sample"] == single["runs"][0]["out_of_sample"]
+    assert row["split"] == single["split"]
+    assert (row["start"], row["end"]) == (single["start"], single["end"])
 
     periods = {period["period"]: period for period in data["periods"]}
     assert list(periods) == ["full", "in_sample", "out_of_sample"]
     full = periods["full"]
-    assert full["tickers"] == 3 and full["pooled"]["trades"] == sum(row["metrics"]["trades"] for row in data["rows"])
+    assert full["tickers"] == 3
+    assert full["pooled"]["trades"] == sum(row["metrics"]["trades"] for row in data["rows"])
     spread = {item["metric"]: item for item in full["spread"]}
-    assert len(spread) == 12 and spread["trades"]["above_break_even_pct"] is None
+    assert len(spread) == 12
+    assert spread["trades"]["above_break_even_pct"] is None
     assert spread["expectancy_r"]["minimum"] <= spread["expectancy_r"]["median"] <= spread["expectancy_r"]["maximum"]
 
-    tickers = client.post("/api/watchlist-backtest", json={"tickers": ["aaa", "zzz"], "signal": "connors_rsi2_long"}).json()
-    assert [row["ticker"] for row in tickers["rows"]] == ["AAA"] and tickers["missing"] == ["ZZZ"] and tickers["benchmark"] is None
+    tickers = client.post(
+        "/api/watchlist-backtest", json={"tickers": ["aaa", "zzz"], "signal": "connors_rsi2_long"}
+    ).json()
+    assert [row["ticker"] for row in tickers["rows"]] == ["AAA"]
+    assert tickers["missing"] == ["ZZZ"]
+    assert tickers["benchmark"] is None
 
     def status(**extra):
         return client.post("/api/watchlist-backtest", json={"signal": "connors_rsi2_long", **extra}).status_code
@@ -411,13 +509,22 @@ def test_portfolio_backtest(client):
         "settings": {"portfolio": {"max_positions": 2, "max_exposure_pct": 60}},
         "priority": {"name": "momentum", "params": {"lookback": 126, "skip": 5}},
     }
-    response = client.post("/api/portfolio-backtest", json={"watchlist": "demo", "engines": ["vectorized", "cerebro"], **setup})
+    response = client.post(
+        "/api/portfolio-backtest", json={"watchlist": "demo", "engines": ["vectorized", "cerebro"], **setup}
+    )
     assert response.status_code == 200, response.text
     data = response.json()
-    assert (data["universe"], data["benchmark"], data["buy_hold_benchmark"], data["missing"]) == ("demo", "SPY", "SPY", [])
+    assert (data["universe"], data["benchmark"], data["buy_hold_benchmark"], data["missing"]) == (
+        "demo",
+        "SPY",
+        "SPY",
+        [],
+    )
     assert data["portfolio"] == {"max_positions": 2, "max_exposure_pct": 60.0}
-    assert data["priority"]["name"] == "momentum" and data["priority"]["params"] == {"lookback": 126, "skip": 5}
-    assert data["split"]["oos_pct"] == 30.0 and data["buy_hold"][0]["value"] == 100_000
+    assert data["priority"]["name"] == "momentum"
+    assert data["priority"]["params"] == {"lookback": 126, "skip": 5}
+    assert data["split"]["oos_pct"] == 30.0
+    assert data["buy_hold"][0]["value"] == 100_000
     vectorized, cerebro = data["runs"]
     assert (vectorized["engine"], cerebro["engine"]) == ("vectorized", "cerebro")
     assert vectorized["full"]["metrics"] == pytest.approx(cerebro["full"]["metrics"], rel=1e-9)
@@ -428,18 +535,28 @@ def test_portfolio_backtest(client):
 
     assert keys(vectorized) == keys(cerebro)
     full = vectorized["full"]
-    assert full["stats"]["max_positions"] <= 2 and full["metrics"]["trades"] > 0
+    assert full["stats"]["max_positions"] <= 2
+    assert full["metrics"]["trades"] > 0
     assert full["stats"]["orders"] >= full["metrics"]["trades"]
     assert {trade["ticker"] for trade in vectorized["trades"]} <= {"AAA", "BBB", "CCC"}
     assert [row["ticker"] for row in vectorized["tickers"]] == ["AAA", "BBB", "CCC"]
-    assert sum(row["pnl"] for row in vectorized["tickers"]) == pytest.approx(vectorized["equity"][-1]["value"] - 100_000)
+    assert sum(row["pnl"] for row in vectorized["tickers"]) == pytest.approx(
+        vectorized["equity"][-1]["value"] - 100_000
+    )
     assert len(vectorized["positions"]) == len(vectorized["equity"])
-    assert vectorized["in_sample"]["metrics"]["trades"] > 0 and vectorized["out_of_sample"] is not None
+    assert vectorized["in_sample"]["metrics"]["trades"] > 0
+    assert vectorized["out_of_sample"] is not None
 
-    tickers = client.post("/api/portfolio-backtest", json={"tickers": ["aaa", "zzz"], "signal": "connors_rsi2_long"}).json()
-    assert tickers["missing"] == ["ZZZ"] and tickers["benchmark"] is None and tickers["buy_hold_benchmark"] == "SPY"
-    assert tickers["priority"]["name"] == "relative_strength" and [run["engine"] for run in tickers["runs"]] == ["vectorized"]
-    assert data["scan"] is None and tickers["scan"] is None  # neither priority reads the scanner
+    tickers = client.post(
+        "/api/portfolio-backtest", json={"tickers": ["aaa", "zzz"], "signal": "connors_rsi2_long"}
+    ).json()
+    assert tickers["missing"] == ["ZZZ"]
+    assert tickers["benchmark"] is None
+    assert tickers["buy_hold_benchmark"] == "SPY"
+    assert tickers["priority"]["name"] == "relative_strength"
+    assert [run["engine"] for run in tickers["runs"]] == ["vectorized"]
+    assert data["scan"] is None
+    assert tickers["scan"] is None
 
     def status(**extra):
         return client.post("/api/portfolio-backtest", json={"signal": "connors_rsi2_long", **extra}).status_code
@@ -453,9 +570,11 @@ def test_portfolio_backtest(client):
     assert status(watchlist="demo", priority={"name": "momentum", "params": {"skip": 300}}) == 400
     assert status(watchlist="demo", settings={"portfolio": {"max_positions": 0}}) == 400
     pyramided = client.post(
-        "/api/portfolio-backtest", json={"signal": "connors_rsi2_long", "watchlist": "demo", "settings": {"pyramid": {"max_units": 2}}}
+        "/api/portfolio-backtest",
+        json={"signal": "connors_rsi2_long", "watchlist": "demo", "settings": {"pyramid": {"max_units": 2}}},
     )
-    assert pyramided.status_code == 400 and "does not pyramid" in pyramided.json()["detail"]
+    assert pyramided.status_code == 400
+    assert "does not pyramid" in pyramided.json()["detail"]
 
 
 def test_rotation_backtest(client):
@@ -472,17 +591,25 @@ def test_rotation_backtest(client):
     data = response.json()
     assert (data["universe"], data["engine"]) == ("demo", "vectorized")
     assert data["rotation"] == {"holdings": 2, "absolute_lookback": 63, "rebalance": "weekly", "safe_asset": "SPY"}
-    assert data["ranking"]["params"] == {"lookback": 126, "skip": 0} and data["weighting"]["name"] == "inverse_volatility"
+    assert data["ranking"]["params"] == {"lookback": 126, "skip": 0}
+    assert data["weighting"]["name"] == "inverse_volatility"
     assert data["config"]["commission_pct"] == 0.05
-    assert data["buy_hold_benchmark"] == "SPY" and data["buy_hold"][0]["value"] == pytest.approx(100_000)
+    assert data["buy_hold_benchmark"] == "SPY"
+    assert data["buy_hold"][0]["value"] == pytest.approx(100_000)
     assert data["start"] == data["equity"][0]["time"] == data["buy_hold"][0]["time"]
-    assert data["split"] and data["in_sample"] and data["out_of_sample"]
+    assert data["split"]
+    assert data["in_sample"]
+    assert data["out_of_sample"]
     full = data["full"]
-    assert full["metrics"]["expectancy_r"] is None and full["stats"]["rebalances"] > 50 and full["stats"]["max_holdings"] <= 3
+    assert full["metrics"]["expectancy_r"] is None
+    assert full["stats"]["rebalances"] > 50
+    assert full["stats"]["max_holdings"] <= 3
     assert [row["ticker"] for row in data["tickers"]] == ["AAA", "BBB", "CCC", "SPY"]
-    assert data["trades"] and all(trade["r_multiple"] is None for trade in data["trades"])
+    assert data["trades"]
+    assert all(trade["r_multiple"] is None for trade in data["trades"])
     targets = data["targets"]
-    assert targets["date"] == data["end"] and len(targets["picks"]) == 2
+    assert targets["date"] == data["end"]
+    assert len(targets["picks"]) == 2
     assert sum(pick["weight_pct"] for pick in targets["picks"]) == pytest.approx(100.0)
 
 
@@ -515,22 +642,32 @@ def test_portfolio_backtest_with_the_score_priority(client):
         "description": "The scanner's confluence score: fresh signals, daily and weekly trend, relative-strength rank",
         "params": {},
     }
+
     def keys(run):
         return [(trade["ticker"], trade["entry_date"], trade["exit_date"], trade["size"]) for trade in run["trades"]]
 
     vectorized, cerebro = data["runs"]
-    assert keys(vectorized) == keys(cerebro) and vectorized["full"]["stats"]["skipped_no_slot"] > 0
+    assert keys(vectorized) == keys(cerebro)
+    assert vectorized["full"]["stats"]["skipped_no_slot"] > 0
 
     sections = {section["name"]: section for section in client.get("/api/config").json()["sections"]}
-    defaults = {name: {spec["name"]: spec["default"] for spec in sections[name]["params"]} for name in ("scoring", "trend")}
+    defaults = {
+        name: {spec["name"]: spec["default"] for spec in sections[name]["params"]} for name in ("scoring", "trend")
+    }
     assert data["scan"]["settings"] == {**defaults, "scan": {"fresh_bars": 3}}
 
-    scoring = {"scoring": {"rs_bonus": 3, "family_weights": {"breakout": 0}}, "scan": {"fresh_bars": 1}, "trend": {"fast_period": 20}}
+    scoring = {
+        "scoring": {"rs_bonus": 3, "family_weights": {"breakout": 0}},
+        "scan": {"fresh_bars": 1},
+        "trend": {"fast_period": 20},
+    }
     scored = run({**limits, **scoring})
     assert scored.status_code == 200
     settings = scored.json()["scan"]["settings"]
-    assert settings["scoring"]["rs_bonus"] == 3 and settings["scoring"]["family_weights"]["breakout"] == 0
-    assert settings["trend"]["fast_period"] == 20 and settings["scan"] == {"fresh_bars": 1}
+    assert settings["scoring"]["rs_bonus"] == 3
+    assert settings["scoring"]["family_weights"]["breakout"] == 0
+    assert settings["trend"]["fast_period"] == 20
+    assert settings["scan"] == {"fresh_bars": 1}
     assert run({"scoring": {"rs_strong_pct": 10}}).status_code == 400
     assert run({"scoring": {"signal_weights": {"nope": 1}}}).status_code == 400
 
@@ -547,12 +684,14 @@ def test_portfolio_backtest_with_the_score_signal_params(client):
     longs = {signal["name"]: signal for signal in client.get("/api/signals").json() if signal["direction"] == "long"}
     counted = data["scan"]["signal_params"]
     assert list(counted) == [name for name in longs if name != "connors_rsi2_long"]
-    assert counted["donchian_breakout"]["period"] == 5 and data["params"]["oversold"] != 30
+    assert counted["donchian_breakout"]["period"] == 5
+    assert data["params"]["oversold"] != 30
     for name, params in counted.items():
         if name != "donchian_breakout":
             assert params == {spec["name"]: spec["default"] for spec in longs[name]["params"]}
     unknown = run({"nope": {"period": 5}})
-    assert unknown.status_code == 400 and "nope" in unknown.json()["detail"]
+    assert unknown.status_code == 400
+    assert "nope" in unknown.json()["detail"]
     assert run({"donchian_breakout": {"period": 1}}).status_code == 400
     assert run({"donchian_breakout": {"nope": 5}}).status_code == 400
 
@@ -570,7 +709,12 @@ def test_sweep_limits_and_errors(client):
     fast = {"target": "signal", "name": "fast", "values": list(range(150, 251, 50))}
     cells = sweep(fast).json()["cells"]
     assert [cell["error"] is None for cell in cells] == [True, False, False]
-    assert sweep({**fast, "values": list(range(2, 17))}, {**fast, "name": "slow", "values": list(range(300, 314))}).status_code == 400
+    assert (
+        sweep(
+            {**fast, "values": list(range(2, 17))}, {**fast, "name": "slow", "values": list(range(300, 314))}
+        ).status_code
+        == 400
+    )
     assert sweep({**fast, "values": [1, 2]}).status_code == 400
     assert sweep({**fast, "values": [50]}).status_code == 422
     assert sweep({"target": "settings", "owner": "backtest", "name": "oos_pct", "values": [20, 30]}).status_code == 400
@@ -585,26 +729,44 @@ def test_walk_forward(client):
         {"target": "signal", "name": "oversold", "values": [5, 10, 15, 20]},
         {"target": "exit", "owner": "target", "name": "target_r", "values": [1.5, 2.5]},
     ]
-    body = {"ticker": "aaa", "signal": "connors_rsi2_long", "axes": axes, "settings": {"walk_forward": {"min_trades": 5}}}
+    body = {
+        "ticker": "aaa",
+        "signal": "connors_rsi2_long",
+        "axes": axes,
+        "settings": {"walk_forward": {"min_trades": 5}},
+    }
     response = client.post("/api/walk-forward", json=body)
     assert response.status_code == 200, response.text
     data = response.json()
-    assert (data["ticker"], data["engine"], data["scheme"], data["metric"]) == ("AAA", "vectorized", "rolling", "sharpe")
+    assert (data["ticker"], data["engine"], data["scheme"], data["metric"]) == (
+        "AAA",
+        "vectorized",
+        "rolling",
+        "sharpe",
+    )
     assert data["walk_forward"] == {
         "windows": 5, "in_sample_ratio": 3, "min_trades": 5, "in_sample_bars": 561, "out_of_sample_bars": 187,
     }  # fmt: skip
     assert [axis["key"] for axis in data["axes"]] == ["signal.oversold", "exit.target.target_r"]
-    assert data["combinations"] == 8 and data["errors"] == []
+    assert data["combinations"] == 8
+    assert data["errors"] == []
     windows = data["windows"]
-    assert len(windows) == 5 and windows[0]["out_of_sample_start"] == data["out_of_sample_start"]
-    assert windows[-1]["out_of_sample_end"] == data["end"] and windows[1]["in_sample_end"] < windows[1]["out_of_sample_start"]
+    assert len(windows) == 5
+    assert windows[0]["out_of_sample_start"] == data["out_of_sample_start"]
+    assert windows[-1]["out_of_sample_end"] == data["end"]
+    assert windows[1]["in_sample_end"] < windows[1]["out_of_sample_start"]
     picked = [window for window in windows if window["values"] is not None]
-    assert picked and all(len(window["values"]) == 2 and window["in_sample"]["trades"] >= 5 for window in picked)
+    assert picked
+    assert all(len(window["values"]) == 2 and window["in_sample"]["trades"] >= 5 for window in picked)
     assert all(window["traded_from"] >= window["out_of_sample_start"] for window in windows if window["traded_from"])
-    assert data["next"]["in_sample_end"] == data["end"] and data["next"]["qualified"] <= 8
-    assert data["equity"][0]["time"] == data["out_of_sample_start"] and data["equity"][-1]["time"] == data["end"]
+    assert data["next"]["in_sample_end"] == data["end"]
+    assert data["next"]["qualified"] <= 8
+    assert data["equity"][0]["time"] == data["out_of_sample_start"]
+    assert data["equity"][-1]["time"] == data["end"]
     assert len(data["equity"]) == len(data["unchanged_equity"]) == len(data["buy_hold"])
-    assert data["metrics"]["trades"] == sum(window["out_of_sample"]["trades"] for window in windows if window["out_of_sample"])
+    assert data["metrics"]["trades"] == sum(
+        window["out_of_sample"]["trades"] for window in windows if window["out_of_sample"]
+    )
     assert len(data["trades"]) >= data["metrics"]["trades"]
     assert data["metrics"]["buy_hold_pct"] == data["unchanged"]["buy_hold_pct"]
 
@@ -615,8 +777,12 @@ def test_walk_forward(client):
 
 def test_walk_forward_limits_and_errors(client):
     limits = client.get("/api/config").json()["walk_forward"]
-    assert limits["max_runs"] == 2000 and limits["schemes"] == ["rolling", "anchored"] and limits["default_scheme"] == "rolling"
-    assert limits["default_metric"] == "sharpe" and "trades" not in limits["metrics"] and "expectancy_r" in limits["metrics"]
+    assert limits["max_runs"] == 2000
+    assert limits["schemes"] == ["rolling", "anchored"]
+    assert limits["default_scheme"] == "rolling"
+    assert limits["default_metric"] == "sharpe"
+    assert "trades" not in limits["metrics"]
+    assert "expectancy_r" in limits["metrics"]
     assert limits["fixed"] == ["account.equity", "backtest.oos_pct"]
 
     def walk_forward(*axes, **extra):
@@ -624,12 +790,16 @@ def test_walk_forward_limits_and_errors(client):
         return client.post("/api/walk-forward", json=body)
 
     oversold = {"target": "signal", "name": "oversold", "values": [5, 10]}
-    assert walk_forward({"target": "settings", "owner": "account", "name": "equity", "values": [1e4, 2e4]}).status_code == 400
+    assert (
+        walk_forward({"target": "settings", "owner": "account", "name": "equity", "values": [1e4, 2e4]}).status_code
+        == 400
+    )
     assert walk_forward(oversold, metric="trades").status_code == 400
     assert walk_forward(oversold, scheme="expanding").status_code == 422
     assert walk_forward(oversold, settings={"walk_forward": {"windows": 25}}).status_code == 400
     too_short = walk_forward(oversold, settings={"walk_forward": {"windows": 20, "in_sample_ratio": 10}})
-    assert too_short.status_code == 400 and "too few for 20 windows" in too_short.json()["detail"]
+    assert too_short.status_code == 400
+    assert "too few for 20 windows" in too_short.json()["detail"]
 
 
 def test_static_ui_with_spa_fallback(watchlists, tmp_path):
@@ -650,7 +820,7 @@ def test_static_ui_with_spa_fallback(watchlists, tmp_path):
 SNAPSHOT = {"kind": "backtest", "ticker": "SPY", "equity": {"time": ["2026-01-02"], "value": [100000.0]}}
 
 
-def pinned_run(slot: int, run_id: str | None = None) -> dict:
+def pinned_run(slot: int, run_id: str | None = None) -> dict[str, Any]:
     return {
         "id": run_id or f"run-{slot}",
         "slot": slot,
@@ -665,7 +835,8 @@ def pinned_run(slot: int, run_id: str | None = None) -> dict:
 def test_runs_are_pinned_renamed_and_unpinned(client):
     assert client.get("/api/runs").json() == []
     created = client.post("/api/runs", json=pinned_run(2))
-    assert created.status_code == 201 and created.json() == pinned_run(2)
+    assert created.status_code == 201
+    assert created.json() == pinned_run(2)
     client.post("/api/runs", json=pinned_run(1))
     assert [run["slot"] for run in client.get("/api/runs").json()] == [1, 2]
 
@@ -682,20 +853,24 @@ def test_runs_are_pinned_renamed_and_unpinned(client):
 def test_run_conflicts_and_unknown_runs(client):
     client.post("/api/runs", json=pinned_run(1))
     taken = client.post("/api/runs", json=pinned_run(1, "other"))
-    assert taken.status_code == 409 and "Slot 1 is taken" in taken.json()["detail"]
+    assert taken.status_code == 409
+    assert "Slot 1 is taken" in taken.json()["detail"]
     assert client.post("/api/runs", json=pinned_run(2, "run-1")).status_code == 409
     assert client.post("/api/runs", json=pinned_run(9)).status_code == 422
     assert client.post("/api/runs", json=pinned_run(2) | {"color": "red"}).status_code == 422
     assert client.patch("/api/runs/missing", json={"name": "x"}).status_code == 404
     missing = client.delete("/api/runs/missing")
-    assert missing.status_code == 404 and missing.json()["detail"] == "No pinned run missing"
+    assert missing.status_code == 404
+    assert missing.json()["detail"] == "No pinned run missing"
 
 
 def test_runs_are_kept_in_the_database_given(watchlists, tmp_path):
     database = Database(tmp_path / "tradescan.db")
     first = TestClient(create_app(Settings(), FakeProvider({}), watchlists, database=database))
     first.post("/api/runs", json=pinned_run(1))
-    second = TestClient(create_app(Settings(), FakeProvider({}), watchlists, database=Database(tmp_path / "tradescan.db")))
+    second = TestClient(
+        create_app(Settings(), FakeProvider({}), watchlists, database=Database(tmp_path / "tradescan.db"))
+    )
     assert [run["id"] for run in second.get("/api/runs").json()] == ["run-1"]
 
 
@@ -714,7 +889,9 @@ def test_trades_are_logged_closed_and_summarized(client):
     logged = client.post("/api/journal/trades", json=TRADE | {"notes": "Pullback to SMA", "run": run})
     assert logged.status_code == 201
     trade = logged.json()
-    assert trade["ticker"] == "SPY" and trade["run"] == run and trade["is_open"]
+    assert trade["ticker"] == "SPY"
+    assert trade["run"] == run
+    assert trade["is_open"]
     assert (trade["risk"], trade["profit"], trade["r_multiple"]) == (20.0, None, None)
 
     closed = client.put(
@@ -722,7 +899,8 @@ def test_trades_are_logged_closed_and_summarized(client):
         json=TRADE | {"closed": "2026-03-20", "exit_price": 530.0, "fees": 2.0, "notes": "Target", "run": run},
     ).json()
     assert (closed["is_open"], closed["profit"], closed["r_multiple"]) == (False, 58.0, 2.9)
-    assert closed["return_pct"] == pytest.approx(5.8) and closed["created_at"] == trade["created_at"]
+    assert closed["return_pct"] == pytest.approx(5.8)
+    assert closed["created_at"] == trade["created_at"]
     client.post("/api/journal/trades", json=TRADE | {"direction": "short", "stop": 510.0})
 
     journal = client.get("/api/journal").json()
@@ -742,9 +920,11 @@ def test_trades_are_logged_closed_and_summarized(client):
 
 def test_invalid_and_unknown_trades(client):
     wrong_stop = client.post("/api/journal/trades", json=TRADE | {"stop": 510.0})
-    assert wrong_stop.status_code == 400 and "must be below the entry price" in wrong_stop.json()["detail"]
+    assert wrong_stop.status_code == 400
+    assert "must be below the entry price" in wrong_stop.json()["detail"]
     half_exit = client.post("/api/journal/trades", json=TRADE | {"exit_price": 520.0})
-    assert half_exit.status_code == 400 and "both its date and its price" in half_exit.json()["detail"]
+    assert half_exit.status_code == 400
+    assert "both its date and its price" in half_exit.json()["detail"]
     assert client.post("/api/journal/trades", json=TRADE | {"quantity": 0}).status_code == 422
     assert client.post("/api/journal/trades", json=TRADE | {"opened": "March"}).status_code == 422
     assert client.put("/api/journal/trades/99", json=TRADE).status_code == 404

@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 import pytest
-from synthetic import make_ohlcv, random_walk
 
+from tests.synthetic import make_ohlcv, random_walk
 from tradescan.signals import Direction, Family, default_registry
 from tradescan.signals.conditions import bars_since_last, crossed_above, rising_edge
 
@@ -93,7 +93,7 @@ def test_streak_fires_once_on_the_nth_close_in_a_row():
 
 
 def test_cumulative_rsi_fires_when_the_summed_rsi_drops_below_the_level():
-    close = list(np.linspace(100.0, 130.0, 31)) + [125.0, 120.0]
+    close = [*list(np.linspace(100.0, 130.0, 31)), 125.0, 120.0]
     events = default_registry.create("cumulative_rsi_long").events(make_ohlcv(close))
     # RSI(2) is 100 on the rise, then about 17 and 6: only the second drop takes the sum below 35.
     assert np.flatnonzero(events.to_numpy()).tolist() == [32]

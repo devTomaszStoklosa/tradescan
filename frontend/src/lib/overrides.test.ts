@@ -16,7 +16,9 @@ import {
 
 const period = spec("period", "Period", 20, [2, 300, 1], "int");
 const targets = spec("targets_r", "Targets", [2, 3], [0.25, 50, 0.25], "float_list");
-const weights = spec("family_weights", "Weights", { trend: 1, breakout: 1.5 }, [-10, 10, 0.5], "weights", { keys: ["trend", "breakout"] });
+const weights = spec("family_weights", "Weights", { trend: 1, breakout: 1.5 }, [-10, 10, 0.5], "weights", {
+  keys: ["trend", "breakout"],
+});
 
 describe("overrides", () => {
   it("keeps only real changes", () => {
@@ -31,12 +33,16 @@ describe("overrides", () => {
     const overrides = { risk: { atr_mult: 2.5, targets_r: [1.5, 4] }, scoring: { family_weights: { breakout: 3 } } };
     const params = new URLSearchParams();
     writeOverrides(params, "set", overrides);
-    expect(params.toString()).toBe("set.risk.atr_mult=2.5&set.risk.targets_r=1.5%2C4&set.scoring.family_weights.breakout=3");
+    expect(params.toString()).toBe(
+      "set.risk.atr_mult=2.5&set.risk.targets_r=1.5%2C4&set.scoring.family_weights.breakout=3",
+    );
     expect(readOverrides(params, "set")).toEqual(overrides);
   });
 
   it("skips what the URL cannot express", () => {
-    const params = new URLSearchParams("set.risk.atr_mult=abc&set.risk=1&set.a.b.c.d=1&other.x.y=1&set.scan.fresh_bars=5");
+    const params = new URLSearchParams(
+      "set.risk.atr_mult=abc&set.risk=1&set.a.b.c.d=1&other.x.y=1&set.scan.fresh_bars=5",
+    );
     expect(readOverrides(params, "set")).toEqual({ scan: { fresh_bars: 5 } });
   });
 
@@ -55,15 +61,20 @@ describe("overrides", () => {
   });
 
   it("picks the listed fields only", () => {
-    expect(pickFields({ risk: { atr_mult: 3, targets_r: [2] }, scan: { fresh_bars: 5 } }, { risk: ["atr_mult", "atr_period"] })).toEqual({
+    expect(
+      pickFields(
+        { risk: { atr_mult: 3, targets_r: [2] }, scan: { fresh_bars: 5 } },
+        { risk: ["atr_mult", "atr_period"] },
+      ),
+    ).toEqual({
       risk: { atr_mult: 3 },
     });
   });
 
   it("fills description templates like the server does", () => {
-    expect(formatTemplate("RSI({period}) < {level:g}, close in the top {band:.0%}", { period: 3, level: 15, band: 0.25 })).toBe(
-      "RSI(3) < 15, close in the top 25%",
-    );
+    expect(
+      formatTemplate("RSI({period}) < {level:g}, close in the top {band:.0%}", { period: 3, level: 15, band: 0.25 }),
+    ).toBe("RSI(3) < 15, close in the top 25%");
     const rsi2 = signals.find((signal) => signal.name === "connors_rsi2_long")!;
     expect(describeSignal(rsi2, undefined)).toBe(rsi2.description);
     expect(describeSignal(rsi2, { oversold: 15 })).toBe("RSI(2) < 15 while price is above SMA(200): dip in an uptrend");

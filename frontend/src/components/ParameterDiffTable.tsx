@@ -43,9 +43,15 @@ export function ParameterDiffTable({ runs, rows }: { runs: PinnedRun[]; rows: Pa
             </thead>
             <tbody>
               {shown.map((row) => (
-                <tr key={row.key} className={`border-b border-line last:border-0 ${showAll && !row.differs ? "text-muted" : ""}`}>
+                <tr
+                  key={row.key}
+                  className={`border-b border-line last:border-0 ${showAll && !row.differs ? "text-muted" : ""}`}
+                >
                   {/* Sticky, so on a phone the label stays visible while the runs scroll sideways. */}
-                  <th scope="row" className="sticky left-0 min-w-36 bg-panel px-3 py-1.5 text-left font-normal text-muted">
+                  <th
+                    scope="row"
+                    className="sticky left-0 min-w-36 bg-panel px-3 py-1.5 text-left font-normal text-muted"
+                  >
                     {row.label}
                     {row.unit && <span className="ml-1 text-xs">({row.unit})</span>}
                   </th>
@@ -60,7 +66,9 @@ export function ParameterDiffTable({ runs, rows }: { runs: PinnedRun[]; rows: Pa
           </table>
         </div>
       ) : (
-        <p className="text-sm text-muted">{runs.length < 2 ? "Show at least two runs to see what differs." : "All shown runs use the same parameters."}</p>
+        <p className="text-sm text-muted">
+          {runs.length < 2 ? "Show at least two runs to see what differs." : "All shown runs use the same parameters."}
+        </p>
       )}
     </section>
   );

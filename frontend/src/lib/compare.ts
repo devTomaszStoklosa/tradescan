@@ -35,7 +35,12 @@ function display(value: Raw): string {
   if (value === undefined) return DASH;
   if (typeof value === "number") return value.toLocaleString("en-US", { maximumFractionDigits: 6 });
   if (Array.isArray(value)) return value.map((item) => display(item)).join(", ");
-  if (typeof value === "object") return Object.entries(value).map(([key, item]) => `${key} ${display(item)}`).join(", ") || "none";
+  if (typeof value === "object")
+    return (
+      Object.entries(value)
+        .map(([key, item]) => `${key} ${display(item)}`)
+        .join(", ") || "none"
+    );
   return value;
 }
 
@@ -64,7 +69,14 @@ function ownedRows(
     const params = runs.map((run) => paramsOf(run, owner));
     for (const name of keysOf(params.filter((item) => item !== undefined))) {
       const spec = specsOf(owner).find((item) => item.name === name);
-      rows.push(row(`${prefix}.${owner}.${name}`, `${labelOf(owner)} · ${spec?.label ?? humanize(name)}`, spec?.unit ?? "", params.map((item) => item?.[name])));
+      rows.push(
+        row(
+          `${prefix}.${owner}.${name}`,
+          `${labelOf(owner)} · ${spec?.label ?? humanize(name)}`,
+          spec?.unit ?? "",
+          params.map((item) => item?.[name]),
+        ),
+      );
     }
   }
   return rows;
@@ -85,28 +97,60 @@ function portfolioRuns(runs: PinnedRun[]): (PinnedPortfolioRun | undefined)[] {
 function universeRows(runs: PinnedRun[], portfolios: (PinnedPortfolioRun | undefined)[]): ParamRow[] {
   if (!portfolios.length) return [];
   return [
-    row("kind", "Run", "", runs.map((run) => KIND_LABELS[run.kind])),
-    row("universe", "Universe", "", portfolios.map((run) => run?.universe)),
-    row("tickers", "Tickers", "", portfolios.map((run) => run?.tickers.length)),
+    row(
+      "kind",
+      "Run",
+      "",
+      runs.map((run) => KIND_LABELS[run.kind]),
+    ),
+    row(
+      "universe",
+      "Universe",
+      "",
+      portfolios.map((run) => run?.universe),
+    ),
+    row(
+      "tickers",
+      "Tickers",
+      "",
+      portfolios.map((run) => run?.tickers.length),
+    ),
   ];
 }
 
 /** The max positions and the max exposure of portfolio runs, labelled like the Portfolio page's fields. */
-function portfolioSettingRows(portfolios: (PinnedPortfolioRun | undefined)[], sections: SettingsSectionOut[]): ParamRow[] {
+function portfolioSettingRows(
+  portfolios: (PinnedPortfolioRun | undefined)[],
+  sections: SettingsSectionOut[],
+): ParamRow[] {
   const section = sections.find((item) => item.name === PORTFOLIO_SECTION);
   const settings = portfolios.map((run) => run?.portfolio as Record<string, number> | undefined);
   return keysOf(settings.filter((item) => item !== undefined)).map((name) => {
     const spec = section?.params.find((item) => item.name === name);
-    return row(`portfolio.${name}`, `${section?.label ?? "Portfolio"} · ${spec?.label ?? humanize(name)}`, spec?.unit ?? "", settings.map((item) => item?.[name]));
+    return row(
+      `portfolio.${name}`,
+      `${section?.label ?? "Portfolio"} · ${spec?.label ?? humanize(name)}`,
+      spec?.unit ?? "",
+      settings.map((item) => item?.[name]),
+    );
   });
 }
 
 /** The rule that ranked a portfolio's signals, with its parameters. */
-function priorityRows(runs: PinnedRun[], portfolios: (PinnedPortfolioRun | undefined)[], rules: CompareSpecs): ParamRow[] {
+function priorityRows(
+  runs: PinnedRun[],
+  portfolios: (PinnedPortfolioRun | undefined)[],
+  rules: CompareSpecs,
+): ParamRow[] {
   if (!portfolios.length) return [];
   const labels = new Map(portfolios.flatMap((run) => (run ? [[run.priority.name, run.priority.label] as const] : [])));
   return [
-    row("priority", "Priority", "", portfolios.map((run) => run?.priority.label)),
+    row(
+      "priority",
+      "Priority",
+      "",
+      portfolios.map((run) => run?.priority.label),
+    ),
     ...ownedRows(
       "priority",
       labels.keys(),
@@ -140,7 +184,14 @@ function scanRows(
     for (const param of keysOf(settings.filter((item) => item !== undefined))) {
       const spec = section?.params.find((item) => item.name === param);
       const label = `${section?.label ?? humanize(name)} · ${spec?.label ?? humanize(param)}`;
-      rows.push(row(`scan.${name}.${param}`, label, spec?.unit ?? "", settings.map((item) => item?.[param])));
+      rows.push(
+        row(
+          `scan.${name}.${param}`,
+          label,
+          spec?.unit ?? "",
+          settings.map((item) => item?.[param]),
+        ),
+      );
     }
   }
   rows.push(
@@ -172,10 +223,30 @@ export function parameterRows(
   const portfolios = portfolioRuns(runs);
   const rows: ParamRow[] = [
     ...universeRows(runs, portfolios),
-    row("ticker", "Ticker", "", runs.map((run) => asBacktest(run)?.ticker)),
-    row("signal", "Signal", "", runs.map((run) => run.signal)),
-    row("engine", "Engine", "", runs.map((run) => run.engine)),
-    row("data", "Data", "", runs.map((run) => `${run.start} → ${run.end}`)),
+    row(
+      "ticker",
+      "Ticker",
+      "",
+      runs.map((run) => asBacktest(run)?.ticker),
+    ),
+    row(
+      "signal",
+      "Signal",
+      "",
+      runs.map((run) => run.signal),
+    ),
+    row(
+      "engine",
+      "Engine",
+      "",
+      runs.map((run) => run.engine),
+    ),
+    row(
+      "data",
+      "Data",
+      "",
+      runs.map((run) => `${run.start} → ${run.end}`),
+    ),
   ];
   for (const name of keysOf(runs.map((run) => run.config))) {
     const spec = settingSpecs.find((item) => item.name === name);
@@ -188,13 +259,37 @@ export function parameterRows(
     for (const name of MONTE_CARLO_SETTINGS) {
       const spec = section?.params.find((item) => item.name === name);
       const label = `${section?.label ?? "Monte Carlo"} · ${spec?.label ?? humanize(name)}`;
-      rows.push(row(`monte_carlo.${name}`, label, spec?.unit ?? "", runs.map((run) => run.monteCarlo?.[name])));
+      rows.push(
+        row(
+          `monte_carlo.${name}`,
+          label,
+          spec?.unit ?? "",
+          runs.map((run) => run.monteCarlo?.[name]),
+        ),
+      );
     }
   }
 
-  const filterLabels = new Map(runs.flatMap((run) => run.filters.map((filter) => [filter.name, filter.label] as const)));
-  rows.push(row("filters", "Filters", "", runs.map((run) => run.filters.map((filter) => filter.label).join(", ") || "none")));
-  if (runs.some((run) => run.benchmark)) rows.push(row("benchmark", "Benchmark", "", runs.map((run) => run.benchmark ?? undefined)));
+  const filterLabels = new Map(
+    runs.flatMap((run) => run.filters.map((filter) => [filter.name, filter.label] as const)),
+  );
+  rows.push(
+    row(
+      "filters",
+      "Filters",
+      "",
+      runs.map((run) => run.filters.map((filter) => filter.label).join(", ") || "none"),
+    ),
+  );
+  if (runs.some((run) => run.benchmark))
+    rows.push(
+      row(
+        "benchmark",
+        "Benchmark",
+        "",
+        runs.map((run) => run.benchmark ?? undefined),
+      ),
+    );
   rows.push(
     ...ownedRows(
       "filter",
@@ -207,7 +302,14 @@ export function parameterRows(
   );
 
   const entryLabels = new Map(runs.map((run) => [run.entry.name, run.entry.label]));
-  rows.push(row("entry", "Entry", "", runs.map((run) => run.entry.label)));
+  rows.push(
+    row(
+      "entry",
+      "Entry",
+      "",
+      runs.map((run) => run.entry.label),
+    ),
+  );
   rows.push(
     ...ownedRows(
       "entry",
@@ -219,7 +321,14 @@ export function parameterRows(
     ),
   );
   const exitLabels = new Map(runs.flatMap((run) => run.exits.map((exit) => [exit.name, exit.label] as const)));
-  rows.push(row("exits", "Exits", "", runs.map((run) => run.exits.map((exit) => exit.label).join(", ") || "stop only")));
+  rows.push(
+    row(
+      "exits",
+      "Exits",
+      "",
+      runs.map((run) => run.exits.map((exit) => exit.label).join(", ") || "stop only"),
+    ),
+  );
   rows.push(
     ...ownedRows(
       "exit",

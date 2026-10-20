@@ -2,11 +2,21 @@
  * Inputs generated from the API's parameter declarations, so every parameter the server knows about
  * can be set here without frontend changes. Empty inputs show the default; only changes are kept.
  */
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 
 import type { ParamSpecOut, SettingsSectionOut } from "../api/client";
-import { problemOf, sameValue, withOwner, withValue, type Overrides, type ParamValue, type Values } from "../lib/overrides";
+import {
+  problemOf,
+  sameValue,
+  withOwner,
+  withValue,
+  type Overrides,
+  type ParamValue,
+  type Values,
+} from "../lib/overrides";
+import { fmtParam } from "../lib/format";
 import { Input, NumberInput } from "./ui";
+import { omit } from "../lib/records";
 
 const cx = (...classes: (string | false | null | undefined)[]) => classes.filter(Boolean).join(" ");
 
@@ -36,7 +46,12 @@ function ParamField({
           {labelOf(spec)}
         </label>
         {changed && (
-          <button type="button" onClick={onReset} className="shrink-0 text-accent hover:underline" aria-label={`Reset ${spec.label} to default`}>
+          <button
+            type="button"
+            onClick={onReset}
+            className="shrink-0 text-accent hover:underline"
+            aria-label={`Reset ${spec.label} to default`}
+          >
             reset
           </button>
         )}
@@ -47,7 +62,15 @@ function ParamField({
   );
 }
 
-function NumberParam({ spec, value, onChange }: { spec: ParamSpecOut; value: ParamValue | undefined; onChange: (value: ParamValue | null) => void }) {
+function NumberParam({
+  spec,
+  value,
+  onChange,
+}: {
+  spec: ParamSpecOut;
+  value: ParamValue | undefined;
+  onChange: (value: ParamValue | null) => void;
+}) {
   const id = useId();
   const problem = problemOf(spec, value);
   return (
@@ -58,7 +81,7 @@ function NumberParam({ spec, value, onChange }: { spec: ParamSpecOut; value: Par
         min={spec.minimum}
         max={spec.maximum}
         step={String(spec.step)}
-        placeholder={String(spec.default)}
+        placeholder={fmtParam(spec.default)}
         invalid={problem !== null}
         onChange={onChange}
       />
@@ -66,25 +89,43 @@ function NumberParam({ spec, value, onChange }: { spec: ParamSpecOut; value: Par
   );
 }
 
-const listText = (value: ParamValue | undefined) => (typeof value === "number" ? String(value) : Array.isArray(value) ? value.join(", ") : "");
+const listText = (value: ParamValue | undefined) =>
+  typeof value === "number" ? String(value) : Array.isArray(value) ? value.join(", ") : "";
 
 /** Numbers in "2, 3" (null when something is not a number, [] when empty). */
 const parseList = (text: string): number[] | null => {
-  const items = text.split(/[\s,;]+/).filter(Boolean).map(Number);
+  const items = text
+    .split(/[\s,;]+/)
+    .filter(Boolean)
+    .map(Number);
   return items.every(Number.isFinite) ? items : null;
 };
 
-function ListParam({ spec, value, onChange }: { spec: ParamSpecOut; value: ParamValue | undefined; onChange: (value: ParamValue | null) => void }) {
+/** True when `text` already reads as `value`, or as no value when it is empty. */
+function readsAs(text: string, value: ParamValue | undefined, spec: ParamSpecOut): boolean {
+  const typed = parseList(text);
+  const effective = value ?? spec.default;
+  const current = typeof effective === "number" ? [effective] : effective;
+  return typed !== null && (typed.length === 0 ? value === undefined : sameValue(typed, current));
+}
+
+function ListParam({
+  spec,
+  value,
+  onChange,
+}: {
+  spec: ParamSpecOut;
+  value: ParamValue | undefined;
+  onChange: (value: ParamValue | null) => void;
+}) {
   const id = useId();
   const [text, setText] = useState(listText(value));
   // Follow outside changes (reset, back navigation) without rewriting what is being typed, e.g. "2, ".
-  useEffect(() => {
-    const typed = parseList(text);
-    const effective = value ?? spec.default;
-    const current = typeof effective === "number" ? [effective] : effective;
-    const typedMatches = typed !== null && (typed.length === 0 ? value === undefined : sameValue(typed, current));
-    if (!typedMatches) setText(listText(value));
-  }, [value]); // only outside changes of `value` matter, not every keystroke
+  const [shownValue, setShownValue] = useState(value);
+  if (value !== shownValue) {
+    setShownValue(value);
+    if (!readsAs(text, value, spec)) setText(listText(value));
+  }
 
   const update = (next: string) => {
     setText(next);
@@ -109,19 +150,30 @@ function ListParam({ spec, value, onChange }: { spec: ParamSpecOut; value: Param
   );
 }
 
-function WeightsParam({ spec, value, onChange }: { spec: ParamSpecOut; value: ParamValue | undefined; onChange: (value: ParamValue | null) => void }) {
+function WeightsParam({
+  spec,
+  value,
+  onChange,
+}: {
+  spec: ParamSpecOut;
+  value: ParamValue | undefined;
+  onChange: (value: ParamValue | null) => void;
+}) {
   const defaults = spec.default as Record<string, number>;
   const current = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const keys = spec.keys ?? Object.keys(defaults);
   const setKey = (key: string, weight: number | null) => {
-    const next = { ...current };
-    if (weight === null || weight === defaults[key]) delete next[key];
-    else next[key] = weight;
+    const next = weight === null || weight === defaults[key] ? omit(current, key) : { ...current, [key]: weight };
     onChange(Object.keys(next).length ? next : null);
   };
   return (
     <fieldset className="col-span-full min-w-0">
-      <ParamField spec={spec} changed={value !== undefined} problem={problemOf(spec, value)} onReset={() => onChange(null)}>
+      <ParamField
+        spec={spec}
+        changed={value !== undefined}
+        problem={problemOf(spec, value)}
+        onReset={() => onChange(null)}
+      >
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           {keys.map((key) => (
             <label key={key} className="flex min-w-0 flex-col gap-1 font-normal">
@@ -162,8 +214,10 @@ export function ParamFields({
     <div className={className}>
       {specs.map((spec) => {
         const value = values[spec.name];
-        if (spec.kind === "weights") return spec.keys ? <WeightsParam key={spec.name} spec={spec} value={value} onChange={set(spec)} /> : null;
-        if (spec.kind === "int_list" || spec.kind === "float_list") return <ListParam key={spec.name} spec={spec} value={value} onChange={set(spec)} />;
+        if (spec.kind === "weights")
+          return spec.keys ? <WeightsParam key={spec.name} spec={spec} value={value} onChange={set(spec)} /> : null;
+        if (spec.kind === "int_list" || spec.kind === "float_list")
+          return <ListParam key={spec.name} spec={spec} value={value} onChange={set(spec)} />;
         return <NumberParam key={spec.name} spec={spec} value={value} onChange={set(spec)} />;
       })}
     </div>

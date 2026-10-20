@@ -26,6 +26,7 @@ from tradescan.backtest.metrics import Metrics, compute_metrics
 from tradescan.backtest.oos import MIN_PERIOD_BARS, SignalBetween, SignalFrom
 from tradescan.backtest.sweep import SweepCase
 from tradescan.backtest.vectorized import VectorizedEngine
+from tradescan.data.schema import bar_position
 
 # Each combination runs once per in-sample window: 2000 backtests of 10 years of daily bars take 10-20 s on four cores.
 MAX_RUNS = 2000
@@ -192,7 +193,7 @@ def stitch(
             config = replace(case.config, initial_equity=equity)
             result = engine.run(ticker, df, SignalBetween(case.signal, start, end), config, case.rules)
             trades, curve = result.trades, result.equity
-        exits = [df.index.get_loc(trade.exit_date) for trade in trades]
+        exits = [bar_position(df.index, trade.exit_date) for trade in trades]
         takeover = last if is_last else min(last, max(start, end, *exits))
         part = curve.iloc[start : takeover + 1]
         segments.append(Segment(start, takeover, part, trades))

@@ -24,7 +24,8 @@ const PERIODS: { value: Period; label: string }[] = [
   { value: "out_of_sample", label: "Out-of-sample" },
 ];
 
-const periodMetrics = (run: PinnedRun, period: Period) => (period === "full" ? run.metrics : (run.split?.[period] ?? null));
+const periodMetrics = (run: PinnedRun, period: Period) =>
+  period === "full" ? run.metrics : (run.split?.[period] ?? null);
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
@@ -46,7 +47,10 @@ export function ComparePage() {
   const [chosenMethod, setMethod] = useState(PREFERRED_METHOD);
 
   const visible = useMemo(() => runs.filter((run) => !run.hidden), [runs]);
-  const rows = useMemo(() => parameterRows(visible, config.data?.sections, signals.data, config.data), [visible, config.data, signals.data]);
+  const rows = useMemo(
+    () => parameterRows(visible, config.data?.sections, signals.data, config.data),
+    [visible, config.data, signals.data],
+  );
   const columns = useMemo(
     () => visible.map((run) => ({ key: run.id, header: <RunLabel run={run} />, metrics: periodMetrics(run, period) })),
     [visible, period],
@@ -62,7 +66,12 @@ export function ComparePage() {
   const methods = useMemo(() => methodsOf(visible.map((run) => run.monteCarlo)), [visible]);
   const method = methods.some((item) => item.name === chosenMethod) ? chosenMethod : (methods[0]?.name ?? chosenMethod);
   const series = useMemo<EquitySeries[]>(
-    () => visible.map((run) => ({ label: `#${run.slot} ${run.name}`, points: returnCurve(run.equity), colorVar: runColorVar(run) })),
+    () =>
+      visible.map((run) => ({
+        label: `#${run.slot} ${run.name}`,
+        points: returnCurve(run.equity),
+        colorVar: runColorVar(run),
+      })),
     [visible],
   );
 
@@ -77,10 +86,12 @@ export function ComparePage() {
     }
   };
 
-  const onExport = () => downloadFile(`tradescan-runs-${new Date().toISOString().slice(0, 10)}.json`, exportRuns(), "application/json");
+  const onExport = () =>
+    downloadFile(`tradescan-runs-${new Date().toISOString().slice(0, 10)}.json`, exportRuns(), "application/json");
 
   const onClear = () => {
-    if (window.confirm(`Remove all ${plural(runs.length, "pinned run")}? Export them first if you want a backup.`)) clear();
+    if (window.confirm(`Remove all ${plural(runs.length, "pinned run")}? Export them first if you want a backup.`))
+      clear();
   };
 
   return (
@@ -90,7 +101,14 @@ export function ComparePage() {
         subtitle={`Pinned backtest and portfolio runs side by side, up to ${MAX_RUNS}. They are kept on the tradescan server: export them as a backup.`}
         actions={
           <>
-            <input ref={fileInput} type="file" accept="application/json,.json" aria-label="Runs file to import" className="hidden" onChange={onImport} />
+            <input
+              ref={fileInput}
+              type="file"
+              accept="application/json,.json"
+              aria-label="Runs file to import"
+              className="hidden"
+              onChange={(event) => void onImport(event)}
+            />
             <Button onClick={() => fileInput.current?.click()}>Import JSON</Button>
             <Button onClick={onExport} disabled={!runs.length}>
               Export JSON
@@ -116,9 +134,15 @@ export function ComparePage() {
         <Loading message="Loading pinned runs…" />
       ) : !runs.length ? (
         <EmptyState title="No pinned runs yet">
-          Run a <Link to="/backtest" className="text-accent hover:underline">backtest</Link> or a{" "}
-          <Link to="/portfolio" className="text-accent hover:underline">portfolio</Link> and press <strong>Pin run</strong> to keep it here, then change
-          a parameter and pin again.
+          Run a{" "}
+          <Link to="/backtest" className="text-accent hover:underline">
+            backtest
+          </Link>{" "}
+          or a{" "}
+          <Link to="/portfolio" className="text-accent hover:underline">
+            portfolio
+          </Link>{" "}
+          and press <strong>Pin run</strong> to keep it here, then change a parameter and pin again.
         </EmptyState>
       ) : (
         <>
@@ -146,7 +170,12 @@ export function ComparePage() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h2 className="text-sm font-semibold">Monte Carlo of the trades</h2>
                   {methods.length > 1 && (
-                    <Segmented label="Method" value={method} onChange={setMethod} options={methods.map(({ name, label }) => ({ value: name, label }))} />
+                    <Segmented
+                      label="Method"
+                      value={method}
+                      onChange={setMethod}
+                      options={methods.map(({ name, label }) => ({ value: name, label }))}
+                    />
                   )}
                 </div>
                 <MonteCarloTable runs={visible} method={method} />
@@ -156,9 +185,18 @@ export function ComparePage() {
                   <h2 className="text-sm font-semibold">Metrics</h2>
                   <Segmented label="Period" value={period} onChange={setPeriod} options={PERIODS} />
                 </div>
-                <MetricsTable columns={columns} caption={period === "full" ? "Metrics of the pinned runs" : `Metrics of the pinned runs, ${period === "in_sample" ? "in-sample" : "out-of-sample"}`} highlightBest />
+                <MetricsTable
+                  columns={columns}
+                  caption={
+                    period === "full"
+                      ? "Metrics of the pinned runs"
+                      : `Metrics of the pinned runs, ${period === "in_sample" ? "in-sample" : "out-of-sample"}`
+                  }
+                  highlightBest
+                />
                 <p className="text-xs text-muted">
-                  The best value of each ranked metric is highlighted.{period !== "full" && " Runs without a split show dashes."}
+                  The best value of each ranked metric is highlighted.
+                  {period !== "full" && " Runs without a split show dashes."}
                 </p>
               </section>
               {statColumns.length > 0 && (

@@ -46,14 +46,31 @@ describe("sweepParams", () => {
       "settings.pyramid.max_units",
       "settings.pyramid.add_every_atr",
     ]);
-    expect(param("exit.target.target_r")).toMatchObject({ target: "exit", owner: "target", name: "target_r", group: "Exit: Profit target", current: 2 });
+    expect(param("exit.target.target_r")).toMatchObject({
+      target: "exit",
+      owner: "target",
+      name: "target_r",
+      group: "Exit: Profit target",
+      current: 2,
+    });
     expect(param("settings.risk.atr_mult").group).toBe("Risk plan");
-    expect(param("settings.pyramid.max_units")).toMatchObject({ target: "settings", owner: "pyramid", group: "Pyramiding", current: 1 });
+    expect(param("settings.pyramid.max_units")).toMatchObject({
+      target: "settings",
+      owner: "pyramid",
+      group: "Pyramiding",
+      current: 1,
+    });
   });
 
   it("follows the setup: its entry, its exits and its changed values", () => {
     const changed = sweepParams(
-      { ...setup, entry: "limit", exits: ["time"], signalParams: { oversold: 15 }, settings: { risk: { atr_mult: 3 } } },
+      {
+        ...setup,
+        entry: "limit",
+        exits: ["time"],
+        signalParams: { oversold: 15 },
+        settings: { risk: { atr_mult: 3 } },
+      },
       config,
       signals,
     );
@@ -67,18 +84,39 @@ describe("sweepParams", () => {
 
 describe("sweepParams with entry filters", () => {
   it("offers the parameters of the chosen filters after the signal's", () => {
-    const filtered = sweepParams({ ...setup, filters: ["trend"], filterParams: { trend: { period: 100 } } }, config, signals);
-    expect(filtered.map((item) => item.key).slice(2, 5)).toEqual(["signal.oversold", "filter.trend.period", "exit.target.target_r"]);
+    const filtered = sweepParams(
+      { ...setup, filters: ["trend"], filterParams: { trend: { period: 100 } } },
+      config,
+      signals,
+    );
+    expect(filtered.map((item) => item.key).slice(2, 5)).toEqual([
+      "signal.oversold",
+      "filter.trend.period",
+      "exit.target.target_r",
+    ]);
     const trend = filtered.find((item) => item.key === "filter.trend.period");
-    expect(trend).toMatchObject({ target: "filter", owner: "trend", name: "period", group: "Filter: Trend filter", current: 100 });
-    expect(withCombination({ ...setup, filters: ["trend"] }, [trend!], [150]).filterParams).toEqual({ trend: { period: 150 } });
+    expect(trend).toMatchObject({
+      target: "filter",
+      owner: "trend",
+      name: "period",
+      group: "Filter: Trend filter",
+      current: 100,
+    });
+    expect(withCombination({ ...setup, filters: ["trend"] }, [trend!], [150]).filterParams).toEqual({
+      trend: { period: 150 },
+    });
   });
 });
 
 describe("axis ranges", () => {
   it("centres a default range on the setup's value in the declared steps", () => {
     expect(defaultAxis(param("signal.oversold"))).toEqual({ key: "signal.oversold", from: 6, to: 14, step: 1 });
-    expect(defaultAxis(param("exit.target.target_r"))).toEqual({ key: "exit.target.target_r", from: 1, to: 3, step: 0.25 });
+    expect(defaultAxis(param("exit.target.target_r"))).toEqual({
+      key: "exit.target.target_r",
+      from: 1,
+      to: 3,
+      step: 0.25,
+    });
   });
 
   it("shifts a default range that would leave the declared limits", () => {
@@ -87,9 +125,15 @@ describe("axis ranges", () => {
   });
 
   it("lists the values without float noise", () => {
-    const range = axisValues({ key: "x", from: 0.1, to: 0.7, step: 0.2 }, param("settings.backtest.commission_pct").spec, limits);
+    const range = axisValues(
+      { key: "x", from: 0.1, to: 0.7, step: 0.2 },
+      param("settings.backtest.commission_pct").spec,
+      limits,
+    );
     expect(range.values).toEqual([0.1, 0.3, 0.5, 0.7]);
-    expect(axisValues({ key: "x", from: 1, to: 3, step: 0.25 }, param("exit.target.target_r").spec, limits).values).toHaveLength(9);
+    expect(
+      axisValues({ key: "x", from: 1, to: 3, step: 0.25 }, param("exit.target.target_r").spec, limits).values,
+    ).toHaveLength(9);
   });
 
   it.each([
@@ -100,15 +144,22 @@ describe("axis ranges", () => {
     [{ from: 5, to: 5, step: 1 }, "at least 2 values"],
     [{ from: 1, to: 50, step: 0.5 }, "99 values: at most 50"],
   ])("explains a bad range %o", (axis, problem) => {
-    expect(axisValues({ key: "signal.oversold", ...axis }, param("signal.oversold").spec, limits).problem).toContain(problem);
+    expect(axisValues({ key: "signal.oversold", ...axis }, param("signal.oversold").spec, limits).problem).toContain(
+      problem,
+    );
   });
 
   it("wants whole numbers for whole-number parameters", () => {
-    expect(axisValues({ key: "x", from: 2, to: 5, step: 0.5 }, param("signal.rsi_period").spec, limits).problem).toBe("Use whole numbers");
+    expect(axisValues({ key: "x", from: 2, to: 5, step: 0.5 }, param("signal.rsi_period").spec, limits).problem).toBe(
+      "Use whole numbers",
+    );
   });
 
   it("multiplies the value counts", () => {
-    const ranges = [axisValues({ key: "a", from: 1, to: 3, step: 1 }, param("signal.oversold").spec, limits), { values: [1, 2], problem: null }];
+    const ranges = [
+      axisValues({ key: "a", from: 1, to: 3, step: 1 }, param("signal.oversold").spec, limits),
+      { values: [1, 2], problem: null },
+    ];
     expect(combinations(ranges)).toBe(6);
     expect(combinations([...ranges, { values: null, problem: "bad" }])).toBeNull();
   });
@@ -153,7 +204,12 @@ describe("sweep form", () => {
     expect(check([])).toBeNull();
     expect(check([{ key: "entry.offset_atr", from: 0, to: 1, step: 0.5 }])).toBeNull();
     expect(check([{ key: "signal.oversold", from: 15, to: 5, step: 5 }])).toBeNull();
-    expect(check([{ key: "signal.oversold", from: 1, to: 15, step: 1 }, { key: "exit.time.max_hold_bars", from: 1, to: 15, step: 1 }])).toBeNull();
+    expect(
+      check([
+        { key: "signal.oversold", from: 1, to: 15, step: 1 },
+        { key: "exit.time.max_hold_bars", from: 1, to: 15, step: 1 },
+      ]),
+    ).toBeNull();
   });
 
   it("applies a combination to the setup, dropping values equal to the defaults", () => {

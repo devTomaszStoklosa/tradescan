@@ -9,6 +9,7 @@ import { PinnedRunsProvider } from "../state/pinnedRuns";
 import { MemoryRunStore } from "../test/runStore";
 import { config, makePortfolioRun, portfolioResult, signals, watchlists } from "../test/fixtures";
 import { PortfolioPage } from "./PortfolioPage";
+import { requestBody, requestUrl } from "../test/fetch";
 
 vi.mock("../components/charts/EquityChart", () => ({ EquityChart: () => null }));
 
@@ -18,11 +19,19 @@ let store = new MemoryRunStore();
 
 function renderPage(path: string) {
   store = new MemoryRunStore();
-  const responses: Record<string, unknown> = { "/config": config, "/signals": signals, "/watchlists": watchlists, "/portfolio-backtest": result };
+  const responses: Record<string, unknown> = {
+    "/config": config,
+    "/signals": signals,
+    "/watchlists": watchlists,
+    "/portfolio-backtest": result,
+  };
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-    const url = String(input);
+    const url = requestUrl(input);
     const body = Object.entries(responses).find(([route]) => url.endsWith(route))?.[1] ?? null;
-    return new Response(JSON.stringify(body), { status: body ? 200 : 404, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify(body), {
+      status: body ? 200 : 404,
+      headers: { "Content-Type": "application/json" },
+    });
   });
   const router = createMemoryRouter(
     [
@@ -47,10 +56,11 @@ function renderPage(path: string) {
 const bodies = () =>
   vi
     .mocked(globalThis.fetch)
-    .mock.calls.filter(([input]) => String(input).endsWith("/portfolio-backtest"))
-    .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>);
+    .mock.calls.filter(([input]) => requestUrl(input).endsWith("/portfolio-backtest"))
+    .map(([, init]) => requestBody(init) as Record<string, unknown>);
 
-const RESULT_URL = "/portfolio?w=us_large&signal=connors_rsi2_long&eng=vectorized&filter=market&set.portfolio.max_positions=5&prio=momentum";
+const RESULT_URL =
+  "/portfolio?w=us_large&signal=connors_rsi2_long&eng=vectorized&filter=market&set.portfolio.max_positions=5&prio=momentum";
 
 describe("PortfolioPage", () => {
   it("runs a setup on the default watchlist with the portfolio's limits and priority", async () => {
@@ -59,12 +69,17 @@ describe("PortfolioPage", () => {
     expect(screen.queryByLabelText("Ticker")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Max units")).not.toBeInTheDocument(); // the portfolio backtest does not pyramid
     expect(screen.getByRole("combobox", { name: "Universe" })).toHaveValue("us_large");
-    expect(screen.getByRole("combobox", { name: "Priority when more signals fire than fit" })).toHaveValue("relative_strength");
+    expect(screen.getByRole("combobox", { name: "Priority when more signals fire than fit" })).toHaveValue(
+      "relative_strength",
+    );
     expect(screen.getByRole("button", { name: "Run portfolio" })).toBeDisabled();
 
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Signal" }), "connors_rsi2_long");
     await userEvent.type(screen.getByLabelText("Max positions"), "5");
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Priority when more signals fire than fit" }), "momentum");
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: "Priority when more signals fire than fit" }),
+      "momentum",
+    );
     await userEvent.type(screen.getByLabelText("Skip (bars)"), "0");
     expect(screen.getByRole("button", { name: "Reset 3 changed" })).toBeInTheDocument(); // max positions, priority, skip
     await userEvent.click(screen.getByRole("button", { name: "Run portfolio" }));
@@ -95,15 +110,22 @@ describe("PortfolioPage", () => {
     await userEvent.selectOptions(priority, "score");
     await userEvent.click(screen.getByText("Scan score settings"));
     expect(screen.queryByLabelText("Minimum score")).not.toBeInTheDocument(); // the scan settings the score does not read
-    expect(within(screen.getByText("Scan score settings").closest("details")!).getByText("Signal parameters")).toBeInTheDocument();
+    expect(
+      within(screen.getByText("Scan score settings").closest("details")!).getByText("Signal parameters"),
+    ).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("Fresh within (bars)"), "5");
     await userEvent.type(screen.getByLabelText("Daily trend bonus"), "2");
     await userEvent.click(screen.getByRole("button", { name: "Run portfolio" }));
     await waitFor(() =>
-      expect(router.state.location.search).toBe("?w=us_large&signal=connors_rsi2_long&eng=vectorized&set.scan.fresh_bars=5&set.scoring.trend_bonus=2&prio=score"),
+      expect(router.state.location.search).toBe(
+        "?w=us_large&signal=connors_rsi2_long&eng=vectorized&set.scan.fresh_bars=5&set.scoring.trend_bonus=2&prio=score",
+      ),
     );
     await waitFor(() =>
-      expect(bodies().at(-1)).toMatchObject({ priority: { name: "score", params: {} }, settings: { scan: { fresh_bars: 5 }, scoring: { trend_bonus: 2 } } }),
+      expect(bodies().at(-1)).toMatchObject({
+        priority: { name: "score", params: {} },
+        settings: { scan: { fresh_bars: 5 }, scoring: { trend_bonus: 2 } },
+      }),
     );
 
     await userEvent.selectOptions(priority, "momentum");
@@ -123,15 +145,21 @@ describe("PortfolioPage", () => {
     expect(screen.getByRole("button", { name: "Reset 2 changed" })).toBeInTheDocument(); // the priority and the channel length
     await userEvent.click(screen.getByRole("button", { name: "Run portfolio" }));
     await waitFor(() =>
-      expect(router.state.location.search).toBe("?w=us_large&signal=connors_rsi2_long&eng=vectorized&prio=score&ss.donchian_breakout.period=55"),
+      expect(router.state.location.search).toBe(
+        "?w=us_large&signal=connors_rsi2_long&eng=vectorized&prio=score&ss.donchian_breakout.period=55",
+      ),
     );
-    await waitFor(() => expect(bodies().at(-1)).toMatchObject({ score_signal_params: { donchian_breakout: { period: 55 } } }));
+    await waitFor(() =>
+      expect(bodies().at(-1)).toMatchObject({ score_signal_params: { donchian_breakout: { period: 55 } } }),
+    );
 
     // Traded now, the breakout's parameters come from the setup, so the score's entry for it goes.
     await userEvent.selectOptions(screen.getByRole("combobox", { name: /^Signal/ }), "donchian_breakout");
     expect(screen.getByRole("button", { name: "Reset 1 changed" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Run portfolio" }));
-    await waitFor(() => expect(router.state.location.search).toBe("?w=us_large&signal=donchian_breakout&eng=vectorized&prio=score"));
+    await waitFor(() =>
+      expect(router.state.location.search).toBe("?w=us_large&signal=donchian_breakout&eng=vectorized&prio=score"),
+    );
   });
 
   it("warns that Cerebro is slow on a large universe", async () => {
@@ -144,13 +172,21 @@ describe("PortfolioPage", () => {
   it("shows the portfolio's metrics, stats, contributions and trades with their tickers", async () => {
     renderPage(RESULT_URL);
     expect(await screen.findByText("No data for: TSLA")).toBeInTheDocument();
-    expect(screen.getByText(/2 tickers, one equity · at most 5 positions and 100% gross exposure · priority: Return from 252 bars ago to 21 bars ago/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /2 tickers, one equity · at most 5 positions and 100% gross exposure · priority: Return from 252 bars ago to 21 bars ago/,
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("SPY buy & hold +180.5%")).toBeInTheDocument();
     expect(screen.getByText("34")).toBeInTheDocument(); // skipped signals
     expect(screen.getByText("30 without a slot, 4 without exposure room")).toBeInTheDocument();
 
     const metrics = screen.getByRole("table", { name: "Portfolio metrics by period" });
-    expect(within(metrics).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["Metric", "Full history", "In-sample", "Out-of-sample"]);
+    expect(
+      within(metrics)
+        .getAllByRole("columnheader")
+        .map((cell) => cell.textContent),
+    ).toEqual(["Metric", "Full history", "In-sample", "Out-of-sample"]);
     const stats = screen.getByRole("table", { name: "Portfolio stats by period" });
     expect(within(stats).getByText("Entry orders").closest("tr")).toHaveTextContent("Entry orders1208238");
 
@@ -160,7 +196,10 @@ describe("PortfolioPage", () => {
       "href",
       "/backtest?ticker=AAPL&signal=connors_rsi2_long&eng=vectorized&filter=market&b=SPY",
     );
-    expect(screen.getByRole("link", { name: /Each ticker on its own/ })).toHaveAttribute("href", "/watchlist?w=us_large&signal=connors_rsi2_long&filter=market");
+    expect(screen.getByRole("link", { name: /Each ticker on its own/ })).toHaveAttribute(
+      "href",
+      "/watchlist?w=us_large&signal=connors_rsi2_long&filter=market",
+    );
 
     const trades = within(screen.getByRole("table", { name: "Trades" })).getAllByRole("columnheader");
     expect(trades[0]).toHaveTextContent("Ticker");
@@ -197,7 +236,12 @@ describe("PortfolioPage pinning", () => {
       priority: { name: "momentum", params: { lookback: 252, skip: 21 } },
       stats: { full: { skipped_no_slot: 30 }, in_sample: { orders: 82 }, out_of_sample: { orders: 38 } },
       monteCarlo: null,
-      form: { universe: { watchlist: "us_large", tickers: "" }, engines: ["vectorized"], priority: "momentum", settings: { portfolio: { max_positions: 5 } } },
+      form: {
+        universe: { watchlist: "us_large", tickers: "" },
+        engines: ["vectorized"],
+        priority: "momentum",
+        settings: { portfolio: { max_positions: 5 } },
+      },
     });
     expect(store.records[0]?.snapshot).not.toHaveProperty("trades");
     expect(screen.getByRole("link", { name: "Compare 1 pinned →" })).toBeInTheDocument();

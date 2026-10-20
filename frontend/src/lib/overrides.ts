@@ -5,6 +5,7 @@
  * by its link. Owners are settings sections ("risk"), signal names ("connors_rsi2_long") or trade rule names ("limit", "trend").
  */
 import type { ParamSpecOut, SettingsSectionOut, SignalOut } from "../api/client";
+import { omit } from "./records";
 
 export type ParamValue = number | number[] | Record<string, number>;
 /** Changed values of one owner, by parameter name. */
@@ -28,7 +29,12 @@ export function sameValue(left: ParamValue | undefined, right: ParamValue | unde
   if (left === undefined || right === undefined) return left === right;
   if (typeof left === "number" || typeof right === "number") return left === right;
   if (Array.isArray(left) || Array.isArray(right)) {
-    return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((item, index) => item === right[index]);
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((item, index) => item === right[index])
+    );
   }
   const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
   return [...keys].every((key) => left[key] === right[key]);
@@ -36,18 +42,13 @@ export function sameValue(left: ParamValue | undefined, right: ParamValue | unde
 
 /** Set one value (null clears it). A value equal to the default is dropped, so only changes remain. */
 export function withValue(values: Values, spec: ParamSpecOut, value: ParamValue | null): Values {
-  const next = { ...values };
-  if (value === null || sameValue(value, spec.default)) delete next[spec.name];
-  else next[spec.name] = value;
-  return next;
+  if (value === null || sameValue(value, spec.default)) return omit(values, spec.name);
+  return { ...values, [spec.name]: value };
 }
 
 /** Replace one owner's values; owners without changes are removed. */
 export function withOwner(overrides: Overrides, owner: string, values: Values): Overrides {
-  const next = { ...overrides };
-  if (Object.keys(values).length) next[owner] = values;
-  else delete next[owner];
-  return next;
+  return Object.keys(values).length ? { ...overrides, [owner]: values } : omit(overrides, owner);
 }
 
 export function pickOwners(overrides: Overrides, owners: readonly string[]): Overrides {
@@ -118,12 +119,17 @@ export const pickSections = (sections: SettingsSectionOut[], names: readonly str
 
 /** Signals a family/direction filter keeps (no families means all). */
 export const visibleSignals = (signals: SignalOut[], families: readonly string[], direction: string): SignalOut[] =>
-  signals.filter((signal) => (!families.length || families.includes(signal.family)) && (direction === "both" || signal.direction === direction));
+  signals.filter(
+    (signal) =>
+      (!families.length || families.includes(signal.family)) &&
+      (direction === "both" || signal.direction === direction),
+  );
 
 export const sectionSpecs = (sections: SettingsSectionOut[]): SpecIndex =>
   Object.fromEntries(sections.map((section) => [section.name, section.params]));
 
-export const signalSpecs = (signals: SignalOut[]): SpecIndex => Object.fromEntries(signals.map((signal) => [signal.name, signal.params]));
+export const signalSpecs = (signals: SignalOut[]): SpecIndex =>
+  Object.fromEntries(signals.map((signal) => [signal.name, signal.params]));
 
 /** True when any override names an unknown parameter or holds an invalid value. */
 export function hasProblems(overrides: Overrides, specs: SpecIndex): boolean {
@@ -162,7 +168,7 @@ export function readOverrides(params: URLSearchParams, prefix: string): Override
     const parts = key.slice(prefix.length + 1).split(".");
     const [owner, name, entry] = parts;
     if (!owner || !name || parts.length > 3) continue;
-    const values = (result[owner] ??= {});
+    const values: Values = { ...result[owner] };
     if (entry !== undefined) {
       const weight = toNumber(raw);
       const current = values[name];
@@ -170,12 +176,12 @@ export function readOverrides(params: URLSearchParams, prefix: string): Override
       if (weight !== null) values[name] = { ...weights, [entry]: weight };
     } else if (raw.includes(",")) {
       const items = raw.split(",").map(toNumber);
-      if (items.every((item) => item !== null)) values[name] = items as number[];
+      if (items.every((item) => item !== null)) values[name] = items;
     } else {
       const value = toNumber(raw);
       if (value !== null) values[name] = value;
     }
-    if (!Object.keys(values).length) delete result[owner];
+    if (Object.keys(values).length) result[owner] = values;
   }
   return result;
 }
@@ -192,7 +198,9 @@ function formatValue(value: ParamValue | undefined, spec: string): string {
 
 /** Fill a server template ("RSI({period}) < {level:g}") with values; mirrors Python's format for "", "g", ".0%". */
 export function formatTemplate(template: string, values: Values): string {
-  return template.replace(PLACEHOLDER, (_, name: string, spec = "") => formatValue(values[name], spec));
+  return template.replace(PLACEHOLDER, (_, name: string, spec: string | undefined) =>
+    formatValue(values[name], spec ?? ""),
+  );
 }
 
 /** Anything with declared parameters and a description template: a signal or a trade rule. */

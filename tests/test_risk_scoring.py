@@ -30,7 +30,8 @@ def test_position_size_risk_budget_value_cap_and_lots():
 
 def test_risk_planner_reports_amounts():
     plan = RiskPlanner(100_000, 1.0, 100.0, 2.0, (2.0, 3.0)).plan(Direction.LONG, 100.0, 2.0)
-    assert plan.stop == 96.0 and plan.size == 250
+    assert plan.stop == 96.0
+    assert plan.size == 250
     assert plan.risk_amount == pytest.approx(1_000.0)
     assert plan.position_value == pytest.approx(25_000.0)
 
@@ -45,7 +46,12 @@ def test_scorer_weights_and_alignment():
     assert scorer.weight(macd) == 1.0
 
     long_score = scorer.score(Direction.LONG, [breakout, macd], _context(), rs_percentile=90.0)
-    assert (long_score.signals, long_score.trend, long_score.weekly, long_score.relative_strength) == (2.5, 1.0, 0.5, 1.0)
+    assert (long_score.signals, long_score.trend, long_score.weekly, long_score.relative_strength) == (
+        2.5,
+        1.0,
+        0.5,
+        1.0,
+    )
     assert long_score.total == pytest.approx(5.0)
 
     short_score = scorer.score(Direction.SHORT, [macd], _context(weekly=Trend.NEUTRAL), rs_percentile=math.nan)

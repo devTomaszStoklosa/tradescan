@@ -58,7 +58,13 @@ export function UniversePicker({
   );
 }
 
-export function DirectionPicker({ value, onChange }: { value: DirectionChoice; onChange: (value: DirectionChoice) => void }) {
+export function DirectionPicker({
+  value,
+  onChange,
+}: {
+  value: DirectionChoice;
+  onChange: (value: DirectionChoice) => void;
+}) {
   return (
     <Field label="Direction">
       <Segmented
@@ -90,7 +96,12 @@ export function FamilyPicker({
     <Field label={value.length ? "Families" : "Families (all)"}>
       <div className="flex flex-wrap gap-1.5 py-1">
         {families.map((family) => (
-          <ToggleChip key={family} active={value.includes(family)} onClick={() => toggle(family)} color={familyColor(family)}>
+          <ToggleChip
+            key={family}
+            active={value.includes(family)}
+            onClick={() => toggle(family)}
+            color={familyColor(family)}
+          >
             {FAMILY_LABELS[family]}
           </ToggleChip>
         ))}

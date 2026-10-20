@@ -1,4 +1,11 @@
-import { LineSeries, LineStyle, createChart, createSeriesMarkers, type ISeriesApi, type PriceFormat, type Time } from "lightweight-charts";
+import {
+  LineSeries,
+  LineStyle,
+  createChart,
+  createSeriesMarkers,
+  type ISeriesApi,
+  type PriceFormat,
+} from "lightweight-charts";
 import { useEffect, useRef } from "react";
 
 import type { Point } from "../../api/client";
@@ -75,14 +82,20 @@ export function EquityChart({
         priceScaleId: item.axis ?? "right",
         priceFormat: PRICE_FORMATS[format],
       });
-      line.setData(item.points.map((point) => ({ time: point.time as Time, value: point.value })));
+      line.setData(item.points.map((point) => ({ time: point.time, value: point.value })));
       lines.push(line);
     }
     const [first] = lines;
     if (first && events.length) {
       createSeriesMarkers(
         first,
-        events.map((event) => ({ time: event.time as Time, position: "aboveBar" as const, shape: "arrowDown" as const, color: palette.muted, text: event.text })),
+        events.map((event) => ({
+          time: event.time,
+          position: "aboveBar" as const,
+          shape: "arrowDown" as const,
+          color: palette.muted,
+          text: event.text,
+        })),
       );
     }
     // autoSize measures the container asynchronously; fit once the real width is known.
@@ -105,7 +118,13 @@ export function EquityChart({
           />
         ))}
       </div>
-      <div ref={container} role="img" aria-label={label} style={{ height }} className="w-full overflow-hidden rounded-lg" />
+      <div
+        ref={container}
+        role="img"
+        aria-label={label}
+        style={{ height }}
+        className="w-full overflow-hidden rounded-lg"
+      />
     </div>
   );
 }

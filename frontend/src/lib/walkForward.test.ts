@@ -28,7 +28,12 @@ const params = walkForwardParams(form, config, signals);
 
 describe("walk-forward form", () => {
   it("round-trips through the URL, leaving the default scheme and metric out", () => {
-    const changed: WalkForwardForm = { ...form, scheme: "anchored", metric: "expectancy_r", settings: { walk_forward: { windows: 8 } } };
+    const changed: WalkForwardForm = {
+      ...form,
+      scheme: "anchored",
+      metric: "expectancy_r",
+      settings: { walk_forward: { windows: 8 } },
+    };
     const url = writeWalkForwardForm(changed, config);
     expect(url.get("scheme")).toBe("anchored");
     expect(url.get("wm")).toBe("expectancy_r");
@@ -41,7 +46,9 @@ describe("walk-forward form", () => {
   });
 
   it("falls back to the defaults for an unknown scheme or metric and drops the out-of-sample share", () => {
-    const url = new URLSearchParams("ticker=SPY&signal=connors_rsi2_long&scheme=expanding&wm=trades&set.backtest.oos_pct=20&set.backtest.commission_pct=0.2");
+    const url = new URLSearchParams(
+      "ticker=SPY&signal=connors_rsi2_long&scheme=expanding&wm=trades&set.backtest.oos_pct=20&set.backtest.commission_pct=0.2",
+    );
     const read = readWalkForwardForm(url, config);
     expect([read.scheme, read.metric]).toEqual(["rolling", "sharpe"]);
     expect(read.settings).toEqual({ backtest: { commission_pct: 0.2 } });
@@ -52,13 +59,21 @@ describe("walk-forward form", () => {
     const keys = params.map((item) => item.key);
     expect(keys).toContain("settings.backtest.commission_pct");
     expect(keys).not.toContain("settings.backtest.oos_pct");
-    const fixed = { ...config, walk_forward: { ...config.walk_forward, fixed: [...config.walk_forward.fixed, "risk.atr_mult"] } };
+    const fixed = {
+      ...config,
+      walk_forward: { ...config.walk_forward, fixed: [...config.walk_forward.fixed, "risk.atr_mult"] },
+    };
     expect(walkForwardParams(form, fixed, signals).map((item) => item.key)).not.toContain("settings.risk.atr_mult");
     expect(keys).toContain("settings.risk.atr_mult");
   });
 
   it("counts and resets the changed settings, scheme and metric", () => {
-    const changed: WalkForwardForm = { ...form, scheme: "anchored", metric: "sqn", settings: { walk_forward: { min_trades: 5 } } };
+    const changed: WalkForwardForm = {
+      ...form,
+      scheme: "anchored",
+      metric: "sqn",
+      settings: { walk_forward: { min_trades: 5 } },
+    };
     expect(walkForwardChanges(form, config)).toBe(0);
     expect(walkForwardChanges(changed, config)).toBe(3);
     expect(resetWalkForward(changed, config)).toEqual(form);
@@ -71,7 +86,9 @@ describe("walk-forward request", () => {
     expect(walkForwardRuns(form, params, config)).toEqual({ combinations: 6, windows: 6, runs: 36 });
     const eight = { ...form, settings: { walk_forward: { windows: 8 } } };
     expect(walkForwardRuns(eight, params, config)).toEqual({ combinations: 6, windows: 9, runs: 54 });
-    expect(walkForwardRuns({ ...form, axes: [{ key: "signal.oversold", from: 5, to: null, step: 5 }] }, params, config)).toBeNull();
+    expect(
+      walkForwardRuns({ ...form, axes: [{ key: "signal.oversold", from: 5, to: null, step: 5 }] }, params, config),
+    ).toBeNull();
   });
 
   it("is the sweep request with the scheme and the metric, within both caps", () => {
@@ -92,7 +109,9 @@ describe("walk-forward request", () => {
 
   it("opens a pick on the Backtest page without the walk-forward's settings", () => {
     const withWindows = { ...form, settings: { walk_forward: { windows: 8 }, risk: { atr_mult: 3 } } };
-    const axisParams = ["signal.oversold", "exit.target.target_r"].map((key) => params.find((item) => item.key === key)!);
+    const axisParams = ["signal.oversold", "exit.target.target_r"].map((key) =>
+      params.find((item) => item.key === key)!,
+    );
     expect(backtestLink(withWindows, axisParams, [15, 3], config).toString()).toBe(
       "ticker=SPY&signal=connors_rsi2_long&eng=vectorized&set.risk.atr_mult=3&sig.connors_rsi2_long.oversold=15&ex.target.target_r=3",
     );

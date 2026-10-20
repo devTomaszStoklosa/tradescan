@@ -22,7 +22,9 @@ class _MovingAverageCross(Signal):
 
     def __post_init__(self) -> None:
         if self.fast >= self.slow:
-            raise ValueError(f"{self.name}: the fast average ({self.fast}) must be shorter than the slow one ({self.slow})")
+            raise ValueError(
+                f"{self.name}: the fast average ({self.fast}) must be shorter than the slow one ({self.slow})"
+            )
 
     @abstractmethod
     def _average(self, close: pd.Series, period: int) -> pd.Series: ...

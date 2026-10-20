@@ -39,13 +39,13 @@ def pool_trades(r_multiples: Iterable[np.ndarray]) -> PooledTrades:
     """Trade statistics of the closed trades of many tickers taken together."""
     parts = list(r_multiples)
     r = np.concatenate(parts) if parts else np.array([], dtype=float)
-    won = r[r > 0].sum()
-    lost = -r[r < 0].sum()
+    won = float(r[r > 0].sum())
+    lost = float(-r[r < 0].sum())
     return PooledTrades(
         trades=int(r.size),
         win_rate_pct=float((r > 0).mean() * 100.0) if r.size else math.nan,
         expectancy_r=float(r.mean()) if r.size else math.nan,
-        profit_factor_r=float(won / lost) if lost > 0 else (math.inf if won > 0 else math.nan),
+        profit_factor_r=won / lost if lost > 0 else (math.inf if won > 0 else math.nan),
         sqn=sqn(r),
     )
 

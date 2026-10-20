@@ -54,7 +54,13 @@ export function DataTable<T>({
               const ariaSort = active ? (sort.direction === "asc" ? "ascending" : "descending") : undefined;
               const align = column.align === "right" ? "text-right" : "text-left";
               return (
-                <th key={column.key} scope="col" aria-sort={ariaSort} title={column.title} className={`${cell} ${align} font-medium whitespace-nowrap`}>
+                <th
+                  key={column.key}
+                  scope="col"
+                  aria-sort={ariaSort}
+                  title={column.title}
+                  className={`${cell} ${align} font-medium whitespace-nowrap`}
+                >
                   {column.sortValue ? (
                     <button
                       type="button"

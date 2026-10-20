@@ -25,11 +25,13 @@ ParamValueIn = float | list[float] | dict[str, float]
 SettingsIn = dict[str, dict[str, ParamValueIn]]
 SignalParamsIn = dict[str, float | list[float]]
 
-_SETTINGS = Field(
+_SETTINGS: SettingsIn = Field(
     default_factory=dict,
-    description='Per-run overrides by settings section, e.g. {"risk": {"atr_mult": 3}}; see /api/config for every parameter',
+    description=(
+        'Per-run overrides by settings section, e.g. {"risk": {"atr_mult": 3}}; see /api/config for every parameter'
+    ),
 )
-_SIGNAL_PARAMS = Field(
+_SIGNAL_PARAMS: dict[str, SignalParamsIn] = Field(
     default_factory=dict,
     description='Per-run signal parameters by signal name, e.g. {"connors_rsi2_long": {"oversold": 15}}',
 )
@@ -80,14 +82,14 @@ class EdgeIn(UniverseIn, SignalFilterIn):
 
 class RuleIn(_Request):
     name: str = Field(description="Rule name; /api/config lists the entry and exit rules")
-    params: SignalParamsIn = Field(default_factory=dict, description="The rule's parameters, e.g. {\"target_r\": 3}")
+    params: SignalParamsIn = Field(default_factory=dict, description='The rule\'s parameters, e.g. {"target_r": 3}')
 
 
 class BacktestRulesIn(_Request):
     """What a backtest tests apart from the ticker, shared by a backtest, a sweep and a watchlist backtest."""
 
     signal: str
-    params: SignalParamsIn = Field(default_factory=dict, description="The signal's parameters, e.g. {\"period\": 30}")
+    params: SignalParamsIn = Field(default_factory=dict, description='The signal\'s parameters, e.g. {"period": 30}')
     settings: SettingsIn = Field(
         default_factory=dict,
         description='Per-run overrides by settings section, e.g. {"risk": {"atr_mult": 3}}; '
@@ -118,7 +120,8 @@ class BacktestIn(BacktestSetupIn):
 
 class SweepAxisIn(_Request):
     target: SweepTarget = Field(
-        description="What holds the parameter: the signal, the entry rule, an exit rule, an entry filter or a settings section"
+        description="What holds the parameter: the signal, the entry rule, an exit rule, an entry filter "
+        "or a settings section"
     )
     owner: str | None = Field(
         None, description="The exit rule, entry filter or settings section; omit for the signal and the entry rule"
@@ -137,17 +140,20 @@ class WalkForwardIn(SweepIn):
 
     scheme: WindowScheme = Field(
         WindowScheme.ROLLING,
-        description="rolling: in-sample windows of fixed length that slide along; anchored: in-sample windows from the first bar",
+        description="rolling: in-sample windows of fixed length that slide along; "
+        "anchored: in-sample windows from the first bar",
     )
     metric: str = Field(
         DEFAULT_SELECTION_METRIC,
-        description="Each in-sample window picks the combination with the highest value of this metric; /api/config lists them",
+        description="Each in-sample window picks the combination with the highest value of this metric; "
+        "/api/config lists them",
     )
 
 
 class WatchlistBacktestIn(UniverseIn, BacktestRulesIn):
     benchmark: str | None = Field(
-        None, description="Benchmark the market filter compares; omit for the watchlist's, else the configured benchmark"
+        None,
+        description="Benchmark the market filter compares; omit for the watchlist's, else the configured benchmark",
     )
 
 
@@ -165,7 +171,8 @@ class PortfolioIn(UniverseIn, BacktestRulesIn):
     )
     benchmark: str | None = Field(
         None,
-        description="Benchmark for buy & hold and for the market filter; omit for the watchlist's, else the configured benchmark",
+        description="Benchmark for buy & hold and for the market filter; omit for the watchlist's, "
+        "else the configured benchmark",
     )
 
 
@@ -283,12 +290,15 @@ class RuleOut(BaseModel):
 
 
 class FilterRuleOut(RuleOut):
-    needs_benchmark: bool = Field(description="True when the filter compares the benchmark, which a backtest then loads")
+    needs_benchmark: bool = Field(
+        description="True when the filter compares the benchmark, which a backtest then loads"
+    )
 
 
 class PriorityRuleOut(RuleOut):
     needs_scan: bool = Field(
-        description="True when the rule reads the scanner's settings (scoring, trend, scan.fresh_bars), which a run can override"
+        description="True when the rule reads the scanner's settings (scoring, trend, scan.fresh_bars), "
+        "which a run can override"
     )
 
 
@@ -309,7 +319,9 @@ class SweepLimitsOut(BaseModel):
 
 
 class WalkForwardLimitsOut(BaseModel):
-    max_runs: int = Field(description="Combinations times in-sample windows (the next one included) a walk-forward runs at most")
+    max_runs: int = Field(
+        description="Combinations times in-sample windows (the next one included) a walk-forward runs at most"
+    )
     schemes: list[WindowScheme]
     default_scheme: WindowScheme
     metrics: list[str] = Field(description="Metrics an in-sample window can pick by, the highest first")
@@ -332,7 +344,9 @@ class ConfigOut(BaseModel):
     default_exits: list[str]
     priority_rules: list[PriorityRuleOut] = Field(description="Priority rules of a portfolio backtest")
     default_priority: str
-    ranking_rules: list[RuleOut] = Field(description="How a rotation ranks the tickers: the priority rules that read bars only")
+    ranking_rules: list[RuleOut] = Field(
+        description="How a rotation ranks the tickers: the priority rules that read bars only"
+    )
     default_ranking: str
     weight_rules: list[RuleOut] = Field(description="How a rotation's picks share the equity")
     default_weighting: str
@@ -526,7 +540,9 @@ class EngineRunOut(BaseModel):
     engine: str
     metrics: MetricsOut
     in_sample: MetricsOut | None = Field(description="The run on the history before the split; null without a split")
-    out_of_sample: MetricsOut | None = Field(description="The run from the split on, with fresh equity; null without a split")
+    out_of_sample: MetricsOut | None = Field(
+        description="The run from the split on, with fresh equity; null without a split"
+    )
     monte_carlo: MonteCarloOut | None = Field(
         description="The full history's closed trades resampled in R; null with fewer than two closed trades"
     )
@@ -634,7 +650,9 @@ class CombinationErrorOut(BaseModel):
 class WindowPickOut(BaseModel):
     in_sample_start: str
     in_sample_end: str
-    values: list[float] | None = Field(description="The picked combination, one value per axis; null when none qualified")
+    values: list[float] | None = Field(
+        description="The picked combination, one value per axis; null when none qualified"
+    )
     qualified: int = Field(description="Combinations with a value and enough in-sample trades to be picked")
     in_sample: MetricsOut | None = Field(description="The pick's metrics on the in-sample window")
 
@@ -647,10 +665,12 @@ class WalkForwardWindowOut(WindowPickOut):
         "position of the window before was still open; null when the window had no part of its own"
     )
     traded_to: str | None = Field(
-        description="The bar where the next window took over: the next window's first bar, or later while a position of "
-        "this window was still open; the last bar for the last window; null when the window had no part of its own"
+        description="The bar where the next window took over: the next window's first bar, or later while a position "
+        "of this window was still open; the last bar for the last window; null when the window had no part of its own"
     )
-    out_of_sample: MetricsOut | None = Field(description="Of the window's own part of the stitched curve; null without one")
+    out_of_sample: MetricsOut | None = Field(
+        description="Of the window's own part of the stitched curve; null without one"
+    )
 
 
 class WalkForwardOut(BacktestSetupOut):
@@ -674,7 +694,9 @@ class WalkForwardOut(BacktestSetupOut):
     )
     equity: list[Point] = Field(description="The stitched out-of-sample curve")
     unchanged_equity: list[Point]
-    buy_hold: list[Point] = Field(description="Buy & hold from the first out-of-sample bar, scaled to the initial equity")
+    buy_hold: list[Point] = Field(
+        description="Buy & hold from the first out-of-sample bar, scaled to the initial equity"
+    )
     trades: list[TradeOut] = Field(description="Every out-of-sample trade, window after window")
 
 
@@ -686,7 +708,9 @@ class TickerRunOut(BaseModel):
     ticker: str
     start: str
     end: str
-    split: SplitOut | None = Field(description="This ticker's in-sample/out-of-sample split; null when its history is too short")
+    split: SplitOut | None = Field(
+        description="This ticker's in-sample/out-of-sample split; null when its history is too short"
+    )
     metrics: MetricsOut = Field(description="The full history")
     in_sample: MetricsOut | None
     out_of_sample: MetricsOut | None
@@ -712,7 +736,9 @@ class MetricSpreadOut(BaseModel):
     p75: float | None
     minimum: float | None
     maximum: float | None
-    above_break_even_pct: float | None = Field(description="Share of the tickers above break-even; null for metrics without one")
+    above_break_even_pct: float | None = Field(
+        description="Share of the tickers above break-even; null for metrics without one"
+    )
 
 
 class PeriodSummaryOut(BaseModel):
@@ -772,7 +798,9 @@ class TickerContributionOut(BaseModel):
 class PortfolioRunOut(BaseModel):
     engine: str
     full: PortfolioPeriodOut
-    in_sample: PortfolioPeriodOut | None = Field(description="The run on the bars before the split; null without a split")
+    in_sample: PortfolioPeriodOut | None = Field(
+        description="The run on the bars before the split; null without a split"
+    )
     out_of_sample: PortfolioPeriodOut | None = Field(
         description="The run from the split on, with fresh equity; null without a split"
     )
@@ -823,7 +851,9 @@ class RotationStatsOut(BaseModel):
     rebalances: int
     orders: int = Field(description="Orders filled")
     unfilled_orders: int = Field(description="Dropped because their ticker had no bar before the next rebalance")
-    average_holdings: float | None = Field(description="Tickers held, the safe asset included, averaged over the closes")
+    average_holdings: float | None = Field(
+        description="Tickers held, the safe asset included, averaged over the closes"
+    )
     max_holdings: int
     average_exposure_pct: float | None = Field(description="Gross value of the holdings, % of equity, averaged")
     average_safe_pct: float | None = Field(description="Value of the safe asset, % of equity, averaged")
@@ -868,7 +898,9 @@ class RotationOut(BaseModel):
     buy_hold: list[Point] = Field(description="The benchmark scaled to the initial equity, on the run's dates")
     split: SplitOut | None = Field(description="The split of the run's dates; null when it is too short")
     full: RotationPeriodOut
-    in_sample: RotationPeriodOut | None = Field(description="The run on the bars before the split; null without a split")
+    in_sample: RotationPeriodOut | None = Field(
+        description="The run on the bars before the split; null without a split"
+    )
     out_of_sample: RotationPeriodOut | None = Field(
         description="The run from the split on, with fresh equity; null without a split"
     )
@@ -878,7 +910,9 @@ class RotationOut(BaseModel):
     trades: list[PortfolioTradeOut] = Field(
         description="Holdings: from the buy that opens a position to the sale that empties it, by entry date"
     )
-    tickers: list[TickerContributionOut] = Field(description="Every ticker with data in watchlist order, the safe asset last")
+    tickers: list[TickerContributionOut] = Field(
+        description="Every ticker with data in watchlist order, the safe asset last"
+    )
     missing: list[str] = Field(description="Tickers without data")
 
 

@@ -146,7 +146,10 @@ export function snapshotRun(result: BacktestOut, engine: string, form: BacktestF
     filters: result.filters,
     benchmark: result.benchmark,
     metrics: run.metrics,
-    split: result.split && run.in_sample && run.out_of_sample ? { ...result.split, in_sample: run.in_sample, out_of_sample: run.out_of_sample } : null,
+    split:
+      result.split && run.in_sample && run.out_of_sample
+        ? { ...result.split, in_sample: run.in_sample, out_of_sample: run.out_of_sample }
+        : null,
     monteCarlo: run.monte_carlo,
     equity: run.equity,
     form: { ...form, engines: [engine] },
@@ -154,10 +157,17 @@ export function snapshotRun(result: BacktestOut, engine: string, form: BacktestF
 }
 
 /** One engine's run from a portfolio result; null when that engine did not run. Trades, contributions and positions are not kept. */
-export function snapshotPortfolioRun(result: PortfolioOut, engine: string, form: PortfolioForm): PortfolioSnapshot | null {
+export function snapshotPortfolioRun(
+  result: PortfolioOut,
+  engine: string,
+  form: PortfolioForm,
+): PortfolioSnapshot | null {
   const run = result.runs.find((item) => item.engine === engine);
   if (!run) return null;
-  const periods = result.split && run.in_sample && run.out_of_sample ? { split: result.split, in_sample: run.in_sample, out_of_sample: run.out_of_sample } : null;
+  const periods =
+    result.split && run.in_sample && run.out_of_sample
+      ? { split: result.split, in_sample: run.in_sample, out_of_sample: run.out_of_sample }
+      : null;
   return {
     kind: "portfolio",
     universe: result.universe,
@@ -166,7 +176,11 @@ export function snapshotPortfolioRun(result: PortfolioOut, engine: string, form:
     portfolio: result.portfolio,
     priority: result.priority,
     scan: result.scan,
-    stats: { full: run.full.stats, in_sample: periods?.in_sample.stats ?? null, out_of_sample: periods?.out_of_sample.stats ?? null },
+    stats: {
+      full: run.full.stats,
+      in_sample: periods?.in_sample.stats ?? null,
+      out_of_sample: periods?.out_of_sample.stats ?? null,
+    },
     signal: result.signal,
     direction: result.direction,
     description: result.description,
@@ -180,7 +194,11 @@ export function snapshotPortfolioRun(result: PortfolioOut, engine: string, form:
     filters: result.filters,
     benchmark: result.benchmark,
     metrics: run.full.metrics,
-    split: periods && { ...periods.split, in_sample: periods.in_sample.metrics, out_of_sample: periods.out_of_sample.metrics },
+    split: periods && {
+      ...periods.split,
+      in_sample: periods.in_sample.metrics,
+      out_of_sample: periods.out_of_sample.metrics,
+    },
     // The portfolio backtest has no Monte Carlo of its trades.
     monteCarlo: null,
     equity: run.equity,
@@ -188,7 +206,8 @@ export function snapshotPortfolioRun(result: PortfolioOut, engine: string, form:
   };
 }
 
-const sortedEntries = (record: object) => Object.entries(record).sort(([left], [right]) => left.localeCompare(right));
+const sortedEntries = <T>(record: Record<string, T>): [string, T][] =>
+  Object.entries(record).sort(([left], [right]) => left.localeCompare(right));
 
 const ruleKey = ({ name, params }: AppliedRuleOut) => [name, sortedEntries(params)];
 
@@ -216,7 +235,13 @@ const KINDS: { [K in RunKind]: KindSpec<SnapshotOf<K>> } = {
   portfolio: {
     subject: (run) => run.universe,
     // The members are part of the key: a watchlist's file can change between two runs.
-    keyParts: (run) => [run.universe, [...run.tickers].sort(), sortedEntries(run.portfolio), ruleKey(run.priority), scanKey(run.scan)],
+    keyParts: (run) => [
+      run.universe,
+      [...run.tickers].sort(),
+      sortedEntries(run.portfolio),
+      ruleKey(run.priority),
+      scanKey(run.scan),
+    ],
   },
 };
 
@@ -253,14 +278,28 @@ export function newId(): string {
 /** The preferred slot when it is free, otherwise the lowest free one; null when all are taken. */
 export function freeSlot(runs: PinnedRun[], preferred?: number): number | null {
   const taken = new Set(runs.map((run) => run.slot));
-  if (preferred !== undefined && Number.isInteger(preferred) && preferred >= 1 && preferred <= MAX_RUNS && !taken.has(preferred)) return preferred;
+  if (
+    preferred !== undefined &&
+    Number.isInteger(preferred) &&
+    preferred >= 1 &&
+    preferred <= MAX_RUNS &&
+    !taken.has(preferred)
+  )
+    return preferred;
   for (let slot = 1; slot <= MAX_RUNS; slot++) if (!taken.has(slot)) return slot;
   return null;
 }
 
 /** A snapshot as a new pinned run; its slot is assigned when it is merged. */
 export function toPinnedRun<S extends RunSnapshot>(snapshot: S, now = new Date()): S & PinMeta {
-  return { ...snapshot, id: newId(), slot: 0, name: `${runSubject(snapshot)} ${snapshot.signal}`, pinnedAt: now.toISOString(), hidden: false };
+  return {
+    ...snapshot,
+    id: newId(),
+    slot: 0,
+    name: `${runSubject(snapshot)} ${snapshot.signal}`,
+    pinnedAt: now.toISOString(),
+    hidden: false,
+  };
 }
 
 /**
@@ -296,7 +335,9 @@ export const sortBySlot = (runs: PinnedRun[]): PinnedRun[] => [...runs].sort((le
 export const runColorVar = (run: Pick<PinnedRun, "slot">): string => `--run-${run.slot}`;
 
 /** The run when it is a backtest of one ticker. */
-export const asBacktest = (run: PinnedRun): PinnedBacktestRun | undefined => (run.kind === "backtest" ? run : undefined);
+export const asBacktest = (run: PinnedRun): PinnedBacktestRun | undefined =>
+  run.kind === "backtest" ? run : undefined;
 
 /** The run when it is a portfolio. */
-export const asPortfolio = (run: PinnedRun): PinnedPortfolioRun | undefined => (run.kind === "portfolio" ? run : undefined);
+export const asPortfolio = (run: PinnedRun): PinnedPortfolioRun | undefined =>
+  run.kind === "portfolio" ? run : undefined;

@@ -18,7 +18,9 @@ def build_router(context: ApiContext) -> APIRouter:
     @router.post("/sweep", response_model=schemas.SweepOut)
     def sweep(body: schemas.SweepIn) -> schemas.SweepOut:
         context.check_signals([body.signal])
-        report = context.use_cases.sweep.run(SweepRequest(setup=backtest_request(body, body.ticker, ()), axes=sweep_axes(body)))
+        report = context.use_cases.sweep.run(
+            SweepRequest(setup=backtest_request(body, body.ticker, ()), axes=sweep_axes(body))
+        )
         return sweep_out(report)
 
     return router
@@ -27,5 +29,6 @@ def build_router(context: ApiContext) -> APIRouter:
 def sweep_axes(body: schemas.SweepIn) -> tuple[SweepAxis, ...]:
     """The swept axes of a sweep or a walk-forward request."""
     return tuple(
-        SweepAxis(target=axis.target, name=axis.name, values=tuple(axis.values), owner=axis.owner or "") for axis in body.axes
+        SweepAxis(target=axis.target, name=axis.name, values=tuple(axis.values), owner=axis.owner or "")
+        for axis in body.axes
     )

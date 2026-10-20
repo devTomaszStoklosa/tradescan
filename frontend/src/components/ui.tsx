@@ -1,5 +1,12 @@
 /** Small presentational building blocks shared by every page. */
-import type { ComponentProps, CSSProperties, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import type {
+  ComponentProps,
+  CSSProperties,
+  InputHTMLAttributes,
+  ReactNode,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
+} from "react";
 
 import type { Direction } from "../api/client";
 
@@ -186,7 +193,17 @@ export function DirectionBadge({ direction }: { direction: Direction }) {
   );
 }
 
-export function StatTile({ label, value, sub, valueClass }: { label: string; value: ReactNode; sub?: ReactNode; valueClass?: string }) {
+export function StatTile({
+  label,
+  value,
+  sub,
+  valueClass,
+}: {
+  label: string;
+  value: ReactNode;
+  sub?: ReactNode;
+  valueClass?: string;
+}) {
   return (
     <div className="rounded-xl border border-line bg-panel px-3 py-2.5">
       <div className="text-xs text-muted">{label}</div>

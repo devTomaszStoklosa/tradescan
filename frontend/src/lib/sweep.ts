@@ -5,7 +5,16 @@
  * A sweep starts from a backtest setup (the same URL keys as the Backtest page) and adds up to two
  * axes: `ax1=signal.oversold&ax1v=5:20:1`. An axis key is `target[.owner].name`, as the API reports it.
  */
-import type { ConfigOut, MetricsOut, ParamSpecOut, SignalOut, SweepAxisIn, SweepCellOut, SweepIn, SweepTarget } from "../api/client";
+import type {
+  ConfigOut,
+  MetricsOut,
+  ParamSpecOut,
+  SignalOut,
+  SweepAxisIn,
+  SweepCellOut,
+  SweepIn,
+  SweepTarget,
+} from "../api/client";
 import { BACKTEST_FIELDS, MONTE_CARLO_SECTION, SETUP_SECTIONS } from "./choices";
 import { metricValue, type MetricKey } from "./compare";
 import { withOwner, withValue, type Values } from "./overrides";
@@ -42,9 +51,16 @@ export interface SweepParam {
 
 const isNumber = (spec: ParamSpecOut) => spec.kind === "int" || spec.kind === "float";
 
-const keyOf = (target: SweepTarget, owner: string | null, name: string) => [target, owner, name].filter(Boolean).join(".");
+const keyOf = (target: SweepTarget, owner: string | null, name: string) =>
+  [target, owner, name].filter(Boolean).join(".");
 
-function paramsOf(target: SweepTarget, owner: string | null, group: string, specs: ParamSpecOut[], values: Values | undefined): SweepParam[] {
+function paramsOf(
+  target: SweepTarget,
+  owner: string | null,
+  group: string,
+  specs: ParamSpecOut[],
+  values: Values | undefined,
+): SweepParam[] {
   return specs.filter(isNumber).map((spec) => {
     const value = values?.[spec.name];
     return {
@@ -64,19 +80,28 @@ function paramsOf(target: SweepTarget, owner: string | null, group: string, spec
  * the entry rule's, the active exits', the stop's, the costs' and the pyramiding's. The settings in `fixed` are left out: for a
  * sweep the out-of-sample share, which defines the split.
  */
-export function sweepParams(setup: BacktestSetup, config: ConfigOut, signals: SignalOut[], fixed: readonly string[] = config.sweep.fixed): SweepParam[] {
+export function sweepParams(
+  setup: BacktestSetup,
+  config: ConfigOut,
+  signals: SignalOut[],
+  fixed: readonly string[] = config.sweep.fixed,
+): SweepParam[] {
   const result: SweepParam[] = [];
   const signal = signals.find((item) => item.name === setup.signal);
   if (signal) result.push(...paramsOf("signal", null, `Signal: ${signal.name}`, signal.params, setup.signalParams));
   for (const name of setup.filters) {
     const filter = findRule(config.filter_rules, name);
-    if (filter) result.push(...paramsOf("filter", filter.name, `Filter: ${filter.label}`, filter.params, setup.filterParams[filter.name]));
+    if (filter)
+      result.push(
+        ...paramsOf("filter", filter.name, `Filter: ${filter.label}`, filter.params, setup.filterParams[filter.name]),
+      );
   }
   const entry = findRule(config.entry_rules, setup.entry);
   if (entry) result.push(...paramsOf("entry", null, `Entry: ${entry.label}`, entry.params, setup.entryParams));
   for (const name of setup.exits) {
     const exit = findRule(config.exit_rules, name);
-    if (exit) result.push(...paramsOf("exit", exit.name, `Exit: ${exit.label}`, exit.params, setup.exitParams[exit.name]));
+    if (exit)
+      result.push(...paramsOf("exit", exit.name, `Exit: ${exit.label}`, exit.params, setup.exitParams[exit.name]));
   }
   const fields: Record<string, readonly string[]> = BACKTEST_FIELDS;
   for (const name of SETUP_SECTIONS) {
@@ -148,9 +173,36 @@ export function combinations(ranges: AxisRange[]): number | null {
 /** A sweep of `setup` with no axes picked yet. */
 /** A sweep runs no Monte Carlo, so a backtest's Monte Carlo settings stay behind. */
 export function newSweepForm(setup: BacktestSetup): SweepForm {
-  const { ticker, signal, period, settings, signalParams, entry, entryParams, exits, exitParams, filters, filterParams, benchmark } = setup;
+  const {
+    ticker,
+    signal,
+    period,
+    settings,
+    signalParams,
+    entry,
+    entryParams,
+    exits,
+    exitParams,
+    filters,
+    filterParams,
+    benchmark,
+  } = setup;
   const { [MONTE_CARLO_SECTION]: _monteCarlo, ...setupSettings } = settings;
-  return { ticker, signal, period, settings: setupSettings, signalParams, entry, entryParams, exits, exitParams, filters, filterParams, benchmark, axes: [] };
+  return {
+    ticker,
+    signal,
+    period,
+    settings: setupSettings,
+    signalParams,
+    entry,
+    entryParams,
+    exits,
+    exitParams,
+    filters,
+    filterParams,
+    benchmark,
+    axes: [],
+  };
 }
 
 const number = (text: string | undefined): number | null => {
@@ -199,7 +251,10 @@ export function sweepBody(form: SweepForm, params: SweepParam[], limits: ConfigO
 }
 
 /** Where the setup keeps the values of parameters that belong to an owner, by sweep target. */
-const GROUPS: Partial<Record<SweepTarget, "exitParams" | "filterParams">> = { exit: "exitParams", filter: "filterParams" };
+const GROUPS: Partial<Record<SweepTarget, "exitParams" | "filterParams">> = {
+  exit: "exitParams",
+  filter: "filterParams",
+};
 
 /** The setup with one combination's values, e.g. to open it on the Backtest page. */
 export function withCombination(setup: BacktestSetup, params: SweepParam[], values: number[]): BacktestSetup {
@@ -212,7 +267,10 @@ export function withCombination(setup: BacktestSetup, params: SweepParam[], valu
     else {
       const owner = param.owner ?? "";
       const group = GROUPS[param.target] ?? "settings";
-      next = { ...next, [group]: withOwner(next[group], owner, withValue(next[group][owner] ?? {}, param.spec, value)) };
+      next = {
+        ...next,
+        [group]: withOwner(next[group], owner, withValue(next[group][owner] ?? {}, param.spec, value)),
+      };
     }
   });
   return next;
@@ -221,7 +279,6 @@ export function withCombination(setup: BacktestSetup, params: SweepParam[], valu
 // --- Results ----------------------------------------------------------------------------------
 
 export type Period = "in_sample" | "out_of_sample";
-
 
 /** Break-even per metric: values above it are good, below it bad. Metrics without one use a one-hue scale. */
 export const BREAK_EVEN: Partial<Record<MetricKey, number>> = {
@@ -241,11 +298,15 @@ export function cellValue(cell: SweepCellOut, period: Period, metric: MetricKey)
   return metrics ? metricValue(metrics, metric) : null;
 }
 
-export type HeatScale = { kind: "diverging"; center: number; extent: number } | { kind: "sequential"; min: number; max: number };
+export type HeatScale =
+  { kind: "diverging"; center: number; extent: number } | { kind: "sequential"; min: number; max: number };
 
 /** One scale for both periods, so the same colour means the same value in each heatmap. */
 export function heatScale(cells: SweepCellOut[], metric: MetricKey): HeatScale | null {
-  const values = cells.flatMap((cell) => [cellValue(cell, "in_sample", metric), cellValue(cell, "out_of_sample", metric)]);
+  const values = cells.flatMap((cell) => [
+    cellValue(cell, "in_sample", metric),
+    cellValue(cell, "out_of_sample", metric),
+  ]);
   const finite = values.filter((value): value is number => value !== null && Number.isFinite(value));
   const center = BREAK_EVEN[metric];
   if (center !== undefined) {
@@ -277,21 +338,21 @@ export function shade(value: number | null, scale: HeatScale | null): Shade | nu
 
 /** Position of the highest value in a period; ties go to the first. Null when no cell has a value. */
 export function bestCell(cells: SweepCellOut[], metric: MetricKey, period: Period = "in_sample"): number | null {
-  let best: number | null = null;
-  cells.forEach((cell, index) => {
+  let best: { index: number; value: number } | null = null;
+  for (const [index, cell] of cells.entries()) {
     const value = cellValue(cell, period, metric);
-    if (value === null) return;
-    const current = best === null ? null : cellValue(cells[best]!, period, metric);
-    if (current === null || value > current) best = index;
-  });
-  return best;
+    if (value !== null && (best === null || value > best.value)) best = { index, value };
+  }
+  return best ? best.index : null;
 }
 
 export function median(values: number[]): number | null {
   const sorted = values.filter(Number.isFinite).sort((left, right) => left - right);
-  if (!sorted.length) return null;
   const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
+  const upper = sorted[middle];
+  if (upper === undefined) return null;
+  const lower = sorted[middle - 1];
+  return sorted.length % 2 || lower === undefined ? upper : (lower + upper) / 2;
 }
 
 export const periodValues = (cells: SweepCellOut[], period: Period, metric: MetricKey): number[] =>
@@ -323,9 +384,17 @@ export function neighbours(index: number, counts: number[]): number[] {
 }
 
 /** Mean of the neighbours' finite values: whether a cell's result holds for nearby settings. */
-export function neighbourAverage(cells: SweepCellOut[], index: number, counts: number[], period: Period, metric: MetricKey): number | null {
+export function neighbourAverage(
+  cells: SweepCellOut[],
+  index: number,
+  counts: number[],
+  period: Period,
+  metric: MetricKey,
+): number | null {
   const values = neighbours(index, counts)
-    .map((position) => cellValue(cells[position]!, period, metric))
+    .map((position) => cells[position])
+    .filter((cell) => cell !== undefined)
+    .map((cell) => cellValue(cell, period, metric))
     .filter((value): value is number => value !== null && Number.isFinite(value));
   return values.length ? values.reduce((total, value) => total + value, 0) / values.length : null;
 }

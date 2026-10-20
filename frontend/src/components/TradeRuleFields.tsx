@@ -49,7 +49,14 @@ export function RuleChoiceFields({
       {selected && (
         <>
           <p className="text-xs text-muted">{describeRule(selected, params)}</p>
-          {selected.params.length > 0 && <ParamFields specs={selected.params} values={params} onChange={(next) => onChange(value, next)} className={FIELDS} />}
+          {selected.params.length > 0 && (
+            <ParamFields
+              specs={selected.params}
+              values={params}
+              onChange={(next) => onChange(value, next)}
+              className={FIELDS}
+            />
+          )}
         </>
       )}
     </div>
@@ -103,7 +110,12 @@ function RuleSetFields({
       <GroupHeading id={id}>{heading}</GroupHeading>
       <div role="group" aria-labelledby={id} className="flex flex-wrap gap-1.5 py-1">
         {rules.map((rule) => (
-          <ToggleChip key={rule.name} active={chosen.includes(rule.name)} onClick={() => toggle(rule.name)} color="var(--accent)">
+          <ToggleChip
+            key={rule.name}
+            active={chosen.includes(rule.name)}
+            onClick={() => toggle(rule.name)}
+            color="var(--accent)"
+          >
             {rule.label}
           </ToggleChip>
         ))}
@@ -187,7 +199,11 @@ export function FilterFields({
       {needsBenchmark(filters, rules) && (
         <div className={FIELDS}>
           <Field label="Benchmark" hint="Compared by the market filter">
-            <Input value={benchmark} placeholder={defaultBenchmark} onChange={(event) => onBenchmarkChange(event.target.value.toUpperCase())} />
+            <Input
+              value={benchmark}
+              placeholder={defaultBenchmark}
+              onChange={(event) => onBenchmarkChange(event.target.value.toUpperCase())}
+            />
           </Field>
         </div>
       )}

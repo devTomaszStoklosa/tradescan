@@ -1,7 +1,15 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, type SubmitEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
-import type { ConfigOut, PortfolioOut, PortfolioPeriodOut, PortfolioRunOut, SignalOut, TickerContributionOut, WatchlistOut } from "../api/client";
+import type {
+  ConfigOut,
+  PortfolioOut,
+  PortfolioPeriodOut,
+  PortfolioRunOut,
+  SignalOut,
+  TickerContributionOut,
+  WatchlistOut,
+} from "../api/client";
 import { useConfig, usePortfolioBacktest, useSignals, useWatchlists } from "../api/hooks";
 import { AdvancedSettings } from "../components/AdvancedSettings";
 import { enginesAgree, MetricsTable, TradesTable } from "../components/BacktestResults";
@@ -14,8 +22,21 @@ import { PinPortfolioRunButton } from "../components/PinRunButton";
 import { PortfolioStatsTable } from "../components/PortfolioStats";
 import { GroupHeading, RuleChoiceFields } from "../components/TradeRuleFields";
 import { UniversePicker } from "../components/UniverseFilters";
-import { Button, DirectionBadge, EmptyState, ErrorBox, Field, Loading, Notice, PageHeader, Panel, Segmented, StatTile, ToggleChip } from "../components/ui";
-import { defaultWatchlist, LARGE_UNIVERSE, PORTFOLIO_SECTION, universeSize } from "../lib/choices";
+import {
+  Button,
+  DirectionBadge,
+  EmptyState,
+  ErrorBox,
+  Field,
+  Loading,
+  Notice,
+  PageHeader,
+  Panel,
+  Segmented,
+  StatTile,
+  ToggleChip,
+} from "../components/ui";
+import { LARGE_UNIVERSE, PORTFOLIO_SECTION, universeSize, withDefaultUniverse } from "../lib/choices";
 import { downloadCsv, tradeRow } from "../lib/csv";
 import { DASH, fmtNumber, fmtPct, fmtSigned, tone } from "../lib/format";
 import { pickSections } from "../lib/overrides";
@@ -38,6 +59,7 @@ import {
   type PortfolioForm,
 } from "../lib/portfolio";
 import { hasSetupProblems, setupChanges } from "../lib/setup";
+import { useResettableState } from "../lib/useResettableState";
 import { useAccount, withAccount } from "../state/account";
 
 const ENGINE_COLORS = ["--accent", "--warn"];
@@ -59,12 +81,15 @@ function PortfolioFormPanel({
   busy: boolean;
   onSubmit: (form: PortfolioForm) => void;
 }) {
-  const withUniverse = (form: PortfolioForm): PortfolioForm =>
-    form.universe.watchlist || form.universe.tickers ? form : { ...form, universe: { watchlist: defaultWatchlist(watchlists), tickers: "" } };
-  const [draft, setDraft] = useState(() => withUniverse(initial));
-  useEffect(() => setDraft(withUniverse(initial)), [initial, watchlists]);
+  const source = useMemo(() => withDefaultUniverse(initial, watchlists), [initial, watchlists]);
+  const [draft, setDraft] = useResettableState(source);
   const toggleEngine = (engine: string) =>
-    setDraft({ ...draft, engines: draft.engines.includes(engine) ? draft.engines.filter((item) => item !== engine) : [...draft.engines, engine] });
+    setDraft({
+      ...draft,
+      engines: draft.engines.includes(engine)
+        ? draft.engines.filter((item) => item !== engine)
+        : [...draft.engines, engine],
+    });
   // Score signal parameters left from another traded signal are neither counted nor sent.
   const counted = withCountedScoreSignals(draft, signals);
   const changes = setupChanges(counted, config) + priorityChanges(counted, config);
@@ -75,12 +100,13 @@ function PortfolioFormPanel({
     hasScoreSignalProblems(counted, signals);
   const watchlistBenchmark = watchlists.find((item) => item.name === draft.universe.watchlist)?.benchmark;
   const portfolio = config.sections.find((section) => section.name === PORTFOLIO_SECTION);
-  const slowCerebro = draft.engines.includes("cerebro") && universeSize(draft.universe, watchlists) > SLOW_CEREBRO_TICKERS;
+  const slowCerebro =
+    draft.engines.includes("cerebro") && universeSize(draft.universe, watchlists) > SLOW_CEREBRO_TICKERS;
   // A priority that scores like the scanner reads the scanner's settings and the parameters and weights of the traded
   // direction's signals; the traded signal's parameters are the setup's.
   const scoreSections = pickSections(config.sections, prioritySections(draft.priority, config));
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: SubmitEvent) => {
     event.preventDefault();
     if (!invalid) onSubmit(counted);
   };
@@ -88,7 +114,11 @@ function PortfolioFormPanel({
   return (
     <Panel>
       <form onSubmit={submit} noValidate className="space-y-4">
-        <UniversePicker value={draft.universe} onChange={(universe) => setDraft({ ...draft, universe })} watchlists={watchlists} />
+        <UniversePicker
+          value={draft.universe}
+          onChange={(universe) => setDraft({ ...draft, universe })}
+          watchlists={watchlists}
+        />
         <BacktestSetupFields
           draft={draft}
           onChange={setDraft}
@@ -103,7 +133,12 @@ function PortfolioFormPanel({
             {portfolio && (
               <div className="space-y-2">
                 <GroupHeading>Limits (one equity for every ticker)</GroupHeading>
-                <SectionFields section={portfolio} overrides={draft.settings} onChange={(settings) => setDraft({ ...draft, settings })} className="grid grid-cols-2 gap-3" />
+                <SectionFields
+                  section={portfolio}
+                  overrides={draft.settings}
+                  onChange={(settings) => setDraft({ ...draft, settings })}
+                  className="grid grid-cols-2 gap-3"
+                />
               </div>
             )}
             <RuleChoiceFields
@@ -134,7 +169,12 @@ function PortfolioFormPanel({
           <Field label="Engines">
             <div className="flex gap-1.5 py-1">
               {config.engines.map((engine) => (
-                <ToggleChip key={engine} active={draft.engines.includes(engine)} onClick={() => toggleEngine(engine)} color="var(--accent)">
+                <ToggleChip
+                  key={engine}
+                  active={draft.engines.includes(engine)}
+                  onClick={() => toggleEngine(engine)}
+                  color="var(--accent)"
+                >
                   {engine}
                 </ToggleChip>
               ))}
@@ -152,7 +192,9 @@ function PortfolioFormPanel({
           </div>
         </div>
         {slowCerebro && (
-          <Notice>Cerebro checks the vectorized engine and is slow: expect about a minute per 20 tickers of 10-year history.</Notice>
+          <Notice>
+            Cerebro checks the vectorized engine and is slow: expect about a minute per 20 tickers of 10-year history.
+          </Notice>
         )}
       </form>
     </Panel>
@@ -170,9 +212,19 @@ function PortfolioTiles({ period, benchmark }: { period: PortfolioPeriodOut; ben
         valueClass={tone(m.total_return_pct)}
         sub={`${benchmark} buy & hold ${fmtPct(m.buy_hold_pct, 1, true)}`}
       />
-      <StatTile label="Max drawdown" value={fmtPct(m.max_drawdown_pct, 1)} valueClass="text-down" sub={`CAGR ${fmtPct(m.cagr_pct, 1, true)}`} />
+      <StatTile
+        label="Max drawdown"
+        value={fmtPct(m.max_drawdown_pct, 1)}
+        valueClass="text-down"
+        sub={`CAGR ${fmtPct(m.cagr_pct, 1, true)}`}
+      />
       <StatTile label="Trades" value={String(m.trades)} sub={`win rate ${fmtPct(m.win_rate_pct, 0)}`} />
-      <StatTile label="Expectancy" value={`${fmtSigned(m.expectancy_r)} R`} valueClass={tone(m.expectancy_r)} sub={`SQN ${fmtNumber(m.sqn)}`} />
+      <StatTile
+        label="Expectancy"
+        value={`${fmtSigned(m.expectancy_r)} R`}
+        valueClass={tone(m.expectancy_r)}
+        sub={`SQN ${fmtNumber(m.sqn)}`}
+      />
       <StatTile label="Sharpe" value={fmtNumber(m.sharpe)} sub={`a position on ${fmtPct(m.exposure_pct, 0)} of days`} />
       <StatTile
         label="Open positions"
@@ -196,8 +248,14 @@ const PERIOD_KEYS = [
 ] as const;
 
 function PeriodsTables({ run }: { run: PortfolioRunOut }) {
-  const periods = PERIOD_KEYS.map(({ key, label }) => ({ key, label, period: key === "full" ? run.full : run[key] }));
-  const statColumns = useMemo(() => periods.map(({ key, label, period }) => ({ key, header: label, stats: period?.stats ?? null })), [run]);
+  const periods = useMemo(
+    () => PERIOD_KEYS.map(({ key, label }) => ({ key, label, period: key === "full" ? run.full : run[key] })),
+    [run],
+  );
+  const statColumns = useMemo(
+    () => periods.map(({ key, label, period }) => ({ key, header: label, stats: period?.stats ?? null })),
+    [periods],
+  );
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <MetricsTable
@@ -209,7 +267,17 @@ function PeriodsTables({ run }: { run: PortfolioRunOut }) {
   );
 }
 
-function ContributionTable({ run, result, form, config }: { run: PortfolioRunOut; result: PortfolioOut; form: PortfolioForm; config: ConfigOut }) {
+function ContributionTable({
+  run,
+  result,
+  form,
+  config,
+}: {
+  run: PortfolioRunOut;
+  result: PortfolioOut;
+  form: PortfolioForm;
+  config: ConfigOut;
+}) {
   const columns = useMemo<Column<TickerContributionOut>[]>(
     () => [
       {
@@ -226,7 +294,13 @@ function ContributionTable({ run, result, form, config }: { run: PortfolioRunOut
           </Link>
         ),
       },
-      { key: "trades", header: "Trades", align: "right", sortValue: (row) => row.trades, render: (row) => String(row.trades) },
+      {
+        key: "trades",
+        header: "Trades",
+        align: "right",
+        sortValue: (row) => row.trades,
+        render: (row) => String(row.trades),
+      },
       {
         key: "pnl",
         header: "P&L",
@@ -242,13 +316,23 @@ function ContributionTable({ run, result, form, config }: { run: PortfolioRunOut
         sortValue: (row) => row.contribution_pct,
         render: (row) => <span className={tone(row.contribution_pct)}>{fmtPct(row.contribution_pct, 2, true)}</span>,
       },
-      { key: "win", header: "Win rate", align: "right", sortValue: (row) => row.win_rate_pct, render: (row) => fmtPct(row.win_rate_pct, 0) },
+      {
+        key: "win",
+        header: "Win rate",
+        align: "right",
+        sortValue: (row) => row.win_rate_pct,
+        render: (row) => fmtPct(row.win_rate_pct, 0),
+      },
       {
         key: "expectancy",
         header: "Expectancy",
         align: "right",
         sortValue: (row) => row.expectancy_r,
-        render: (row) => <span className={tone(row.expectancy_r)}>{row.expectancy_r === null ? DASH : `${fmtSigned(row.expectancy_r)} R`}</span>,
+        render: (row) => (
+          <span className={tone(row.expectancy_r)}>
+            {row.expectancy_r === null ? DASH : `${fmtSigned(row.expectancy_r)} R`}
+          </span>
+        ),
       },
     ],
     [run, result, form, config],
@@ -266,8 +350,8 @@ function ContributionTable({ run, result, form, config }: { run: PortfolioRunOut
 }
 
 function PortfolioView({ result, form, config }: { result: PortfolioOut; form: PortfolioForm; config: ConfigOut }) {
-  const [engine, setEngine] = useState(result.runs[0]?.engine ?? "");
-  useEffect(() => setEngine(result.runs[0]?.engine ?? ""), [result]);
+  // A new result shows its first engine.
+  const [engine, setEngine] = useResettableState(result.runs[0]?.engine ?? "", result);
   const run = result.runs.find((item) => item.engine === engine) ?? result.runs[0];
 
   const equitySeries = useMemo<EquitySeries[]>(
@@ -278,7 +362,13 @@ function PortfolioView({ result, form, config }: { result: PortfolioOut; form: P
         colorVar: ENGINE_COLORS[index % ENGINE_COLORS.length] ?? "--accent",
         dashed: index > 0,
       })),
-      { label: `${result.buy_hold_benchmark} buy & hold`, points: result.buy_hold, colorVar: "--chart-benchmark", dashed: true, axis: "left" },
+      {
+        label: `${result.buy_hold_benchmark} buy & hold`,
+        points: result.buy_hold,
+        colorVar: "--chart-benchmark",
+        dashed: true,
+        axis: "left",
+      },
     ],
     [result],
   );
@@ -309,12 +399,13 @@ function PortfolioView({ result, form, config }: { result: PortfolioOut; form: P
           </div>
         </div>
         <p className="text-muted">
-          {result.start} → {result.end} · {run.tickers.length} tickers, one equity · at most {result.portfolio.max_positions} positions and{" "}
-          {fmtNumber(result.portfolio.max_exposure_pct, 0)}% gross exposure · priority: {result.priority.description}
+          {result.start} → {result.end} · {run.tickers.length} tickers, one equity · at most{" "}
+          {result.portfolio.max_positions} positions and {fmtNumber(result.portfolio.max_exposure_pct, 0)}% gross
+          exposure · priority: {result.priority.description}
         </p>
         <p className="text-muted">
-          Risk {fmtNumber(used.risk_pct, 2)}%, max position {fmtNumber(used.max_position_pct, 0)}% · costs {fmtNumber(used.commission_pct, 2)}% +{" "}
-          {fmtNumber(used.slippage_pct, 2)}%
+          Risk {fmtNumber(used.risk_pct, 2)}%, max position {fmtNumber(used.max_position_pct, 0)}% · costs{" "}
+          {fmtNumber(used.commission_pct, 2)}% + {fmtNumber(used.slippage_pct, 2)}%
         </p>
         {filters && (
           <p className="text-muted">
@@ -323,7 +414,8 @@ function PortfolioView({ result, form, config }: { result: PortfolioOut; form: P
           </p>
         )}
         <p className="text-muted">
-          Entry: {result.entry.description} · initial stop {fmtNumber(used.atr_mult, 2)} × ATR({used.atr_period}) · exits: {exits}
+          Entry: {result.entry.description} · initial stop {fmtNumber(used.atr_mult, 2)} × ATR({used.atr_period}) ·
+          exits: {exits}
         </p>
         <Link to={watchlistLink(form, config)} className="inline-block text-accent hover:underline">
           Each ticker on its own, with its own equity →
@@ -332,7 +424,12 @@ function PortfolioView({ result, form, config }: { result: PortfolioOut; form: P
       {result.missing.length > 0 && <Notice>No data for: {result.missing.join(", ")}</Notice>}
       {result.runs.length > 1 && (
         <div className="flex flex-wrap items-center gap-3">
-          <Segmented label="Engine" value={engine} onChange={setEngine} options={result.runs.map((item) => ({ value: item.engine, label: item.engine }))} />
+          <Segmented
+            label="Engine"
+            value={engine}
+            onChange={setEngine}
+            options={result.runs.map((item) => ({ value: item.engine, label: item.engine }))}
+          />
           <p className={`text-sm ${agree ? "text-up" : "text-warn"}`}>
             {agree ? "✓ Both engines produced identical results." : "Engines differ: compare the trades below."}
           </p>
@@ -351,31 +448,50 @@ function PortfolioView({ result, form, config }: { result: PortfolioOut; form: P
         <h2 className="text-sm font-semibold">In-sample and out-of-sample</h2>
         <PeriodsTables run={run} />
         <p className="text-xs text-muted">
-          {PERIOD_NOTE} Buy & hold is {result.buy_hold_benchmark}'s; exposure is the share of days with an open position.
+          {PERIOD_NOTE} Buy & hold is {result.buy_hold_benchmark}'s; exposure is the share of days with an open
+          position.
         </p>
       </section>
       <section className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">Each ticker's contribution ({run.engine})</h2>
-          <Button onClick={() => downloadCsv(`tradescan-portfolio-${result.universe}-${result.signal}-tickers.csv`, run.tickers.map((row) => ({ ...row })))}>
+          <Button
+            onClick={() =>
+              downloadCsv(
+                `tradescan-portfolio-${result.universe}-${result.signal}-tickers.csv`,
+                run.tickers.map((row) => ({ ...row })),
+              )
+            }
+          >
             Export CSV
           </Button>
         </div>
         <ContributionTable run={run} result={result} form={form} config={config} />
-        <p className="text-xs text-muted">Click a ticker to backtest it on its own. Today's index members carry survivorship bias.</p>
+        <p className="text-xs text-muted">
+          Click a ticker to backtest it on its own. Today's index members carry survivorship bias.
+        </p>
       </section>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">
           {run.trades.length} trades ({run.engine})
         </h2>
         <Button
-          onClick={() => downloadCsv(`tradescan-portfolio-${result.universe}-${result.signal}-${run.engine}.csv`, run.trades.map(tradeRow))}
+          onClick={() =>
+            downloadCsv(
+              `tradescan-portfolio-${result.universe}-${result.signal}-${run.engine}.csv`,
+              run.trades.map(tradeRow),
+            )
+          }
           disabled={!run.trades.length}
         >
           Export CSV
         </Button>
       </div>
-      {run.trades.length ? <TradesTable trades={run.trades} /> : <EmptyState title="The signal never triggered a trade in this period" />}
+      {run.trades.length ? (
+        <TradesTable trades={run.trades} />
+      ) : (
+        <EmptyState title="The signal never triggered a trade in this period" />
+      )}
     </div>
   );
 }
@@ -396,7 +512,8 @@ export function PortfolioPage() {
 
   const failed = config.error ?? signals.error ?? watchlists.error;
   if (failed) return <ErrorBox error={failed} />;
-  if (!config.data || !signals.data || !watchlists.data || !form) return <Loading message="Connecting to the tradescan server…" />;
+  if (!config.data || !signals.data || !watchlists.data || !form)
+    return <Loading message="Connecting to the tradescan server…" />;
   const defaults = config.data;
 
   return (
@@ -413,7 +530,11 @@ export function PortfolioPage() {
         busy={run.isFetching}
         onSubmit={(next) => setParams(writePortfolioForm(next, defaults))}
       />
-      {!body && <EmptyState title="Choose a watchlist and a signal">Every ticker trades from one account, so the tickers compete for its slots.</EmptyState>}
+      {!body && (
+        <EmptyState title="Choose a watchlist and a signal">
+          Every ticker trades from one account, so the tickers compete for its slots.
+        </EmptyState>
+      )}
       {run.isLoading && (
         <Loading
           message={
@@ -423,7 +544,7 @@ export function PortfolioPage() {
           }
         />
       )}
-      {run.isError && <ErrorBox error={run.error} onRetry={() => run.refetch()} />}
+      {run.isError && <ErrorBox error={run.error} onRetry={() => void run.refetch()} />}
       {run.data && <PortfolioView result={run.data} form={form} config={defaults} />}
     </>
   );

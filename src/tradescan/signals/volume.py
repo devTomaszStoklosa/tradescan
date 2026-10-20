@@ -72,7 +72,9 @@ class PocketPivot(Signal):
     name = "pocket_pivot"
     family = Family.VOLUME
     direction = Direction.LONG
-    description = "Up-day volume above every down-day volume of the prior {lookback} bars, price above SMA({trend_period})"
+    description = (
+        "Up-day volume above every down-day volume of the prior {lookback} bars, price above SMA({trend_period})"
+    )
 
     def condition(self, df: pd.DataFrame) -> pd.Series:
         close, volume = df["close"], df["volume"]

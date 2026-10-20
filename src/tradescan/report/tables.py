@@ -14,6 +14,7 @@ from tradescan.backtest.portfolio import PortfolioTrade
 from tradescan.backtest.portfolio_metrics import TickerContribution
 from tradescan.backtest.rotation import Targets
 from tradescan.backtest.tickers import Period
+from tradescan.data.schema import bar_dates
 from tradescan.scanner import ScanHit
 from tradescan.scoring import Scorer
 from tradescan.services import (
@@ -93,7 +94,11 @@ def edge_to_frame(rows: Sequence[EdgeRow]) -> pd.DataFrame:
     records = []
     for row in rows:
         signal = row.signal
-        record: dict[str, object] = {"signal": signal.name, "dir": signal.direction.value, "family": signal.family.value}
+        record: dict[str, object] = {
+            "signal": signal.name,
+            "dir": signal.direction.value,
+            "family": signal.family.value,
+        }
         for item in row.stats:
             suffix = f" {item.horizon}d"
             record.update(
@@ -127,7 +132,9 @@ def periods_to_frame(runs: Sequence[EngineRun]) -> pd.DataFrame:
         if run.periods is None:
             continue
         for label, metrics in (("in-sample", run.periods.in_sample), ("out-of-sample", run.periods.out_of_sample)):
-            columns[f"{run.result.engine} {label}"] = {item.name: getattr(metrics, item.name) for item in fields(metrics)}
+            columns[f"{run.result.engine} {label}"] = {
+                item.name: getattr(metrics, item.name) for item in fields(metrics)
+            }
     return pd.DataFrame(columns)
 
 
@@ -158,7 +165,9 @@ def sweep_cells_frame(report: SweepReport) -> pd.DataFrame:
     """Every combination with both periods' metrics, one row each (for export)."""
     records = []
     for cell in report.cells:
-        record: dict[str, object] = {item.axis.key: value for item, value in zip(report.parameters, cell.values)}
+        record: dict[str, object] = {
+            item.axis.key: value for item, value in zip(report.parameters, cell.values, strict=True)
+        }
         record["error"] = cell.error or ""
         if cell.periods is not None:
             for prefix, metrics in (("is", cell.periods.in_sample), ("oos", cell.periods.out_of_sample)):
@@ -172,7 +181,7 @@ def _picked(report: WalkForwardReport, pick: WindowPick) -> str:
     if pick.combination is None:
         return "none qualified"
     values = report.combinations[pick.combination].values
-    return ", ".join(f"{item.axis.name}={value:g}" for item, value in zip(report.parameters, values))
+    return ", ".join(f"{item.axis.name}={value:g}" for item, value in zip(report.parameters, values, strict=True))
 
 
 def _dates(index: pd.DatetimeIndex, first: int, last: int) -> str:
@@ -182,7 +191,7 @@ def _dates(index: pd.DatetimeIndex, first: int, last: int) -> str:
 def walk_forward_windows_frame(report: WalkForwardReport) -> pd.DataFrame:
     """One row per window: its in-sample and out-of-sample dates, the bars its pick traded, the pick and its
     in-sample metric, and the out-of-sample metric, trades and return of the bars it traded."""
-    index, metric = report.close.index, report.metric
+    index, metric = bar_dates(report.close), report.metric
     records = []
     for number, item in enumerate(report.windows, start=1):
         window, pick, segment, out = item.window, item.pick, item.segment, item.out_of_sample
@@ -207,13 +216,16 @@ def walk_forward_metrics_frame(report: WalkForwardReport) -> pd.DataFrame:
     """The stitched out-of-sample curve's metrics next to the unchanged setup's on the same bars."""
     columns = {"walk-forward": report.metrics, "unchanged setup": report.unchanged_metrics}
     return pd.DataFrame(
-        {label: {item.name: getattr(metrics, item.name) for item in fields(metrics)} for label, metrics in columns.items()}
+        {
+            label: {item.name: getattr(metrics, item.name) for item in fields(metrics)}
+            for label, metrics in columns.items()
+        }
     )
 
 
 def walk_forward_pick(report: WalkForwardReport, pick: WindowPick) -> str:
     """A window's pick with the dates of the in-sample window that picked it."""
-    return f"{_picked(report, pick)} (in-sample {_dates(report.close.index, pick.span.start, pick.span.end - 1)})"
+    return f"{_picked(report, pick)} (in-sample {_dates(bar_dates(report.close), pick.span.start, pick.span.end - 1)})"
 
 
 def walk_forward_export_frame(report: WalkForwardReport) -> pd.DataFrame:
@@ -234,7 +246,7 @@ def walk_forward_export_frame(report: WalkForwardReport) -> pd.DataFrame:
             "qualified": pick.qualified,
         }
         values = report.combinations[pick.combination].values if pick.combination is not None else no_pick
-        record.update({parameter.axis.key: value for parameter, value in zip(report.parameters, values)})
+        record.update({parameter.axis.key: value for parameter, value in zip(report.parameters, values, strict=True)})
         for prefix, metrics in (("is", pick.in_sample), ("oos", item.out_of_sample)):
             if metrics is not None:
                 record.update({f"{prefix}_{field.name}": getattr(metrics, field.name) for field in fields(metrics)})
@@ -257,7 +269,9 @@ def watchlist_rows_frame(report: WatchlistBacktestReport, metric: str) -> pd.Dat
         for period, part in parts.items():
             record[f"{metric} {PERIOD_LABELS[period]}"] = getattr(part.metrics, metric) if part else math.nan
         full = row.run.full.metrics
-        record.update({"return%": full.total_return_pct, "max DD%": full.max_drawdown_pct, "buy&hold%": full.buy_hold_pct})
+        record.update(
+            {"return%": full.total_return_pct, "max DD%": full.max_drawdown_pct, "buy&hold%": full.buy_hold_pct}
+        )
         records.append(record)
     frame = pd.DataFrame(records)
     return frame.sort_values(f"{metric} full", ascending=False, na_position="last", kind="stable", ignore_index=True)
@@ -298,7 +312,7 @@ def pooled_frame(report: WatchlistBacktestReport) -> pd.DataFrame:
 
 def _whole_counts(frame: pd.DataFrame, *columns: str) -> pd.DataFrame:
     """Counts kept as Python ints, so a row that also holds floats still shows them as whole numbers."""
-    return frame.astype({column: object for column in columns})
+    return frame.astype(dict.fromkeys(columns, object))
 
 
 def watchlist_export_frame(report: WatchlistBacktestReport) -> pd.DataFrame:
@@ -315,7 +329,9 @@ def watchlist_export_frame(report: WatchlistBacktestReport) -> pd.DataFrame:
         }
         for period, prefix in prefixes.items():
             part = row.run.period(period)
-            record.update({f"{prefix}_{name}": getattr(part.metrics, name) if part else math.nan for name in METRIC_NAMES})
+            record.update(
+                {f"{prefix}_{name}": getattr(part.metrics, name) if part else math.nan for name in METRIC_NAMES}
+            )
         records.append(record)
     return pd.DataFrame(records)
 
@@ -328,7 +344,9 @@ def trades_to_frame(trades: Sequence[Trade], engine: str = "") -> pd.DataFrame:
     for column in ("signal_date", "entry_date", "exit_date"):
         frame[column] = pd.to_datetime(frame[column]).dt.date.astype(str)
     frame["units"] = [trade.units for trade in trades]
-    frame["adds"] = ["; ".join(f"{fill.date.date().isoformat()} {fill.price:g}" for fill in trade.adds) for trade in trades]
+    frame["adds"] = [
+        "; ".join(f"{fill.date.date().isoformat()} {fill.price:g}" for fill in trade.adds) for trade in trades
+    ]
     if engine:
         frame.insert(0, "engine", engine)
     return frame
@@ -350,7 +368,11 @@ def portfolio_metrics_frame(report: PortfolioReport) -> pd.DataFrame:
 def rotation_metrics_frame(report: RotationReport) -> pd.DataFrame:
     """The metrics and rotation stats of the full run and of each period, one column each."""
     columns = {}
-    for label, period in (("full", report.full), ("in-sample", report.in_sample), ("out-of-sample", report.out_of_sample)):
+    for label, period in (
+        ("full", report.full),
+        ("in-sample", report.in_sample),
+        ("out-of-sample", report.out_of_sample),
+    ):
         if period is None:
             continue
         values = {item.name: getattr(period.metrics, item.name) for item in fields(period.metrics)}

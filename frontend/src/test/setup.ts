@@ -6,6 +6,9 @@ import { afterEach, vi } from "vitest";
 // Stays below the 5000 ms test timeout, so a wait that never succeeds still reports what it was waiting for.
 configure({ asyncUtilTimeout: 3000 });
 
+// jsdom lays nothing out, so it has no scrollIntoView.
+Element.prototype.scrollIntoView = () => undefined;
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();

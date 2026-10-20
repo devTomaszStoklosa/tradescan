@@ -61,7 +61,8 @@ class UpdateResult:
 def http_fetch(url: str) -> str:
     request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     with urllib.request.urlopen(request, timeout=30) as response:
-        return response.read().decode("utf-8")
+        body: bytes = response.read()
+        return body.decode("utf-8")
 
 
 def yahoo_symbol(symbol: str) -> str:

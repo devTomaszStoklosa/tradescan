@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router";
 
 import { MIN_TRADES } from "../lib/compare";
@@ -6,6 +5,7 @@ import { fmtPct } from "../lib/format";
 import { writeBacktestForm } from "../lib/params";
 import { writePortfolioForm } from "../lib/portfolio";
 import { runColorVar, runSubject, type PinnedRun, type RunKind } from "../lib/runs";
+import { useResettableState } from "../lib/useResettableState";
 import { Button, DirectionBadge, Input } from "./ui";
 
 /** What a card shows only for one kind of run; a new kind of run adds its entry here. */
@@ -36,7 +36,11 @@ export const openRun = (run: PinnedRun) => cardOf(run).open(run);
 export function RunLabel({ run }: { run: PinnedRun }) {
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-      <span aria-hidden className="inline-block size-2.5 shrink-0 rounded-full" style={{ background: `var(${runColorVar(run)})` }} />
+      <span
+        aria-hidden
+        className="inline-block size-2.5 shrink-0 rounded-full"
+        style={{ background: `var(${runColorVar(run)})` }}
+      />
       <span className="num text-muted">#{run.slot}</span>
       <span className="text-fg">{run.name}</span>
     </span>
@@ -54,8 +58,7 @@ export function RunCard({
   onToggle: () => void;
   onRemove: () => void;
 }) {
-  const [name, setName] = useState(run.name);
-  useEffect(() => setName(run.name), [run.name]);
+  const [name, setName] = useResettableState(run.name);
   // Saved on blur rather than per keystroke: each save is a request to the server.
   const commit = () => {
     const next = name.trim();
@@ -97,9 +100,14 @@ export function RunCard({
         {scope && `${scope} · `}
         {run.engine} · {run.start} → {run.end} · return {fmtPct(run.metrics.total_return_pct, 1, true)}
       </p>
-      {fewTrades && <p className="text-xs text-warn">Only {run.metrics.trades} trades: too few to trust the metrics.</p>}
+      {fewTrades && (
+        <p className="text-xs text-warn">Only {run.metrics.trades} trades: too few to trust the metrics.</p>
+      )}
       <div className="flex flex-wrap gap-1.5">
-        <Link to={open.to} className="inline-flex items-center rounded-lg border border-line px-3 py-1.5 text-sm font-medium hover:bg-panel-2">
+        <Link
+          to={open.to}
+          className="inline-flex items-center rounded-lg border border-line px-3 py-1.5 text-sm font-medium hover:bg-panel-2"
+        >
           {open.label}
         </Link>
         <Link

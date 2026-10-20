@@ -42,7 +42,8 @@ class GapAndGoDown(_GapAndGo):
     name = "gap_and_go_down"
     direction = Direction.SHORT
     description = (
-        "Gap down >= {min_gap_pct:g}% that closes below the open on >= {min_rvol:g}x the {rvol_period}-bar average volume"
+        "Gap down >= {min_gap_pct:g}% that closes below the open "
+        "on >= {min_rvol:g}x the {rvol_period}-bar average volume"
     )
 
 

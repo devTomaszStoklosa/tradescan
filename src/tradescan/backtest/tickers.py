@@ -17,6 +17,7 @@ from tradescan.backtest.metrics import Metrics, compute_metrics
 from tradescan.backtest.oos import Split, period_metrics, run_period_results, split_history
 from tradescan.backtest.trade_rules import TradeRules
 from tradescan.backtest.vectorized import VectorizedEngine
+from tradescan.data.schema import bar_dates
 from tradescan.signals.base import Signal
 
 
@@ -40,7 +41,9 @@ class TickerRun:
     out_of_sample: PeriodRun | None
 
     def period(self, period: Period) -> PeriodRun | None:
-        return {Period.FULL: self.full, Period.IN_SAMPLE: self.in_sample, Period.OUT_OF_SAMPLE: self.out_of_sample}[period]
+        return {Period.FULL: self.full, Period.IN_SAMPLE: self.in_sample, Period.OUT_OF_SAMPLE: self.out_of_sample}[
+            period
+        ]
 
 
 def _r_multiples(result: BacktestResult) -> np.ndarray:
@@ -63,7 +66,7 @@ class TickerJob:
         full = PeriodRun(
             compute_metrics(result.equity, result.trades, df["close"], self.config.bars_per_year), _r_multiples(result)
         )
-        split = split_history(df.index, self.config.oos_pct)
+        split = split_history(bar_dates(df), self.config.oos_pct)
         if split is None:
             return TickerRun(full, None, None, None)
         results = run_period_results(engine, ticker, df, self.signal, self.config, self.rules, split.index)

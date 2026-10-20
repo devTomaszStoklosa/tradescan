@@ -11,6 +11,8 @@ hold several units of up to `max_position_pct` of equity each.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pandas as pd
 
 try:
@@ -20,7 +22,7 @@ except ImportError as error:  # pragma: no cover - depends on the optional extra
 
 from tradescan.backtest.base import BacktestConfig, BacktestResult, ExitReason, Fill, Trade
 from tradescan.backtest.entries import OrderType
-from tradescan.backtest.exits import ExitOrders, OpenTrade
+from tradescan.backtest.exits import ExitOrders, ExitTracker, OpenTrade
 from tradescan.backtest.pyramid import Pyramiding, Units
 from tradescan.backtest.rules import Bars
 from tradescan.backtest.trade_rules import EntryPlan, PreparedRules, TradeRules
@@ -64,12 +66,13 @@ class TickerOrders:
         self._plan: EntryPlan | None = None
         self._signal: tuple[int, pd.Timestamp] | None = None  # (bar index, date)
         self._fills: list[tuple[pd.Timestamp, float, float, float]] = []  # (date, price, size, commission) per unit
-        self._tracker = None
+        self._tracker: ExitTracker | None = None
         self._units: Units | None = None
-        self._exit_orders: list = []
+        self._exit_orders: list[Any] = []  # backtrader orders
         self._exit_reasons: dict[int, str] = {}
-        self._add_order = None
-        self._levels: tuple | None = None  # the levels and reasons of the live exit orders, the add level and the size
+        self._add_order: Any = None  # a backtrader order
+        # The levels and reasons of the live exit orders, the add level and the size.
+        self._levels: tuple[object, ...] | None = None
         self._closing = False
 
     @property
@@ -96,7 +99,8 @@ class TickerOrders:
             self._manage_exits(index)
             return
         if self._entry_order is not None:
-            assert self._plan is not None and self._signal is not None
+            assert self._plan is not None
+            assert self._signal is not None
             if index - self._signal[0] < self._plan.valid_bars:
                 return
             self._strategy.cancel(self._entry_order)
@@ -192,7 +196,9 @@ class TickerOrders:
             self._record(last_date, self._data.close[0], 0.0, ExitReason.OPEN)
 
     def _record(self, exit_date: pd.Timestamp, exit_price: float, exit_commission: float, reason: str) -> None:
-        assert self._plan is not None and self._fills and self._signal is not None
+        assert self._plan is not None
+        assert self._fills
+        assert self._signal is not None
         entry_date, _, unit_size, _ = self._fills[0]
         size = sum(fill[2] for fill in self._fills)
         entry_price = sum(fill[1] * fill[2] for fill in self._fills) / size

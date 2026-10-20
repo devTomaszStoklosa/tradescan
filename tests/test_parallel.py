@@ -1,5 +1,6 @@
-from synthetic import FakeProvider, random_walk
+from typing import Any
 
+from tests.synthetic import FakeProvider, random_walk
 from tradescan.backtest.edge import EdgeSampler, combine_samples, edge_samples
 from tradescan.config import Settings
 from tradescan.parallel import ProcessRunner, SequentialRunner
@@ -31,13 +32,16 @@ def test_multi_horizon_samples_match_single_horizon():
     df = FRAMES["AAA"]
     signal = default_registry.create("donchian_breakout")
     together = EdgeSampler((signal,), (5, 10, 20))(df)[0]
-    for sample, horizon in zip(together, (5, 10, 20)):
+    for sample, horizon in zip(together, (5, 10, 20), strict=True):
         alone = edge_samples(df, signal, (horizon,))[0]
         assert combine_samples(signal.name, horizon, [sample]) == combine_samples(signal.name, horizon, [alone])
 
 
 def _hits(report):
-    return [(hit.ticker, hit.direction, hit.score.total, tuple(item.signal.name for item in hit.fired), hit.edge) for hit in report.hits]
+    return [
+        (hit.ticker, hit.direction, hit.score.total, tuple(item.signal.name for item in hit.fired), hit.edge)
+        for hit in report.hits
+    ]
 
 
 def test_parallel_scan_and_edge_match_sequential():
@@ -46,7 +50,10 @@ def test_parallel_scan_and_edge_match_sequential():
 
     # Non-default parameters must reach the worker processes too.
     signal_params = {"donchian_breakout": {"period": 30}, "connors_rsi2_long": {"oversold": 20}}
-    settings = {"scan": {"fresh_bars": 20, "min_score": -10}, "trend": {"rs_weights": [0.25, 0.25, 0.25, 0.25]}}
+    settings: dict[str, dict[str, Any]] = {
+        "scan": {"fresh_bars": 20, "min_score": -10},
+        "trend": {"rs_weights": [0.25, 0.25, 0.25, 0.25]},
+    }
     request = ScanRequest(universe=UNIVERSE, settings=settings, signal_params=signal_params)
     assert _hits(parallel.scan.run(request)) == _hits(sequential.scan.run(request))
 

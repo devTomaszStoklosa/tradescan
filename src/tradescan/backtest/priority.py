@@ -87,7 +87,7 @@ def _signal_points(df: pd.DataFrame, signals: Sequence[Signal], scorer: Scorer, 
 def _percentiles(values: Sequence[np.ndarray], days: Sequence[np.ndarray], calendar_length: int) -> list[np.ndarray]:
     """Each ticker's percentile rank (0-100) at each bar among the tickers with a value on that calendar day."""
     table = np.full((calendar_length, len(values)), np.nan)
-    for column, (value, day) in enumerate(zip(values, days)):
+    for column, (value, day) in enumerate(zip(values, days, strict=True)):
         table[day, column] = value
     ranks = pd.DataFrame(table).rank(axis=1, pct=True).to_numpy() * 100.0
     return [ranks[day, column] for column, day in enumerate(days)]
@@ -132,7 +132,12 @@ def _shifted(close: np.ndarray, bars: int) -> np.ndarray:
 @dataclass(frozen=True)
 class RelativeStrengthPriority(TickerPriorityRule):
     periods: tuple[int, ...] = param(
-        (63, 126, 189, 252), minimum=1, maximum=1000, step=1, label="Lookbacks", unit="bars",
+        (63, 126, 189, 252),
+        minimum=1,
+        maximum=1000,
+        step=1,
+        label="Lookbacks",
+        unit="bars",
         help="Returns over these lookbacks are weighted into one score",
     )
     weights: tuple[float, ...] = param(
@@ -144,13 +149,15 @@ class RelativeStrengthPriority(TickerPriorityRule):
 
     def __post_init__(self) -> None:
         if len(self.periods) != len(self.weights):
-            raise ValueError(f"{self.name}: {len(self.periods)} lookbacks need as many weights, got {len(self.weights)}")
+            raise ValueError(
+                f"{self.name}: {len(self.periods)} lookbacks need as many weights, got {len(self.weights)}"
+            )
         if not any(self.weights):
             raise ValueError(f"{self.name}: at least one weight must be above 0")
 
     def strength(self, bars: Bars) -> np.ndarray:
         total = np.zeros(len(bars))
-        for period, weight in zip(self.periods, self.weights):
+        for period, weight in zip(self.periods, self.weights, strict=True):
             total += weight * (bars.close / _shifted(bars.close, period) - 1.0)
         return total
 
@@ -160,7 +167,12 @@ class RelativeStrengthPriority(TickerPriorityRule):
 class MomentumPriority(TickerPriorityRule):
     lookback: int = param(252, minimum=2, maximum=1000, step=1, label="Lookback", unit="bars")
     skip: int = param(
-        21, minimum=0, maximum=250, step=1, label="Skip", unit="bars",
+        21,
+        minimum=0,
+        maximum=250,
+        step=1,
+        label="Skip",
+        unit="bars",
         help="The latest bars left out; 252 and 21 give the 12-1 month momentum",
     )
     name = "momentum"
@@ -172,7 +184,8 @@ class MomentumPriority(TickerPriorityRule):
             raise ValueError(f"{self.name}: skip ({self.skip}) must be below the lookback ({self.lookback})")
 
     def strength(self, bars: Bars) -> np.ndarray:
-        return _shifted(bars.close, self.skip) / _shifted(bars.close, self.lookback) - 1.0
+        change: np.ndarray = _shifted(bars.close, self.skip) / _shifted(bars.close, self.lookback) - 1.0
+        return change
 
 
 @priority_rules.register
@@ -210,7 +223,7 @@ class ScorePriority(PriorityRule):
                 scan.context.weekly_trends(close),
                 percentile,
             )
-            for ticker, bars, close, percentile in zip(inputs.tickers, inputs.bars, closes, percentiles)
+            for ticker, bars, close, percentile in zip(inputs.tickers, inputs.bars, closes, percentiles, strict=True)
         ]
 
 

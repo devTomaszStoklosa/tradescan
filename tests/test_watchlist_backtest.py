@@ -4,8 +4,8 @@ from dataclasses import astuple, replace
 
 import numpy as np
 import pytest
-from synthetic import FakeProvider, random_walk
 
+from tests.synthetic import FakeProvider, random_walk
 from tradescan.backtest.base import BacktestConfig
 from tradescan.backtest.pooled import BREAK_EVEN, pool_trades, spread
 from tradescan.backtest.tickers import Period, TickerJob
@@ -31,7 +31,9 @@ def test_pooled_trades_take_every_ticker_together():
 
 def test_pooled_trades_without_trades_or_losers():
     empty = pool_trades([])
-    assert empty.trades == 0 and math.isnan(empty.expectancy_r) and math.isnan(empty.profit_factor_r)
+    assert empty.trades == 0
+    assert math.isnan(empty.expectancy_r)
+    assert math.isnan(empty.profit_factor_r)
     assert math.isinf(pool_trades([np.array([1.0, 2.0])]).profit_factor_r)
 
 
@@ -47,10 +49,13 @@ def test_spread_quantiles_and_break_even():
 
 def test_spread_keeps_infinite_profit_factors_largest():
     result = spread([0.5, math.inf, math.inf, 2.0], BREAK_EVEN["profit_factor"])
-    assert result.median == math.inf and result.maximum == math.inf and result.p25 == pytest.approx(1.625)
+    assert result.median == math.inf
+    assert result.maximum == math.inf
+    assert result.p25 == pytest.approx(1.625)
     assert result.above_break_even_pct == pytest.approx(75.0)
     empty = spread([math.nan])
-    assert empty.tickers == 0 and math.isnan(empty.median)
+    assert empty.tickers == 0
+    assert math.isnan(empty.median)
 
 
 # --- The per-ticker job --------------------------------------------------------------------------
@@ -60,8 +65,11 @@ def test_ticker_job_is_picklable_and_skips_the_split_on_short_history():
     job = TickerJob(default_registry.create("connors_rsi2_long"), TradeRules(), BacktestConfig())
     assert pickle.loads(pickle.dumps(job)).signal.name == "connors_rsi2_long"
     run = job(("TINY", random_walk(100, seed=2)))
-    assert run.split is None and run.in_sample is None and run.out_of_sample is None
-    assert run.period(Period.FULL) is run.full and run.period(Period.OUT_OF_SAMPLE) is None
+    assert run.split is None
+    assert run.in_sample is None
+    assert run.out_of_sample is None
+    assert run.period(Period.FULL) is run.full
+    assert run.period(Period.OUT_OF_SAMPLE) is None
 
 
 # --- The use case ----------------------------------------------------------------------------------
@@ -96,7 +104,8 @@ def _run(frames, setup=SETUP, universe=DEMO, runner=None, provider=None):
 def test_every_ticker_row_is_its_single_backtest(frames):
     report = _run(frames)
     assert [row.ticker for row in report.rows] == ["AAA", "BBB", "CCC", "TINY"]
-    assert report.missing == ["NOPE"] and report.base.benchmark is None
+    assert report.missing == ["NOPE"]
+    assert report.base.benchmark is None
     backtest = build_use_cases(Settings(), FakeProvider(frames)).backtest
     for row in report.rows:
         single = backtest.run(replace(SETUP, ticker=row.ticker))
@@ -116,14 +125,17 @@ def test_every_ticker_row_is_its_single_backtest(frames):
 def test_periods_pool_trades_and_spread_metrics(frames):
     report = _run(frames)
     full = report.periods[Period.FULL]
-    assert full.tickers == 4 and report.periods[Period.OUT_OF_SAMPLE].tickers == 3  # TINY is too short to split
+    assert full.tickers == 4
+    assert report.periods[Period.OUT_OF_SAMPLE].tickers == 3
     _same(full.pooled, pool_trades(row.run.full.r_multiples for row in report.rows))
     assert full.pooled.trades == sum(row.run.full.metrics.trades for row in report.rows)
     oos = report.periods[Period.OUT_OF_SAMPLE]
     values = [row.run.out_of_sample.metrics.sharpe for row in report.rows if row.run.out_of_sample]
     _same(oos.spreads["sharpe"], spread(values, 0.0))
-    assert set(oos.spreads) == {"total_return_pct", "cagr_pct", "sharpe", "sortino", "max_drawdown_pct", "trades",
-                                "win_rate_pct", "profit_factor", "expectancy_r", "sqn", "exposure_pct", "buy_hold_pct"}  # fmt: skip
+    assert set(oos.spreads) == {
+        "total_return_pct", "cagr_pct", "sharpe", "sortino", "max_drawdown_pct", "trades",
+        "win_rate_pct", "profit_factor", "expectancy_r", "sqn", "exposure_pct", "buy_hold_pct",
+    }  # fmt: skip
     assert math.isnan(oos.spreads["trades"].above_break_even_pct)
 
 
@@ -132,8 +144,11 @@ def test_the_market_filter_compares_the_watchlist_benchmark_unless_the_setup_nam
     setup = replace(SETUP, filters=(RuleChoice("market"),))
     universe = Watchlist("demo", ("AAA", "BBB"), benchmark="QQQ")
     report = _run(frames, setup, universe, provider=provider)
-    assert report.base.benchmark == "QQQ" and provider.calls[0][0] == ("AAA", "BBB", "QQQ")
-    single = build_use_cases(Settings(), FakeProvider(frames)).backtest.run(replace(setup, ticker="AAA", benchmark="QQQ"))
+    assert report.base.benchmark == "QQQ"
+    assert provider.calls[0][0] == ("AAA", "BBB", "QQQ")
+    single = build_use_cases(Settings(), FakeProvider(frames)).backtest.run(
+        replace(setup, ticker="AAA", benchmark="QQQ")
+    )
     _same(report.rows[0].run.full.metrics, single.runs[0].metrics)
 
     assert _run(frames, replace(setup, benchmark="spy"), universe).base.benchmark == "SPY"

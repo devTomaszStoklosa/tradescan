@@ -81,7 +81,11 @@ class BollingerReentryDown(_BollingerReentry):
 @dataclass(frozen=True)
 class _InternalBarStrength(Signal):
     zone: float = param(
-        0.2, minimum=0.01, maximum=0.5, step=0.01, label="Close zone",
+        0.2,
+        minimum=0.01,
+        maximum=0.5,
+        step=0.01,
+        label="Close zone",
         help="Share of the bar's range at its low (long) or its high (short)",
     )
     family = Family.MEAN_REVERSION
@@ -203,7 +207,9 @@ class _PercentB(Signal):
 @register
 @dataclass(frozen=True)
 class PercentBLow(_PercentB):
-    below: float = param(0.0, minimum=-1.0, maximum=0.5, step=0.05, label="%b below", help="0 is the lower band, 1 the upper")
+    below: float = param(
+        0.0, minimum=-1.0, maximum=0.5, step=0.05, label="%b below", help="0 is the lower band, 1 the upper"
+    )
     name = "bb_pctb_low"
     direction = Direction.LONG
     description = "Bollinger %b({period}, {mult:g}) < {below:g} (0 = lower band)"
@@ -215,7 +221,9 @@ class PercentBLow(_PercentB):
 @register
 @dataclass(frozen=True)
 class PercentBHigh(_PercentB):
-    above: float = param(1.0, minimum=0.5, maximum=2.0, step=0.05, label="%b above", help="0 is the lower band, 1 the upper")
+    above: float = param(
+        1.0, minimum=0.5, maximum=2.0, step=0.05, label="%b above", help="0 is the lower band, 1 the upper"
+    )
     name = "bb_pctb_high"
     direction = Direction.SHORT
     description = "Bollinger %b({period}, {mult:g}) > {above:g} (1 = upper band)"

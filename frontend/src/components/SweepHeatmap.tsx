@@ -9,7 +9,11 @@ import { METRICS } from "./BacktestResults";
 
 const cx = (...classes: (string | false | null | undefined)[]) => classes.filter(Boolean).join(" ");
 
-const COLOR: Record<Shade["tone"], string> = { good: "var(--heat-good)", bad: "var(--heat-bad)", level: "var(--heat-good)" };
+const COLOR: Record<Shade["tone"], string> = {
+  good: "var(--heat-good)",
+  bad: "var(--heat-bad)",
+  level: "var(--heat-good)",
+};
 
 export const axisTitle = (axis: SweepAxisOut) => (axis.unit ? `${axis.label} (${axis.unit})` : axis.label);
 
@@ -65,7 +69,9 @@ export function SweepHeatmap({
     const label = cell.error
       ? `${what}: could not run (${cell.error})`
       : `${what}: ${metricLabel} ${cellText(cell, period, metric)}, ${metrics?.trades ?? 0} trades${few ? " (too few to trust)" : ""}`;
-    const style = tint ? ({ "--cell-color": COLOR[tint.tone], "--cell-strength": tint.strength } as CSSProperties) : undefined;
+    const style = tint
+      ? ({ "--cell-color": COLOR[tint.tone], "--cell-strength": tint.strength } as CSSProperties)
+      : undefined;
     return (
       <td key={index} className="p-0.5">
         <button
@@ -155,7 +161,10 @@ export function SweepLegend({ scale, metric }: { scale: HeatScale | null; metric
       </span>
       <span>★ best in-sample</span>
       <span className="flex items-center gap-1.5">
-        <span aria-hidden className="inline-block size-3.5 rounded-sm outline-2 -outline-offset-2 outline-fg/70 outline-dashed" />
+        <span
+          aria-hidden
+          className="inline-block size-3.5 rounded-sm outline-2 -outline-offset-2 outline-fg/70 outline-dashed"
+        />
         current setting
       </span>
       <span>× could not run</span>

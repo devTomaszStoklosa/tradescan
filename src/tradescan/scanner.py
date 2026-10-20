@@ -79,9 +79,7 @@ class TickerAnalyzer:
             primary = items[0].signal  # the signal the edge column describes
             sample = edge_samples(df, primary, (self.edge_horizon,), events[primary])[0]
             edges[direction] = combine_samples(primary.name, self.edge_horizon, [sample])
-        return TickerAnalysis(
-            ticker=ticker, context=self.context_builder.build(ticker, df), fired=ordered, edges=edges
-        )
+        return TickerAnalysis(ticker=ticker, context=self.context_builder.build(ticker, df), fired=ordered, edges=edges)
 
 
 class Scanner:
@@ -143,7 +141,8 @@ def rs_percentiles(raw: Mapping[str, float]) -> dict[str, float]:
     values = pd.Series(raw, dtype=float).dropna()
     if values.empty:
         return {}
-    return (values.rank(pct=True) * 100.0).to_dict()
+    ranks = values.rank(pct=True) * 100.0
+    return {str(ticker): float(rank) for ticker, rank in ranks.items()}
 
 
 def filter_hits(
@@ -151,8 +150,4 @@ def filter_hits(
     min_score: float = -math.inf,
     directions: Collection[Direction] | None = None,
 ) -> list[ScanHit]:
-    return [
-        hit
-        for hit in hits
-        if hit.score.total >= min_score and (not directions or hit.direction in directions)
-    ]
+    return [hit for hit in hits if hit.score.total >= min_score and (not directions or hit.direction in directions)]

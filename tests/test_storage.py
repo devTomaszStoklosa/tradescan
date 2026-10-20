@@ -1,20 +1,21 @@
 import sqlite3
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from tradescan.journal import SuggestedBy, TradeEntry
 from tradescan.signals.base import Direction
-from tradescan.storage.database import Conflict, Database, NotFound
+from tradescan.storage.database import ConflictError, Database, NotFoundError
 from tradescan.storage.runs import PinnedRun, PinnedRunStore
 from tradescan.storage.trades import TradeJournal
 
 SNAPSHOT = {"kind": "backtest", "ticker": "SPY", "equity": {"time": ["2026-01-02"], "value": [100000.0]}}
 
 
-def pinned(slot: int, run_id: str | None = None, **changes) -> PinnedRun:
-    values = {
+def pinned(slot: int, run_id: str | None = None, **changes: Any) -> PinnedRun:
+    values: dict[str, Any] = {
         "id": run_id or f"run-{slot}",
         "slot": slot,
         "name": f"run {slot}",
@@ -26,8 +27,14 @@ def pinned(slot: int, run_id: str | None = None, **changes) -> PinnedRun:
     return PinnedRun(**(values | changes))
 
 
-def entry(**changes) -> TradeEntry:
-    values = {"ticker": "SPY", "direction": Direction.LONG, "opened": date(2026, 3, 2), "entry_price": 500.0, "quantity": 2.0}
+def entry(**changes: Any) -> TradeEntry:
+    values: dict[str, Any] = {
+        "ticker": "SPY",
+        "direction": Direction.LONG,
+        "opened": date(2026, 3, 2),
+        "entry_price": 500.0,
+        "quantity": 2.0,
+    }
     return TradeEntry(**(values | changes))
 
 
@@ -99,9 +106,9 @@ def test_runs_are_listed_by_slot_with_their_snapshot(database):
 def test_a_taken_slot_or_a_pinned_id_is_a_conflict(database):
     store = PinnedRunStore(database)
     store.add(pinned(1))
-    with pytest.raises(Conflict, match="Slot 1 is taken"):
+    with pytest.raises(ConflictError, match="Slot 1 is taken"):
         store.add(pinned(1, run_id="other"))
-    with pytest.raises(Conflict, match="already pinned"):
+    with pytest.raises(ConflictError, match="already pinned"):
         store.add(pinned(2, run_id="run-1"))
     assert [run.id for run in store.runs()] == ["run-1"]
 
@@ -125,9 +132,9 @@ def test_a_run_is_renamed_hidden_and_removed(database):
     assert (hidden.name, hidden.hidden) == ("baseline", True)
     store.remove("run-1")
     assert store.runs() == []
-    with pytest.raises(NotFound):
+    with pytest.raises(NotFoundError):
         store.remove("run-1")
-    with pytest.raises(NotFound):
+    with pytest.raises(NotFoundError):
         store.update("run-1", name="gone")
 
 
@@ -145,7 +152,12 @@ def test_clear_removes_every_run(database):
 def test_trades_keep_every_field_and_the_suggesting_run(database):
     journal = TradeJournal(database, clock=Clock())
     logged = entry(
-        stop=490.0, closed=date(2026, 3, 9), exit_price=520.0, fees=1.5, notes="Gap up\nheld", run=SuggestedBy(7, SNAPSHOT)
+        stop=490.0,
+        closed=date(2026, 3, 9),
+        exit_price=520.0,
+        fees=1.5,
+        notes="Gap up\nheld",
+        run=SuggestedBy(7, SNAPSHOT),
     )
     added = journal.add(logged)
     assert (added.created_at, added.updated_at) == ("2026-10-18T09:00:00+00:00", "2026-10-18T09:00:00+00:00")
@@ -169,9 +181,10 @@ def test_a_trade_is_replaced_with_a_new_update_time(database):
     clock.now = datetime(2026, 10, 19, 15, 30, tzinfo=UTC)
     closed = entry(closed=date(2026, 3, 9), exit_price=520.0, notes="Target hit")
     replaced = journal.replace(added.id, closed)
-    assert replaced.entry == closed and replaced.entry.run is None
+    assert replaced.entry == closed
+    assert replaced.entry.run is None
     assert (replaced.created_at, replaced.updated_at) == (added.created_at, "2026-10-19T15:30:00+00:00")
-    with pytest.raises(NotFound):
+    with pytest.raises(NotFoundError):
         journal.replace(added.id + 1, closed)
 
 
@@ -180,5 +193,5 @@ def test_a_trade_is_removed(database):
     added = journal.add(entry())
     journal.remove(added.id)
     assert journal.trades() == []
-    with pytest.raises(NotFound):
+    with pytest.raises(NotFoundError):
         journal.remove(added.id)

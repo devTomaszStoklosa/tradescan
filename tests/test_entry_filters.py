@@ -6,8 +6,8 @@ from dataclasses import replace
 import numpy as np
 import pandas as pd
 import pytest
-from synthetic import FakeProvider, make_ohlcv, random_walk
 
+from tests.synthetic import FakeProvider, make_ohlcv, random_walk
 from tradescan.backtest.base import BacktestConfig
 from tradescan.backtest.filters import (
     AdxFilter,
@@ -33,7 +33,8 @@ def _bars(close, volume=1_000.0, start="2024-01-01") -> Bars:
 
 
 def _allows(rule, bars, direction=Direction.LONG, benchmark=None) -> list[bool]:
-    return rule.allows(FilterInputs(bars, benchmark), direction).tolist()
+    allowed: list[bool] = rule.allows(FilterInputs(bars, benchmark), direction).tolist()
+    return allowed
 
 
 def test_registry_lists_every_filter_and_only_the_market_filter_reads_the_benchmark():
@@ -77,7 +78,9 @@ def test_adx_filter_needs_the_minimum_trend_strength_whatever_the_direction():
 
 
 def test_volume_filter_compares_the_bar_with_the_average_of_the_bars_before_it():
-    bars = _bars([10] * 6, volume=[100, 100, 100, 150, 300, 0])  # averages of the 3 bars before: -, -, -, 100, 116.7, 183.3
+    bars = _bars(
+        [10] * 6, volume=[100, 100, 100, 150, 300, 0]
+    )  # averages of the 3 bars before: -, -, -, 100, 116.7, 183.3
     rule = VolumeFilter(period=3, min_ratio=1.5)
     assert _allows(rule, bars) == [False, False, False, True, True, False]
     assert _allows(rule, _bars([10] * 6, volume=0.0)) == [False] * 6  # no volume never passes
@@ -85,7 +88,15 @@ def test_volume_filter_compares_the_bar_with_the_average_of_the_bars_before_it()
 
 def test_atr_percent_filter_keeps_the_atr_inside_the_band():
     bars = _bars(np.full(30, 100.0))
-    bars = Bars(bars.open, bars.high, bars.low, bars.close, bars.volume, np.r_[np.full(10, np.nan), np.linspace(0.5, 6.0, 20)], bars.dates)
+    bars = Bars(
+        bars.open,
+        bars.high,
+        bars.low,
+        bars.close,
+        bars.volume,
+        np.r_[np.full(10, np.nan), np.linspace(0.5, 6.0, 20)],
+        bars.dates,
+    )
     allowed = np.array(_allows(AtrPercentFilter(min_pct=1.0, max_pct=5.0), bars))
     pct = bars.atr / bars.close * 100.0
     assert not allowed[:10].any()
@@ -100,9 +111,11 @@ def test_trade_rules_need_every_filter_to_allow_a_signal():
     wide, narrow = AtrPercentFilter(min_pct=1.0, max_pct=3.0), AtrPercentFilter(min_pct=3.0, max_pct=4.0)
     assert TradeRules(filters=()).prepare(bars, Direction.LONG).allowed.all()
     prepared = TradeRules(filters=(wide,)).prepare(bars, Direction.LONG)
-    assert prepared.plan(13, 100_000.0, CONFIG) is not None and prepared.plan(5, 100_000.0, CONFIG) is None
+    assert prepared.plan(13, 100_000.0, CONFIG) is not None
+    assert prepared.plan(5, 100_000.0, CONFIG) is None
     blocked = TradeRules(filters=(wide, VolumeFilter(min_ratio=2.0))).prepare(bars, Direction.LONG)
-    assert not blocked.allowed.any() and blocked.plan(13, 100_000.0, CONFIG) is None
+    assert not blocked.allowed.any()
+    assert blocked.plan(13, 100_000.0, CONFIG) is None
     assert not TradeRules(filters=(narrow,)).prepare(bars, Direction.LONG).allowed.any()
 
 
@@ -112,7 +125,8 @@ def test_trade_rules_reject_repeated_filters_and_report_whether_they_need_the_be
     assert not TradeRules(filters=(TrendFilter(),)).needs_benchmark
     rules = TradeRules(filters=(TrendFilter(), MarketFilter()))
     close = pd.Series([1.0, 2.0])
-    assert rules.needs_benchmark and rules.with_benchmark(close).benchmark_close is close
+    assert rules.needs_benchmark
+    assert rules.with_benchmark(close).benchmark_close is close
     assert rules.with_benchmark(close) == rules  # the benchmark's closes are data, not part of the rules
 
 
@@ -135,14 +149,17 @@ def test_backtest_loads_the_benchmark_only_when_a_filter_compares_it():
     request = BacktestRequest(ticker="AAA", signal="connors_rsi2_long", period="max")
 
     trend = backtest.run(replace(request, filters=(RuleChoice("trend", {"period": 50}),)))
-    assert trend.benchmark is None and provider.calls[-1][0] == ("AAA",)
+    assert trend.benchmark is None
+    assert provider.calls[-1][0] == ("AAA",)
     unfiltered = backtest.run(request)
     assert len(trend.runs[0].result.trades) < len(unfiltered.runs[0].result.trades)
 
     market = backtest.run(replace(request, filters=(RuleChoice("market"),)))
-    assert market.benchmark == "SPY" and provider.calls[-1][0] == ("AAA", "SPY")  # the settings' scan benchmark
+    assert market.benchmark == "SPY"
+    assert provider.calls[-1][0] == ("AAA", "SPY")
     assert market.rules.benchmark_close.equals(frames["SPY"]["close"])
     chosen = backtest.run(replace(request, filters=(RuleChoice("market"),), benchmark="qqq"))
-    assert chosen.benchmark == "QQQ" and provider.calls[-1][0] == ("AAA", "QQQ")
+    assert chosen.benchmark == "QQQ"
+    assert provider.calls[-1][0] == ("AAA", "QQQ")
     with pytest.raises(ValueError, match="No data for the benchmark NOPE, which the market filter compares"):
         backtest.run(replace(request, filters=(RuleChoice("market"),), benchmark="nope"))

@@ -15,9 +15,14 @@ import {
 
 describe("watchlist backtest form", () => {
   it("round-trips the universe and the setup without a ticker", () => {
-    const url = "w=us_large&signal=connors_rsi2_long&filter=market&b=qqq&set.risk.atr_mult=2.5&exit=target&ex.target.target_r=3";
+    const url =
+      "w=us_large&signal=connors_rsi2_long&filter=market&b=qqq&set.risk.atr_mult=2.5&exit=target&ex.target.target_r=3";
     const form = readWatchlistForm(new URLSearchParams(url), config);
-    expect(form).toMatchObject({ universe: { watchlist: "us_large", tickers: "" }, signal: "connors_rsi2_long", benchmark: "QQQ" });
+    expect(form).toMatchObject({
+      universe: { watchlist: "us_large", tickers: "" },
+      signal: "connors_rsi2_long",
+      benchmark: "QQQ",
+    });
     expect("ticker" in form).toBe(false);
     expect(watchlistBody(form)).toEqual({
       watchlist: "us_large",
@@ -74,7 +79,13 @@ describe("watchlist backtest results", () => {
 
   it("exports every metric of every period", () => {
     const [first, second] = rowsToCsv(watchlistResult);
-    expect(first).toMatchObject({ ticker: "AAPL", oos_start: "2023-07-03", full_expectancy_r: 0.3, is_trades: 28, oos_expectancy_r: -0.1 });
+    expect(first).toMatchObject({
+      ticker: "AAPL",
+      oos_start: "2023-07-03",
+      full_expectancy_r: 0.3,
+      is_trades: 28,
+      oos_expectancy_r: -0.1,
+    });
     expect(second).toMatchObject({ ticker: "MSFT", oos_start: "", is_trades: null, oos_sharpe: null });
   });
 });

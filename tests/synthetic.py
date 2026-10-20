@@ -15,8 +15,8 @@ from tradescan.signals.base import Direction, Family, Signal
 
 
 def make_ohlcv(
-    close: Sequence[float],
-    opens: Sequence[float] | None = None,
+    close: Sequence[float] | np.ndarray,
+    opens: Sequence[float] | np.ndarray | None = None,
     spread: float = 0.01,
     volume: float | Sequence[float] = 1_000_000.0,
     start: str = "2015-01-01",

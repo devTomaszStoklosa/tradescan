@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { ParamSpecOut } from "../api/client";
 import { useConfig } from "../api/hooks";
-import { fmtCompact, fmtNumber } from "../lib/format";
+import { fmtCompact, fmtNumber, fmtParam } from "../lib/format";
 import { problemOf } from "../lib/overrides";
 import { useAccount, type Account } from "../state/account";
 import { Button, Field, NumberInput } from "./ui";
@@ -27,7 +27,6 @@ export function AccountMenu() {
 
   useEffect(() => {
     if (!open) return;
-    setDraft(account);
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && setOpen(false);
     const onClick = (event: MouseEvent) => {
       if (panel.current && !panel.current.contains(event.target as Node)) setOpen(false);
@@ -53,7 +52,15 @@ export function AccountMenu() {
 
   return (
     <div className="relative" ref={panel}>
-      <Button onClick={() => setOpen(!open)} aria-expanded={open} aria-haspopup="dialog" title="Account size and risk per trade">
+      <Button
+        onClick={() => {
+          if (!open) setDraft(account); // the menu opens on the account in use
+          setOpen(!open);
+        }}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        title="Account size and risk per trade"
+      >
         <span className="num">
           {fmtCompact(equity)} · {fmtNumber(riskPct, 1)}%
         </span>
@@ -64,7 +71,9 @@ export function AccountMenu() {
           aria-label="Account settings"
           className="absolute right-0 z-40 mt-2 w-72 max-w-[calc(100vw-2rem)] space-y-3 rounded-xl border border-line bg-panel p-4 shadow-xl"
         >
-          <p className="text-xs text-muted">Used for position sizing in scans and backtests. Empty fields use the server defaults.</p>
+          <p className="text-xs text-muted">
+            Used for position sizing in scans and backtests. Empty fields use the server defaults.
+          </p>
           {FIELDS.map(({ key, param }) => {
             const fieldSpec = spec(param);
             if (!fieldSpec) return null;
@@ -77,7 +86,7 @@ export function AccountMenu() {
                   min={fieldSpec.minimum}
                   max={fieldSpec.maximum}
                   step={String(fieldSpec.step)}
-                  placeholder={String(fieldSpec.default)}
+                  placeholder={fmtParam(fieldSpec.default)}
                   invalid={problem !== null}
                   onChange={(next) => setDraft({ ...draft, [key]: next })}
                 />

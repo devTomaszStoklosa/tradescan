@@ -64,14 +64,16 @@ export const entryRules: RuleOut[] = [
     name: "stop",
     label: "Stop order",
     description: "Buy-stop 0 ATR above the signal bar's high (sell-stop below its low for shorts), active for 1 bar(s)",
-    template: "Buy-stop {offset_atr:g} ATR above the signal bar's high (sell-stop below its low for shorts), active for {valid_bars} bar(s)",
+    template:
+      "Buy-stop {offset_atr:g} ATR above the signal bar's high (sell-stop below its low for shorts), active for {valid_bars} bar(s)",
     params: [spec("offset_atr", "Offset", 0, [0, 5, 0.05], "float", { unit: "ATR" }), VALID_BARS],
   },
   {
     name: "limit",
     label: "Limit order",
     description: "Buy-limit 0.5 ATR below the signal bar's close (sell-limit above it for shorts), active for 1 bar(s)",
-    template: "Buy-limit {offset_atr:g} ATR below the signal bar's close (sell-limit above it for shorts), active for {valid_bars} bar(s)",
+    template:
+      "Buy-limit {offset_atr:g} ATR below the signal bar's close (sell-limit above it for shorts), active for {valid_bars} bar(s)",
     params: [spec("offset_atr", "Offset", 0.5, [0, 5, 0.05], "float", { unit: "ATR" }), VALID_BARS],
   },
 ];
@@ -132,7 +134,10 @@ export const priorityRules: PriorityRuleOut[] = [
     label: "Momentum",
     description: "Return from 252 bars ago to 21 bars ago",
     template: "Return from {lookback} bars ago to {skip} bars ago",
-    params: [spec("lookback", "Lookback", 252, [2, 1000, 1], "int", { unit: "bars" }), spec("skip", "Skip", 21, [0, 250, 1], "int", { unit: "bars" })],
+    params: [
+      spec("lookback", "Lookback", 252, [2, 1000, 1], "int", { unit: "bars" }),
+      spec("skip", "Skip", 21, [0, 250, 1], "int", { unit: "bars" }),
+    ],
     needs_scan: false,
   },
   {
@@ -147,7 +152,13 @@ export const priorityRules: PriorityRuleOut[] = [
 
 /** What /api/config lists as weighting rules of a rotation. */
 export const weightRules: RuleOut[] = [
-  { name: "equal", label: "Equal", description: "Every pick gets one slot", template: "Every pick gets one slot", params: [] },
+  {
+    name: "equal",
+    label: "Equal",
+    description: "Every pick gets one slot",
+    template: "Every pick gets one slot",
+    params: [],
+  },
   {
     name: "inverse_volatility",
     label: "Inverse volatility",
@@ -203,7 +214,9 @@ export const config: ConfigOut = {
       label: "Scoring",
       params: [
         spec("trend_bonus", "Daily trend bonus", 1, [0, 10, 0.5]),
-        spec("family_weights", "Family weights", FAMILY_WEIGHTS, [-10, 10, 0.5], "weights", { keys: Object.keys(FAMILY_WEIGHTS) }),
+        spec("family_weights", "Family weights", FAMILY_WEIGHTS, [-10, 10, 0.5], "weights", {
+          keys: Object.keys(FAMILY_WEIGHTS),
+        }),
         spec("signal_weights", "Signal weights", {}, [-10, 10, 0.5], "weights"),
       ],
     },
@@ -291,7 +304,17 @@ export const config: ConfigOut = {
     max_runs: 2000,
     schemes: ["rolling", "anchored"],
     default_scheme: "rolling",
-    metrics: ["total_return_pct", "cagr_pct", "sharpe", "sortino", "max_drawdown_pct", "win_rate_pct", "profit_factor", "expectancy_r", "sqn"],
+    metrics: [
+      "total_return_pct",
+      "cagr_pct",
+      "sharpe",
+      "sortino",
+      "max_drawdown_pct",
+      "win_rate_pct",
+      "profit_factor",
+      "expectancy_r",
+      "sqn",
+    ],
     default_metric: "sharpe",
     fixed: ["account.equity", "backtest.oos_pct"],
   },
@@ -343,7 +366,15 @@ export function makeHit(overrides: Partial<HitOut> = {}): HitOut {
     rs_percentile: 90,
     fired: [{ name: "donchian_breakout", family: "breakout", bars_ago: 0, weight: 1.5 }],
     score: { total: 4.5, signals: 1.5, trend: 1, weekly: 1, relative_strength: 1 },
-    risk: { entry: 200, stop: 192, targets: [216, 224], risk_per_share: 8, size: 125, position_value: 25000, risk_amount: 1000 },
+    risk: {
+      entry: 200,
+      stop: 192,
+      targets: [216, 224],
+      risk_per_share: 8,
+      size: 125,
+      position_value: 25000,
+      risk_amount: 1000,
+    },
     edge: {
       signal: "donchian_breakout",
       horizon: 10,
@@ -372,7 +403,15 @@ export const scanResult: ScanOut = {
     universe_size: 2,
     regime: "risk-on",
   },
-  hits: [makeHit(), makeHit({ ticker: "MSFT", direction: "short", score: { total: 2, signals: 1, trend: 0, weekly: 0, relative_strength: 1 }, edge: null })],
+  hits: [
+    makeHit(),
+    makeHit({
+      ticker: "MSFT",
+      direction: "short",
+      score: { total: 2, signals: 1, trend: 0, weekly: 0, relative_strength: 1 },
+      edge: null,
+    }),
+  ],
   missing: [],
   skipped: [],
   min_score: 1,
@@ -505,7 +544,11 @@ export const backtestForm: BacktestForm = {
 type PinFields = Pick<PinnedRun, "id" | "slot" | "name" | "pinnedAt" | "hidden">;
 
 /** A pinned run of `backtestResult`, changed by `overrides`, with a fixed slot. */
-export function makeRun(slot: number, overrides: Partial<BacktestSnapshot> = {}, extra: Partial<PinFields> = {}): PinnedBacktestRun {
+export function makeRun(
+  slot: number,
+  overrides: Partial<BacktestSnapshot> = {},
+  extra: Partial<PinFields> = {},
+): PinnedBacktestRun {
   const snapshot: BacktestSnapshot = {
     kind: "backtest",
     ticker: backtestResult.ticker,
@@ -522,7 +565,11 @@ export function makeRun(slot: number, overrides: Partial<BacktestSnapshot> = {},
     filters: backtestResult.filters,
     benchmark: backtestResult.benchmark,
     metrics: makeMetrics(),
-    split: { ...backtestResult.split!, in_sample: makeMetrics({ sharpe: 1.1, trades: 30 }), out_of_sample: makeMetrics({ sharpe: 0.2, trades: 12 }) },
+    split: {
+      ...backtestResult.split!,
+      in_sample: makeMetrics({ sharpe: 1.1, trades: 30 }),
+      out_of_sample: makeMetrics({ sharpe: 0.2, trades: 12 }),
+    },
     monteCarlo: makeMonteCarlo(),
     equity: backtestResult.runs[0]!.equity,
     form: backtestForm,
@@ -555,8 +602,28 @@ export const sweepResult: SweepOut = {
   engine: "vectorized",
   split: backtestResult.split!,
   axes: [
-    { target: "signal", owner: null, name: "oversold", key: "signal.oversold", label: "Oversold level", unit: "", kind: "float", current: 10, values: [5, 10, 15] },
-    { target: "exit", owner: "target", name: "target_r", key: "exit.target.target_r", label: "Distance", unit: "R", kind: "float", current: 2, values: [2, 3] },
+    {
+      target: "signal",
+      owner: null,
+      name: "oversold",
+      key: "signal.oversold",
+      label: "Oversold level",
+      unit: "",
+      kind: "float",
+      current: 10,
+      values: [5, 10, 15],
+    },
+    {
+      target: "exit",
+      owner: "target",
+      name: "target_r",
+      key: "exit.target.target_r",
+      label: "Distance",
+      unit: "R",
+      kind: "float",
+      current: 2,
+      values: [2, 3],
+    },
   ],
   cells: [
     sweepCell([5, 2], [0.4, 0.1]),
@@ -655,8 +722,17 @@ export const walkForwardResult: WalkForwardOut = {
   ],
   trades: [
     {
-      direction: "long", signal_date: "2023-09-28", entry_date: "2023-09-29", exit_date: "2023-10-12",
-      entry_price: 428, exit_price: 434, size: 50, pnl: 270, r_multiple: 0.6, exit_reason: "time", adds: [],
+      direction: "long",
+      signal_date: "2023-09-28",
+      entry_date: "2023-09-29",
+      exit_date: "2023-10-12",
+      entry_price: 428,
+      exit_price: 434,
+      size: 50,
+      pnl: 270,
+      r_multiple: 0.6,
+      exit_reason: "time",
+      adds: [],
     },
   ],
 };
@@ -710,23 +786,78 @@ export const watchlistResult: WatchlistBacktestOut = {
     {
       period: "full",
       tickers: 2,
-      pooled: { trades: 46, win_rate_pct: 58.7, expectancy_r: 0.33, profit_factor_r: 1.8, profit_factor_infinite: false, sqn: 2.1 },
+      pooled: {
+        trades: 46,
+        win_rate_pct: 58.7,
+        expectancy_r: 0.33,
+        profit_factor_r: 1.8,
+        profit_factor_infinite: false,
+        sqn: 2.1,
+      },
       spread: [
-        spread("expectancy_r", { median: 0.4, p25: 0.35, p75: 0.45, minimum: 0.3, maximum: 0.5, above_break_even_pct: 100 }),
-        spread("profit_factor", { median: null, p25: 1.6, p75: null, minimum: 1.6, maximum: null, above_break_even_pct: 100 }),
+        spread("expectancy_r", {
+          median: 0.4,
+          p25: 0.35,
+          p75: 0.45,
+          minimum: 0.3,
+          maximum: 0.5,
+          above_break_even_pct: 100,
+        }),
+        spread("profit_factor", {
+          median: null,
+          p25: 1.6,
+          p75: null,
+          minimum: 1.6,
+          maximum: null,
+          above_break_even_pct: 100,
+        }),
       ],
     },
     {
       period: "in_sample",
       tickers: 1,
-      pooled: { trades: 28, win_rate_pct: 60, expectancy_r: 0.4, profit_factor_r: 2, profit_factor_infinite: false, sqn: 2.3 },
-      spread: [spread("expectancy_r", { tickers: 1, median: 0.4, p25: 0.4, p75: 0.4, minimum: 0.4, maximum: 0.4, above_break_even_pct: 100 })],
+      pooled: {
+        trades: 28,
+        win_rate_pct: 60,
+        expectancy_r: 0.4,
+        profit_factor_r: 2,
+        profit_factor_infinite: false,
+        sqn: 2.3,
+      },
+      spread: [
+        spread("expectancy_r", {
+          tickers: 1,
+          median: 0.4,
+          p25: 0.4,
+          p75: 0.4,
+          minimum: 0.4,
+          maximum: 0.4,
+          above_break_even_pct: 100,
+        }),
+      ],
     },
     {
       period: "out_of_sample",
       tickers: 1,
-      pooled: { trades: 12, win_rate_pct: 41.7, expectancy_r: -0.1, profit_factor_r: 0.8, profit_factor_infinite: false, sqn: -0.4 },
-      spread: [spread("expectancy_r", { tickers: 1, median: -0.1, p25: -0.1, p75: -0.1, minimum: -0.1, maximum: -0.1, above_break_even_pct: 0 })],
+      pooled: {
+        trades: 12,
+        win_rate_pct: 41.7,
+        expectancy_r: -0.1,
+        profit_factor_r: 0.8,
+        profit_factor_infinite: false,
+        sqn: -0.4,
+      },
+      spread: [
+        spread("expectancy_r", {
+          tickers: 1,
+          median: -0.1,
+          p25: -0.1,
+          p75: -0.1,
+          minimum: -0.1,
+          maximum: -0.1,
+          above_break_even_pct: 0,
+        }),
+      ],
     },
   ],
   missing: ["TSLA"],
@@ -748,7 +879,10 @@ export function makePortfolioRun(engine: string, overrides: Partial<PortfolioRun
     engine,
     full: { metrics: makeMetrics({ trades: 118, buy_hold_pct: 180.5 }), stats: portfolioStats() },
     in_sample: { metrics: makeMetrics({ sharpe: 1.1, trades: 80 }), stats: portfolioStats({ orders: 82 }) },
-    out_of_sample: { metrics: makeMetrics({ sharpe: 0.3, trades: 38 }), stats: portfolioStats({ orders: 38, skipped_no_room: 0 }) },
+    out_of_sample: {
+      metrics: makeMetrics({ sharpe: 0.3, trades: 38 }),
+      stats: portfolioStats({ orders: 38, skipped_no_room: 0 }),
+    },
     equity: [
       { time: "2016-01-04", value: 100000 },
       { time: "2026-10-13", value: 115000 },
@@ -759,12 +893,32 @@ export function makePortfolioRun(engine: string, overrides: Partial<PortfolioRun
     ],
     trades: [
       {
-        ticker: "AAPL", direction: "long", signal_date: "2024-03-01", entry_date: "2024-03-04", exit_date: "2024-03-08",
-        entry_price: 170, exit_price: 178, size: 100, pnl: 780, r_multiple: 1.6, exit_reason: "target", adds: [],
+        ticker: "AAPL",
+        direction: "long",
+        signal_date: "2024-03-01",
+        entry_date: "2024-03-04",
+        exit_date: "2024-03-08",
+        entry_price: 170,
+        exit_price: 178,
+        size: 100,
+        pnl: 780,
+        r_multiple: 1.6,
+        exit_reason: "target",
+        adds: [],
       },
       {
-        ticker: "MSFT", direction: "long", signal_date: "2024-03-01", entry_date: "2024-03-04", exit_date: "2024-03-06",
-        entry_price: 400, exit_price: 390, size: 40, pnl: -430, r_multiple: -1.05, exit_reason: "stop", adds: [],
+        ticker: "MSFT",
+        direction: "long",
+        signal_date: "2024-03-01",
+        entry_date: "2024-03-04",
+        exit_date: "2024-03-06",
+        entry_price: 400,
+        exit_price: 390,
+        size: 40,
+        pnl: -430,
+        r_multiple: -1.05,
+        exit_reason: "stop",
+        adds: [],
       },
     ],
     tickers: [
@@ -811,9 +965,18 @@ export const portfolioForm: PortfolioForm = {
 };
 
 /** A pinned run of `portfolioResult`, changed by `overrides`, with a fixed slot. */
-export function makePortfolioPin(slot: number, overrides: Partial<PortfolioSnapshot> = {}, extra: Partial<PinFields> = {}): PinnedPortfolioRun {
+export function makePortfolioPin(
+  slot: number,
+  overrides: Partial<PortfolioSnapshot> = {},
+  extra: Partial<PinFields> = {},
+): PinnedPortfolioRun {
   const snapshot = snapshotPortfolioRun(portfolioResult, "vectorized", portfolioForm)!;
-  return { ...toPinnedRun({ ...snapshot, ...overrides }, new Date("2026-10-14T09:00:00Z")), id: `portfolio-${slot}`, slot, ...extra };
+  return {
+    ...toPinnedRun({ ...snapshot, ...overrides }, new Date("2026-10-14T09:00:00Z")),
+    id: `portfolio-${slot}`,
+    slot,
+    ...extra,
+  };
 }
 
 /** What the scan score priority reads of the scanner with the default settings, changed by `scoring` and the
@@ -860,10 +1023,25 @@ export const rotationResult: RotationOut = {
     { time: "2017-10-31", value: 100000 },
     { time: "2026-10-16", value: 340000 },
   ],
-  split: { oos_pct: 30, in_sample_start: "2017-10-31", in_sample_end: "2024-02-06", out_of_sample_start: "2024-02-07", out_of_sample_end: "2026-10-16" },
-  full: { metrics: makeMetrics({ total_return_pct: 163.6, trades: 94, expectancy_r: null, sqn: null, buy_hold_pct: 240.7 }), stats: rotationStats() },
-  in_sample: { metrics: makeMetrics({ sharpe: 0.43, trades: 64, expectancy_r: null, sqn: null }), stats: rotationStats({ rebalances: 76 }) },
-  out_of_sample: { metrics: makeMetrics({ sharpe: 1.09, trades: 29, expectancy_r: null, sqn: null }), stats: rotationStats({ rebalances: 32 }) },
+  split: {
+    oos_pct: 30,
+    in_sample_start: "2017-10-31",
+    in_sample_end: "2024-02-06",
+    out_of_sample_start: "2024-02-07",
+    out_of_sample_end: "2026-10-16",
+  },
+  full: {
+    metrics: makeMetrics({ total_return_pct: 163.6, trades: 94, expectancy_r: null, sqn: null, buy_hold_pct: 240.7 }),
+    stats: rotationStats(),
+  },
+  in_sample: {
+    metrics: makeMetrics({ sharpe: 0.43, trades: 64, expectancy_r: null, sqn: null }),
+    stats: rotationStats({ rebalances: 76 }),
+  },
+  out_of_sample: {
+    metrics: makeMetrics({ sharpe: 1.09, trades: 29, expectancy_r: null, sqn: null }),
+    stats: rotationStats({ rebalances: 32 }),
+  },
   equity: [
     { time: "2017-10-31", value: 100000 },
     { time: "2026-10-16", value: 263600 },
@@ -883,12 +1061,32 @@ export const rotationResult: RotationOut = {
   },
   trades: [
     {
-      ticker: "GLD", direction: "long", signal_date: "2024-02-29", entry_date: "2024-03-01", exit_date: "2024-11-01",
-      entry_price: 190.5, exit_price: 250.2, size: 160, pnl: 9400, r_multiple: null, exit_reason: "rebalance", adds: [],
+      ticker: "GLD",
+      direction: "long",
+      signal_date: "2024-02-29",
+      entry_date: "2024-03-01",
+      exit_date: "2024-11-01",
+      entry_price: 190.5,
+      exit_price: 250.2,
+      size: 160,
+      pnl: 9400,
+      r_multiple: null,
+      exit_reason: "rebalance",
+      adds: [],
     },
     {
-      ticker: "XLE", direction: "long", signal_date: "2026-08-31", entry_date: "2026-09-01", exit_date: "2026-10-16",
-      entry_price: 88.1, exit_price: 95.4, size: 400, pnl: 2900, r_multiple: null, exit_reason: "open", adds: [],
+      ticker: "XLE",
+      direction: "long",
+      signal_date: "2026-08-31",
+      entry_date: "2026-09-01",
+      exit_date: "2026-10-16",
+      entry_price: 88.1,
+      exit_price: 95.4,
+      size: 400,
+      pnl: 2900,
+      r_multiple: null,
+      exit_reason: "open",
+      adds: [],
     },
   ],
   tickers: [

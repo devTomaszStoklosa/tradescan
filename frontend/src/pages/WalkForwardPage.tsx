@@ -1,7 +1,14 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, type SubmitEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
-import type { ConfigOut, MetricsOut, SignalOut, WalkForwardOut, WalkForwardWindowOut, WindowScheme } from "../api/client";
+import type {
+  ConfigOut,
+  MetricsOut,
+  SignalOut,
+  WalkForwardOut,
+  WalkForwardWindowOut,
+  WindowScheme,
+} from "../api/client";
 import { useConfig, useSignals, useWalkForward } from "../api/hooks";
 import { METRICS, MetricsTable, TradesTable } from "../components/BacktestResults";
 import { BacktestSetupFields } from "../components/BacktestSetupFields";
@@ -11,13 +18,27 @@ import { SectionFields } from "../components/ParamFields";
 import { SweptParameters } from "../components/SweepAxisFields";
 import { describeCombination } from "../components/SweepHeatmap";
 import { GroupHeading } from "../components/TradeRuleFields";
-import { Button, DirectionBadge, EmptyState, ErrorBox, Field, Loading, Notice, PageHeader, Panel, Segmented, Select, StatTile } from "../components/ui";
+import {
+  Button,
+  DirectionBadge,
+  EmptyState,
+  ErrorBox,
+  Field,
+  Loading,
+  Notice,
+  PageHeader,
+  Panel,
+  Segmented,
+  Select,
+  StatTile,
+} from "../components/ui";
 import { WALK_FORWARD_PAGE_SECTIONS, WALK_FORWARD_SECTION } from "../lib/choices";
 import { MIN_TRADES } from "../lib/compare";
 import { downloadCsv, tradeRow } from "../lib/csv";
 import { DASH, fmtNumber, fmtPct, tone } from "../lib/format";
 import { hasSetupProblems } from "../lib/setup";
 import type { SweepParam } from "../lib/sweep";
+import { useResettableState } from "../lib/useResettableState";
 import {
   backtestLink,
   readWalkForwardForm,
@@ -59,17 +80,18 @@ function WalkForwardFormPanel({
   busy: boolean;
   onSubmit: (form: WalkForwardForm) => void;
 }) {
-  const [draft, setDraft] = useState(initial);
-  useEffect(() => setDraft(initial), [initial]);
+  const [draft, setDraft] = useResettableState(initial);
   const limits = config.walk_forward;
   const params = useMemo(() => walkForwardParams(draft, config, signals), [draft, config, signals]);
   const runs = walkForwardRuns(draft, params, config);
   const changes = walkForwardChanges(draft, config);
-  const invalid = hasSetupProblems(draft, config, signals, WALK_FORWARD_PAGE_SECTIONS) || walkForwardBody(draft, params, config) === null;
+  const invalid =
+    hasSetupProblems(draft, config, signals, WALK_FORWARD_PAGE_SECTIONS) ||
+    walkForwardBody(draft, params, config) === null;
   const section = config.sections.find((item) => item.name === WALK_FORWARD_SECTION);
   const tooMany = runs !== null && (runs.combinations > config.sweep.max_combinations || runs.runs > limits.max_runs);
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: SubmitEvent) => {
     event.preventDefault();
     if (!invalid) onSubmit(draft);
   };
@@ -78,16 +100,29 @@ function WalkForwardFormPanel({
     <Panel>
       <form onSubmit={submit} noValidate className="space-y-4">
         <BacktestSetupFields draft={draft} onChange={setDraft} config={config} signals={signals} outOfSample={false} />
-        <SweptParameters axes={draft.axes} params={params} limits={config.sweep} canAdd={Boolean(draft.signal)} onChange={(axes) => setDraft({ ...draft, axes })} />
+        <SweptParameters
+          axes={draft.axes}
+          params={params}
+          limits={config.sweep}
+          canAdd={Boolean(draft.signal)}
+          onChange={(axes) => setDraft({ ...draft, axes })}
+        />
         <section className="space-y-3">
           <h2 className="text-sm font-semibold">Windows</h2>
           <div className="grid gap-x-6 gap-y-4 md:grid-cols-2 lg:grid-cols-3">
             {/* Not a Field: a label around the buttons would press the first one when its text is clicked. */}
             <div className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted">
               <span>In-sample windows</span>
-              <Segmented label="In-sample windows" value={draft.scheme} options={SCHEMES} onChange={(scheme) => setDraft({ ...draft, scheme })} />
+              <Segmented
+                label="In-sample windows"
+                value={draft.scheme}
+                options={SCHEMES}
+                onChange={(scheme) => setDraft({ ...draft, scheme })}
+              />
               <span className="font-normal">
-                {draft.scheme === "rolling" ? "Of fixed length, sliding along with the out-of-sample windows" : "From the first bar, growing with every window"}
+                {draft.scheme === "rolling"
+                  ? "Of fixed length, sliding along with the out-of-sample windows"
+                  : "From the first bar, growing with every window"}
               </span>
             </div>
             <Field label="Pick by" hint="Each in-sample window picks the combination with the highest value">
@@ -102,7 +137,12 @@ function WalkForwardFormPanel({
             {section && (
               <div className="space-y-2">
                 <GroupHeading>Windows and picks</GroupHeading>
-                <SectionFields section={section} overrides={draft.settings} onChange={(settings) => setDraft({ ...draft, settings })} className="grid grid-cols-2 gap-3" />
+                <SectionFields
+                  section={section}
+                  overrides={draft.settings}
+                  onChange={(settings) => setDraft({ ...draft, settings })}
+                  className="grid grid-cols-2 gap-3"
+                />
               </div>
             )}
           </div>
@@ -141,10 +181,23 @@ function WalkForwardTiles({ result }: { result: WalkForwardOut }) {
         valueClass={tone(m.total_return_pct)}
         sub={`unchanged setup ${fmtPct(u.total_return_pct, 1, true)}`}
       />
-      <StatTile label="CAGR" value={fmtPct(m.cagr_pct, 1, true)} sub={`buy & hold ${fmtPct(m.buy_hold_pct, 1, true)} in all`} />
+      <StatTile
+        label="CAGR"
+        value={fmtPct(m.cagr_pct, 1, true)}
+        sub={`buy & hold ${fmtPct(m.buy_hold_pct, 1, true)} in all`}
+      />
       <StatTile label="Sharpe" value={fmtNumber(m.sharpe)} sub={`unchanged setup ${fmtNumber(u.sharpe)}`} />
-      <StatTile label="Max drawdown" value={fmtPct(m.max_drawdown_pct, 1)} valueClass="text-down" sub={`unchanged setup ${fmtPct(u.max_drawdown_pct, 1)}`} />
-      <StatTile label="Trades" value={String(m.trades)} sub={`win rate ${fmtPct(m.win_rate_pct, 0)}, ${metricText(m, "expectancy_r")}`} />
+      <StatTile
+        label="Max drawdown"
+        value={fmtPct(m.max_drawdown_pct, 1)}
+        valueClass="text-down"
+        sub={`unchanged setup ${fmtPct(u.max_drawdown_pct, 1)}`}
+      />
+      <StatTile
+        label="Trades"
+        value={String(m.trades)}
+        sub={`win rate ${fmtPct(m.win_rate_pct, 0)}, ${metricText(m, "expectancy_r")}`}
+      />
       <StatTile
         label="Walk-forward efficiency"
         value={result.efficiency === null ? DASH : fmtNumber(result.efficiency)}
@@ -159,7 +212,8 @@ type WindowRow = WalkForwardWindowOut & { number: number; nextStart: string | nu
 
 /** Whether a window's pick traded other bars than its own: it started late, because a position of the window before was
  * still open, or it ran on, because one of its own was. */
-const shifted = (row: WindowRow) => row.traded_from !== row.out_of_sample_start || row.traded_to !== (row.nextStart ?? row.traded_to);
+const shifted = (row: WindowRow) =>
+  row.traded_from !== row.out_of_sample_start || row.traded_to !== (row.nextStart ?? row.traded_to);
 
 function WindowsTable({ result }: { result: WalkForwardOut }) {
   const label = metricLabel(result.metric);
@@ -167,11 +221,16 @@ function WindowsTable({ result }: { result: WalkForwardOut }) {
     () => [
       { key: "number", header: "#", align: "right", render: (row) => String(row.number) },
       { key: "in_sample", header: "In-sample", render: (row) => `${row.in_sample_start} → ${row.in_sample_end}` },
-      { key: "out_of_sample", header: "Out-of-sample", render: (row) => `${row.out_of_sample_start} → ${row.out_of_sample_end}` },
+      {
+        key: "out_of_sample",
+        header: "Out-of-sample",
+        render: (row) => `${row.out_of_sample_start} → ${row.out_of_sample_end}`,
+      },
       {
         key: "traded",
         header: "Traded",
-        title: "The bars this window's pick owned: a position still open at a window's end runs to its exit, and the next window trades from there",
+        title:
+          "The bars this window's pick owned: a position still open at a window's end runs to its exit, and the next window trades from there",
         render: (row) =>
           row.traded_from === null ? (
             <span className="text-warn">skipped: the window before was still in a trade</span>
@@ -185,7 +244,12 @@ function WindowsTable({ result }: { result: WalkForwardOut }) {
         key: "pick",
         header: "Pick",
         wrap: true,
-        render: (row) => (row.values ? describeCombination(result.axes, row.values) : <span className="text-warn">none qualified, held cash</span>),
+        render: (row) =>
+          row.values ? (
+            describeCombination(result.axes, row.values)
+          ) : (
+            <span className="text-warn">none qualified, held cash</span>
+          ),
       },
       {
         key: "qualified",
@@ -194,23 +258,55 @@ function WindowsTable({ result }: { result: WalkForwardOut }) {
         align: "right",
         render: (row) => `${row.qualified} of ${result.combinations}`,
       },
-      { key: "is", header: `In-sample ${label}`, align: "right", render: (row) => metricText(row.in_sample, result.metric) },
-      { key: "oos", header: `Out-of-sample ${label}`, align: "right", render: (row) => metricText(row.out_of_sample, result.metric) },
-      { key: "trades", header: "Trades", align: "right", render: (row) => (row.out_of_sample ? String(row.out_of_sample.trades) : DASH) },
+      {
+        key: "is",
+        header: `In-sample ${label}`,
+        align: "right",
+        render: (row) => metricText(row.in_sample, result.metric),
+      },
+      {
+        key: "oos",
+        header: `Out-of-sample ${label}`,
+        align: "right",
+        render: (row) => metricText(row.out_of_sample, result.metric),
+      },
+      {
+        key: "trades",
+        header: "Trades",
+        align: "right",
+        render: (row) => (row.out_of_sample ? String(row.out_of_sample.trades) : DASH),
+      },
       {
         key: "return",
         header: "Return",
         align: "right",
-        render: (row) => <span className={tone(row.out_of_sample?.total_return_pct)}>{fmtPct(row.out_of_sample?.total_return_pct, 1, true)}</span>,
+        render: (row) => (
+          <span className={tone(row.out_of_sample?.total_return_pct)}>
+            {fmtPct(row.out_of_sample?.total_return_pct, 1, true)}
+          </span>
+        ),
       },
     ],
     [result, label],
   );
   const rows = useMemo(
-    () => result.windows.map((window, index) => ({ ...window, number: index + 1, nextStart: result.windows[index + 1]?.out_of_sample_start ?? null })),
+    () =>
+      result.windows.map((window, index) => ({
+        ...window,
+        number: index + 1,
+        nextStart: result.windows[index + 1]?.out_of_sample_start ?? null,
+      })),
     [result],
   );
-  return <DataTable rows={rows} columns={columns} rowKey={(row) => String(row.number)} caption="Walk-forward windows" dense />;
+  return (
+    <DataTable
+      rows={rows}
+      columns={columns}
+      rowKey={(row) => String(row.number)}
+      caption="Walk-forward windows"
+      dense
+    />
+  );
 }
 
 function windowsCsv(result: WalkForwardOut) {
@@ -229,17 +325,37 @@ function windowsCsv(result: WalkForwardOut) {
   }));
 }
 
-function WalkForwardView({ result, form, params, config }: { result: WalkForwardOut; form: WalkForwardForm; params: SweepParam[]; config: ConfigOut }) {
+function WalkForwardView({
+  result,
+  form,
+  params,
+  config,
+}: {
+  result: WalkForwardOut;
+  form: WalkForwardForm;
+  params: SweepParam[];
+  config: ConfigOut;
+}) {
   const series = useMemo<EquitySeries[]>(
     () => [
       { label: "walk-forward equity", points: result.equity, colorVar: "--accent" },
       { label: "unchanged setup", points: result.unchanged_equity, colorVar: "--warn" },
-      { label: `${result.ticker} buy & hold`, points: result.buy_hold, colorVar: "--chart-benchmark", dashed: true, axis: "left" },
+      {
+        label: `${result.ticker} buy & hold`,
+        points: result.buy_hold,
+        colorVar: "--chart-benchmark",
+        dashed: true,
+        axis: "left",
+      },
     ],
     [result],
   );
   const events = useMemo<EquityEvent[]>(
-    () => result.windows.map((window, index) => ({ time: window.traded_from ?? window.out_of_sample_start, text: `W${index + 1}` })),
+    () =>
+      result.windows.map((window, index) => ({
+        time: window.traded_from ?? window.out_of_sample_start,
+        text: `W${index + 1}`,
+      })),
     [result],
   );
   const label = metricLabel(result.metric);
@@ -257,24 +373,27 @@ function WalkForwardView({ result, form, params, config }: { result: WalkForward
           <span className="text-muted">{result.description}</span>
         </div>
         <p className="text-muted">
-          {plural(result.combinations, "combination")} on the {result.engine} engine · {windows.windows} {result.scheme} windows of {windows.out_of_sample_bars}{" "}
-          bars after in-sample windows of {windows.in_sample_bars} bars{result.scheme === "anchored" ? " or more" : ""} · picked by the highest in-sample{" "}
-          {label} with at least {plural(windows.min_trades, "trade")}
+          {plural(result.combinations, "combination")} on the {result.engine} engine · {windows.windows} {result.scheme}{" "}
+          windows of {windows.out_of_sample_bars} bars after in-sample windows of {windows.in_sample_bars} bars
+          {result.scheme === "anchored" ? " or more" : ""} · picked by the highest in-sample {label} with at least{" "}
+          {plural(windows.min_trades, "trade")}
         </p>
         <p className="text-xs text-muted">
-          Each window trades its pick with the equity the window before ended with, and its signal fires only within the window. A position still open at a
-          window's end runs to its own exit, and the next window trades from there. The unchanged setup trades the same bars with the values as set.
+          Each window trades its pick with the equity the window before ended with, and its signal fires only within the
+          window. A position still open at a window's end runs to its own exit, and the next window trades from there.
+          The unchanged setup trades the same bars with the values as set.
         </p>
       </div>
       {result.errors.length > 0 && (
         <Notice>
-          {plural(result.errors.length, "combination")} could not run and were never picked, e.g. {result.errors[0]!.error}
+          {plural(result.errors.length, "combination")} could not run and were never picked, e.g.{" "}
+          {result.errors[0]?.error}
         </Notice>
       )}
       {few > 0 && (
         <Notice>
-          {plural(few, "window")} picked a setting with fewer than {MIN_TRADES} in-sample trades: its in-sample metrics are mostly noise. Raise the minimum
-          trades or use longer in-sample windows.
+          {plural(few, "window")} picked a setting with fewer than {MIN_TRADES} in-sample trades: its in-sample metrics
+          are mostly noise. Raise the minimum trades or use longer in-sample windows.
         </Notice>
       )}
       <WalkForwardTiles result={result} />
@@ -295,7 +414,10 @@ function WalkForwardView({ result, form, params, config }: { result: WalkForward
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">The setting to trade next</h2>
           {next.values && axisParams.every(Boolean) && (
-            <Link to={`/backtest?${backtestLink(form, axisParams as SweepParam[], next.values, config).toString()}`} className="text-sm text-accent hover:underline">
+            <Link
+              to={`/backtest?${backtestLink(form, axisParams as SweepParam[], next.values, config).toString()}`}
+              className="text-sm text-accent hover:underline"
+            >
               Open in Backtest →
             </Link>
           )}
@@ -304,8 +426,8 @@ function WalkForwardView({ result, form, params, config }: { result: WalkForward
           {next.values ? describeCombination(result.axes, next.values) : "No combination qualified"}
           <span className="text-muted">
             {" "}
-            · picked on {next.in_sample_start} → {next.in_sample_end}, in-sample {label} {metricText(next.in_sample, result.metric)},{" "}
-            {next.qualified} of {result.combinations} qualified
+            · picked on {next.in_sample_start} → {next.in_sample_end}, in-sample {label}{" "}
+            {metricText(next.in_sample, result.metric)}, {next.qualified} of {result.combinations} qualified
           </span>
         </p>
       </section>
@@ -322,7 +444,10 @@ function WalkForwardView({ result, form, params, config }: { result: WalkForward
       </section>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">{plural(result.trades.length, "out-of-sample trade")}</h2>
-        <Button onClick={() => downloadCsv(`${file}.csv`, result.trades.map(tradeRow))} disabled={!result.trades.length}>
+        <Button
+          onClick={() => downloadCsv(`${file}.csv`, result.trades.map(tradeRow))}
+          disabled={!result.trades.length}
+        >
           Export CSV
         </Button>
       </div>
@@ -366,11 +491,12 @@ export function WalkForwardPage() {
       />
       {!body && !run.data && (
         <EmptyState title="Choose a setup and up to two parameters">
-          Every combination is backtested on each in-sample window; the best one trades the out-of-sample window after it.
+          Every combination is backtested on each in-sample window; the best one trades the out-of-sample window after
+          it.
         </EmptyState>
       )}
       {run.isLoading && <Loading message="Sweeping every in-sample window and trading each pick…" />}
-      {run.isError && <ErrorBox error={run.error} onRetry={() => run.refetch()} />}
+      {run.isError && <ErrorBox error={run.error} onRetry={() => void run.refetch()} />}
       {run.data && <WalkForwardView result={run.data} form={form} params={sweepable} config={defaults} />}
     </>
   );

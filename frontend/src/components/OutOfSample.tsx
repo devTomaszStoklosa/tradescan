@@ -27,9 +27,23 @@ function PeriodHeader({ title, range }: { title: string; range: string }) {
 }
 
 /** The full history next to its two periods, for one engine's run. */
-export function PeriodsPanel({ run, split, start, end }: { run: EngineRunOut; split: SplitOut | null; start: string; end: string }) {
+export function PeriodsPanel({
+  run,
+  split,
+  start,
+  end,
+}: {
+  run: EngineRunOut;
+  split: SplitOut | null;
+  start: string;
+  end: string;
+}) {
   if (!split || !run.in_sample || !run.out_of_sample) {
-    return <Notice>The history is too short to split into an in-sample and an out-of-sample period. Choose a longer history.</Notice>;
+    return (
+      <Notice>
+        The history is too short to split into an in-sample and an out-of-sample period. Choose a longer history.
+      </Notice>
+    );
   }
   const periods: [string, MetricsOut][] = [
     ["In-sample", run.in_sample],
@@ -38,10 +52,19 @@ export function PeriodsPanel({ run, split, start, end }: { run: EngineRunOut; sp
   const few = periods.filter(([, metrics]) => metrics.trades < MIN_TRADES);
   const columns = [
     { key: "full", header: <PeriodHeader title="Full history" range={`${start} → ${end}`} />, metrics: run.metrics },
-    { key: "in", header: <PeriodHeader title="In-sample" range={`${split.in_sample_start} → ${split.in_sample_end}`} />, metrics: run.in_sample },
+    {
+      key: "in",
+      header: <PeriodHeader title="In-sample" range={`${split.in_sample_start} → ${split.in_sample_end}`} />,
+      metrics: run.in_sample,
+    },
     {
       key: "out",
-      header: <PeriodHeader title={`Out-of-sample (${split.oos_pct}%)`} range={`${split.out_of_sample_start} → ${split.out_of_sample_end}`} />,
+      header: (
+        <PeriodHeader
+          title={`Out-of-sample (${split.oos_pct}%)`}
+          range={`${split.out_of_sample_start} → ${split.out_of_sample_end}`}
+        />
+      ),
       metrics: run.out_of_sample,
     },
   ];
@@ -49,9 +72,13 @@ export function PeriodsPanel({ run, split, start, end }: { run: EngineRunOut; sp
     <section className="space-y-2">
       <h2 className="text-sm font-semibold">In-sample vs out-of-sample ({run.engine})</h2>
       <p className="text-xs text-muted">
-        The out-of-sample period is the last part of the history: tune on the in-sample one and check here that the result holds. {PERIOD_NOTE}
+        The out-of-sample period is the last part of the history: tune on the in-sample one and check here that the
+        result holds. {PERIOD_NOTE}
       </p>
-      <MetricsTable columns={columns} caption="Metrics of the full history and of the in-sample and out-of-sample periods" />
+      <MetricsTable
+        columns={columns}
+        caption="Metrics of the full history and of the in-sample and out-of-sample periods"
+      />
       {few.map(([title, metrics]) => (
         <p key={title} className="text-xs text-warn">
           {title}: only {metrics.trades} trades, too few to trust the metrics.
@@ -79,6 +106,20 @@ function PeriodValue({ metrics, metricKey }: { metrics: MetricsOut; metricKey: M
   );
 }
 
+function SplitCells({ split }: { split: NonNullable<PinnedRun["split"]> }) {
+  return (
+    <>
+      <td className="num px-3 py-1.5 whitespace-nowrap text-muted">
+        {split.out_of_sample_start} ({split.oos_pct}%)
+      </td>
+      {CHECKED.flatMap((key) => [
+        <PeriodValue key={`${key}-in`} metrics={split.in_sample} metricKey={key} />,
+        <PeriodValue key={`${key}-out`} metrics={split.out_of_sample} metricKey={key} />,
+      ])}
+    </>
+  );
+}
+
 /** One row per pinned run: key metrics in-sample next to out-of-sample. */
 export function OutOfSampleTable({ runs }: { runs: PinnedRun[] }) {
   const labels = CHECKED.map((key) => METRICS.find((metric) => metric.key === key)?.label ?? key);
@@ -96,7 +137,12 @@ export function OutOfSampleTable({ runs }: { runs: PinnedRun[] }) {
                 Out-of-sample from
               </th>
               {labels.map((label) => (
-                <th key={label} scope="colgroup" colSpan={2} className="border-l border-line px-3 pt-2 text-center font-medium">
+                <th
+                  key={label}
+                  scope="colgroup"
+                  colSpan={2}
+                  className="border-l border-line px-3 pt-2 text-center font-medium"
+                >
                   {label}
                 </th>
               ))}
@@ -119,15 +165,7 @@ export function OutOfSampleTable({ runs }: { runs: PinnedRun[] }) {
                   <RunLabel run={run} />
                 </th>
                 {run.split ? (
-                  <>
-                    <td className="num px-3 py-1.5 whitespace-nowrap text-muted">
-                      {run.split.out_of_sample_start} ({run.split.oos_pct}%)
-                    </td>
-                    {CHECKED.flatMap((key) => [
-                      <PeriodValue key={`${key}-in`} metrics={run.split!.in_sample} metricKey={key} />,
-                      <PeriodValue key={`${key}-out`} metrics={run.split!.out_of_sample} metricKey={key} />,
-                    ])}
-                  </>
+                  <SplitCells split={run.split} />
                 ) : (
                   <td colSpan={1 + CHECKED.length * 2} className="px-3 py-1.5 text-muted">
                     No split: pinned before out-of-sample results or with too short a history.

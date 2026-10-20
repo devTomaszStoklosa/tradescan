@@ -22,12 +22,12 @@ from typing import TypeVar
 
 import pandas as pd
 
+from tradescan.backtest.allocation import PortfolioConfig
 from tradescan.backtest.base import BacktestConfig, BacktestEngine, BacktestResult
 from tradescan.backtest.edge import EdgeSampler, EdgeStats, combine_samples
 from tradescan.backtest.metrics import Metrics, compute_metrics
 from tradescan.backtest.monte_carlo import MonteCarlo, MonteCarloConfig, closed_r_multiples, simulate
 from tradescan.backtest.oos import MIN_PERIOD_BARS, PeriodMetrics, SignalFrom, Split, run_periods, split_history
-from tradescan.backtest.allocation import PortfolioConfig
 from tradescan.backtest.pooled import BREAK_EVEN, PooledTrades, Spread, pool_trades, spread
 from tradescan.backtest.portfolio import (
     PortfolioEngine,
@@ -77,6 +77,7 @@ from tradescan.config import Settings, WalkForwardSettings
 from tradescan.context import ContextBuilder
 from tradescan.data.cache import CachedProvider
 from tradescan.data.provider import DataProvider
+from tradescan.data.schema import bar_dates
 from tradescan.data.yfinance_provider import YFinanceProvider
 from tradescan.indicators import sma
 from tradescan.parallel import SequentialRunner, TaskRunner
@@ -294,7 +295,9 @@ class ScanReport:
 
 
 class ScanUseCase:
-    def __init__(self, market_data: MarketData, settings: Settings, registry: SignalRegistry, runner: TaskRunner) -> None:
+    def __init__(
+        self, market_data: MarketData, settings: Settings, registry: SignalRegistry, runner: TaskRunner
+    ) -> None:
         self._market_data = market_data
         self._settings = settings
         self._registry = registry
@@ -305,7 +308,9 @@ class ScanUseCase:
         signals = request.signals.select(self._registry, request.signal_params)
         benchmark = _benchmark(request.benchmark, request.universe, settings)
         loaded = self._market_data.load([*request.universe.tickers, benchmark], request.period, request.interval)
-        universe_frames = {ticker: loaded.frames[ticker] for ticker in request.universe.tickers if ticker in loaded.frames}
+        universe_frames = {
+            ticker: loaded.frames[ticker] for ticker in request.universe.tickers if ticker in loaded.frames
+        }
         regime = build_regime_analyzer(settings).analyze(benchmark, loaded.frames.get(benchmark), universe_frames)
 
         scorer = build_scorer(settings)
@@ -363,7 +368,9 @@ class MarketUseCase:
         settings = resolve_settings(self._settings, request.settings, self._registry)
         benchmark = _benchmark(request.benchmark, request.universe, settings)
         loaded = self._market_data.load([*request.universe.tickers, benchmark], request.period, request.interval)
-        universe_frames = {ticker: loaded.frames[ticker] for ticker in request.universe.tickers if ticker in loaded.frames}
+        universe_frames = {
+            ticker: loaded.frames[ticker] for ticker in request.universe.tickers if ticker in loaded.frames
+        }
         return MarketReport(
             universe=request.universe,
             regime=build_regime_analyzer(settings).analyze(benchmark, loaded.frames.get(benchmark), universe_frames),
@@ -402,7 +409,9 @@ class EdgeReport:
 
 
 class EdgeUseCase:
-    def __init__(self, market_data: MarketData, settings: Settings, registry: SignalRegistry, runner: TaskRunner) -> None:
+    def __init__(
+        self, market_data: MarketData, settings: Settings, registry: SignalRegistry, runner: TaskRunner
+    ) -> None:
         self._market_data = market_data
         self._settings = settings
         self._registry = registry
@@ -534,13 +543,15 @@ class BacktestUseCase:
     def run(self, request: BacktestRequest) -> BacktestReport:
         unknown = [name for name in request.engines if name not in self._engines]
         if unknown or not request.engines:
-            raise ValueError(f"Unknown engine(s): {', '.join(unknown) or 'none given'}. Use: {', '.join(self._engines)}")
+            raise ValueError(
+                f"Unknown engine(s): {', '.join(unknown) or 'none given'}. Use: {', '.join(self._engines)}"
+            )
         resolved = resolve_backtest(request, self._settings, self._registry, self._rules)
         signal, config = resolved.signal, resolved.config
         ticker = request.ticker.upper()
         period = request.period or resolved.settings.backtest.period
         df, rules = _load_setup(self._market_data, ticker, resolved, period, request.interval)
-        split = split_history(df.index, config.oos_pct)
+        split = split_history(bar_dates(df), config.oos_pct)
         monte_carlo = build_monte_carlo_config(resolved.settings)
 
         runs = []
@@ -662,7 +673,11 @@ class SweepGridBuilder:
     each name the settings they cannot vary."""
 
     def __init__(
-        self, market_data: MarketData, settings: Settings, registry: SignalRegistry, rules: RuleCatalog = default_catalog
+        self,
+        market_data: MarketData,
+        settings: Settings,
+        registry: SignalRegistry,
+        rules: RuleCatalog = default_catalog,
     ) -> None:
         self._market_data = market_data
         self._settings = settings
@@ -685,7 +700,7 @@ class SweepGridBuilder:
         combinations: list[Combination] = []
         for values in grid(checked):
             combination = setup
-            for axis, value in zip(checked, values):
+            for axis, value in zip(checked, values, strict=True):
                 combination = _APPLY[axis.target](combination, axis, value)
             try:
                 resolved = resolve_backtest(combination, self._settings, self._registry, self._rules)
@@ -705,7 +720,9 @@ class SweepGridBuilder:
 
     def _named_rules(self, setup: BacktestRequest) -> BacktestRequest:
         """The setup with its entry and exits named, so axes can refer to the default rules too."""
-        exits = setup.exits if setup.exits is not None else tuple(RuleChoice(name) for name in self._rules.default_exits)
+        exits = (
+            setup.exits if setup.exits is not None else tuple(RuleChoice(name) for name in self._rules.default_exits)
+        )
         return replace(setup, entry=setup.entry or RuleChoice(self._rules.default_entry), exits=exits)
 
     def _check(self, axis: SweepAxis, base: ResolvedBacktest, fixed: Mapping[tuple[str, str], str]) -> SweptParameter:
@@ -724,14 +741,17 @@ class SweepUseCase:
     def run(self, request: SweepRequest) -> SweepReport:
         sweep = self._grids.build(request.setup, request.axes, NOT_SWEEPABLE)
         ticker, df, config = sweep.ticker, sweep.df, sweep.base.config
-        split = split_history(df.index, config.oos_pct)
+        split = split_history(bar_dates(df), config.oos_pct)
         if split is None:
             raise ValueError(
                 f"{ticker} has {len(df)} bars: too few to split at {config.oos_pct:g}% "
                 f"with at least {MIN_PERIOD_BARS} bars in each period. Use a longer history."
             )
         results = sweep.per_combination(self._runner.map(SweepJob(ticker, df, split.index), sweep.cases))
-        cells = [SweepCell(item.values, periods, item.error) for item, periods in zip(sweep.combinations, results)]
+        cells = [
+            SweepCell(item.values, periods, item.error)
+            for item, periods in zip(sweep.combinations, results, strict=True)
+        ]
         return SweepReport(
             ticker=ticker, base=sweep.base, parameters=sweep.parameters, close=df["close"], split=split, cells=cells
         )
@@ -894,13 +914,17 @@ class WalkForwardUseCase:
             for position, span in enumerate(plan.in_samples)
         ]
         *window_picks, next_pick = picks
-        picked = [sweep.combinations[item.combination].case if item.combination is not None else None for item in window_picks]
+        picked = [
+            sweep.combinations[item.combination].case if item.combination is not None else None for item in window_picks
+        ]
         stitched = stitch(self._engine, ticker, df, plan, picked, base.config.initial_equity)
 
         bars_per_year = base.config.bars_per_year
         close = df["close"].iloc[plan.start :]
         metrics = compute_metrics(stitched.equity, stitched.trades, close, bars_per_year)
-        unchanged = self._engine.run(ticker, df, SignalFrom(base.signal, plan.start), base.config, sweep.base_case.rules)
+        unchanged = self._engine.run(
+            ticker, df, SignalFrom(base.signal, plan.start), base.config, sweep.base_case.rules
+        )
         return WalkForwardReport(
             ticker=ticker,
             base=base,
@@ -918,7 +942,9 @@ class WalkForwardUseCase:
             stitched=stitched,
             metrics=metrics,
             unchanged=unchanged,
-            unchanged_metrics=compute_metrics(unchanged.equity.iloc[plan.start :], unchanged.trades, close, bars_per_year),
+            unchanged_metrics=compute_metrics(
+                unchanged.equity.iloc[plan.start :], unchanged.trades, close, bars_per_year
+            ),
             efficiency=efficiency(metrics, [item.in_sample for item in window_picks if item.in_sample is not None]),
         )
 
@@ -998,14 +1024,18 @@ class WatchlistBacktestUseCase:
         base = resolve_backtest(setup, self._settings, self._registry, self._rules)
         history = setup.period or base.settings.backtest.period
         tickers = list(universe.tickers)
-        loaded = self._market_data.load([*tickers, base.benchmark] if base.benchmark else tickers, history, setup.interval)
+        loaded = self._market_data.load(
+            [*tickers, base.benchmark] if base.benchmark else tickers, history, setup.interval
+        )
         rules = _with_benchmark(base, loaded)
         frames = [(ticker, loaded.frames[ticker]) for ticker in tickers if ticker in loaded.frames]
         if not frames:
             raise ValueError(f"No data for any ticker of {universe.name}")
 
         runs = self._runner.map(TickerJob(base.signal, rules, base.config), frames)
-        rows = [TickerRow(ticker, df.index[0], df.index[-1], run) for (ticker, df), run in zip(frames, runs)]
+        rows = [
+            TickerRow(ticker, df.index[0], df.index[-1], run) for (ticker, df), run in zip(frames, runs, strict=True)
+        ]
         return WatchlistBacktestReport(
             universe=universe,
             base=base,
@@ -1104,7 +1134,9 @@ class PortfolioUseCase:
         engines = request.setup.engines
         unknown = [name for name in engines if name not in self._engines]
         if unknown or not engines:
-            raise ValueError(f"Unknown engine(s): {', '.join(unknown) or 'none given'}. Use: {', '.join(self._engines)}")
+            raise ValueError(
+                f"Unknown engine(s): {', '.join(unknown) or 'none given'}. Use: {', '.join(self._engines)}"
+            )
         universe = request.universe
         benchmark = _benchmark(request.setup.benchmark, universe, self._settings)
         setup = replace(request.setup, benchmark=benchmark)
@@ -1119,7 +1151,9 @@ class PortfolioUseCase:
         portfolio = build_portfolio_config(base.settings)
 
         tickers = list(universe.tickers)
-        loaded = self._market_data.load([*tickers, benchmark], setup.period or base.settings.backtest.period, setup.interval)
+        loaded = self._market_data.load(
+            [*tickers, benchmark], setup.period or base.settings.backtest.period, setup.interval
+        )
         rules = _with_benchmark(base, loaded)
         frames = {ticker: loaded.frames[ticker] for ticker in tickers if ticker in loaded.frames}
         if not frames:
@@ -1300,7 +1334,9 @@ class RotationUseCase:
 
         tickers = list(universe.tickers)
         extra = [benchmark, safe] if safe else [benchmark]
-        loaded = self._market_data.load([*tickers, *extra], request.period or settings.backtest.period, request.interval)
+        loaded = self._market_data.load(
+            [*tickers, *extra], request.period or settings.backtest.period, request.interval
+        )
         frames = {ticker: loaded.frames[ticker] for ticker in tickers if ticker in loaded.frames}
         if not frames:
             raise ValueError(f"No data for any ticker of {universe.name}")
@@ -1318,9 +1354,11 @@ class RotationUseCase:
             )
         close = loaded.frames[benchmark]["close"]
         bars_per_year = config.bars_per_year
-        split = split_history(result.equity.index, config.oos_pct)
+        split = split_history(bar_dates(result.equity), config.oos_pct)
         periods = (
-            run_rotation_periods(self._engine, frames, config, rotation, ranking, weighting, safe_frame, split.out_of_sample[0])
+            run_rotation_periods(
+                self._engine, frames, config, rotation, ranking, weighting, safe_frame, split.out_of_sample[0]
+            )
             if split
             else None
         )
@@ -1448,7 +1486,9 @@ def build_use_cases(
         sweep=SweepUseCase(grids, task_runner),
         walk_forward=WalkForwardUseCase(grids, task_runner),
         watchlist_backtest=WatchlistBacktestUseCase(market_data, settings, registry, task_runner, rules),
-        portfolio=PortfolioUseCase(market_data, settings, registry, portfolio_engines or default_portfolio_engines(), rules),
+        portfolio=PortfolioUseCase(
+            market_data, settings, registry, portfolio_engines or default_portfolio_engines(), rules
+        ),
         rotation=RotationUseCase(market_data, settings, rotation_engine),
         chart=ChartUseCase(market_data, registry),
     )

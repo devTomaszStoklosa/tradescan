@@ -47,9 +47,10 @@ class _PortfolioStrategy(bt.Strategy):
     def __init__(self) -> None:
         setup: PortfolioSetup = self.p.setup
         self._tickers = [
-            TickerOrders(self, data, ticker.rules, setup.direction) for data, ticker in zip(self.datas, setup.tickers)
+            TickerOrders(self, data, ticker.rules, setup.direction)
+            for data, ticker in zip(self.datas, setup.tickers, strict=True)
         ]
-        self._by_name = {data._name: orders for data, orders in zip(self.datas, self._tickers)}
+        self._by_name = {data._name: orders for data, orders in zip(self.datas, self._tickers, strict=True)}
         self._lengths = [0] * len(self.datas)
         self.dates: list[pd.Timestamp] = []
         self.equity_values: list[float] = []
@@ -74,7 +75,7 @@ class _PortfolioStrategy(bt.Strategy):
 
         open_value = waiting_value = 0.0
         open_positions = busy = 0
-        for data, orders in zip(self.datas, self._tickers):
+        for data, orders in zip(self.datas, self._tickers, strict=True):
             if orders.position:
                 open_value += abs(orders.position.size) * data.close[0]
                 open_positions += 1
@@ -128,7 +129,9 @@ class CerebroPortfolioEngine:
         cerebro = bt.Cerebro(stdstats=False)
         cerebro.setbroker(_Broker())
         for ticker, df in frames.items():
-            cerebro.adddata(bt.feeds.PandasData(dataname=df.loc[:, list(OHLCV_COLUMNS)], openinterest=None), name=ticker)
+            cerebro.adddata(
+                bt.feeds.PandasData(dataname=df.loc[:, list(OHLCV_COLUMNS)], openinterest=None), name=ticker
+            )
         cerebro.addstrategy(_PortfolioStrategy, setup=setup, config=config, portfolio=portfolio)
         cerebro.broker.setcash(config.initial_equity)
         cerebro.broker.setcommission(commission=config.commission_pct / 100.0, leverage=LEVERAGE)

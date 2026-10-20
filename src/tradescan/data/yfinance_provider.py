@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -18,7 +18,8 @@ Downloader = Callable[..., pd.DataFrame]
 def _yfinance_download(*args: Any, **kwargs: Any) -> pd.DataFrame:
     import yfinance as yf
 
-    return yf.download(*args, **kwargs)
+    frame: pd.DataFrame = yf.download(*args, **kwargs)
+    return frame
 
 
 class YFinanceProvider:
@@ -54,7 +55,7 @@ def split_download(raw: pd.DataFrame | None, tickers: Sequence[str]) -> dict[str
     frames: dict[str, pd.DataFrame] = {}
     for ticker in tickers:
         if ticker in available:
-            frames.update(_single(raw.xs(ticker, axis=1, level=level), ticker))
+            frames.update(_single(cast(pd.DataFrame, raw.xs(ticker, axis=1, level=level)), ticker))
     return frames
 
 

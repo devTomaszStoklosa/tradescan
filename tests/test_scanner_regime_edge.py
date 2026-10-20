@@ -3,8 +3,8 @@ import math
 import numpy as np
 import pandas as pd
 import pytest
-from synthetic import FixedSignal, make_ohlcv
 
+from tests.synthetic import FixedSignal, make_ohlcv
 from tradescan.backtest.edge import combine_samples, edge_samples, forward_returns
 from tradescan.context import ContextBuilder, Trend
 from tradescan.indicators import atr
@@ -42,11 +42,13 @@ def test_scanner_finds_scores_and_plans_a_fresh_breakout():
     hit = result.hits[0]
     assert (hit.ticker, hit.direction) == ("UP", Direction.LONG)
     assert [(item.signal.name, item.bars_ago) for item in hit.fired] == [("donchian_breakout", 0)]
-    assert hit.context.daily_trend is Trend.UP and hit.context.weekly_trend is Trend.UP
+    assert hit.context.daily_trend is Trend.UP
+    assert hit.context.weekly_trend is Trend.UP
     assert hit.score.total == pytest.approx(1.5 + 1.0 + 1.0 + 1.0)
     expected_stop = 160.0 - 2.0 * atr(frames["UP"]).iloc[-1]
     assert hit.risk.stop == pytest.approx(expected_stop)
-    assert hit.edge is not None and hit.edge.signal == "donchian_breakout"
+    assert hit.edge is not None
+    assert hit.edge.signal == "donchian_breakout"
 
 
 def test_filter_hits_and_rs_percentiles():
@@ -66,7 +68,8 @@ def test_regime_risk_on_and_risk_off():
 
     down = {name: make_ohlcv(np.linspace(100 + i, 50, 300)) for i, name in enumerate("ABC")}
     off = analyzer.analyze("IDX", make_ohlcv(np.linspace(100, 50, 300)), down)
-    assert off.regime is Regime.RISK_OFF and off.new_lows == 3
+    assert off.regime is Regime.RISK_OFF
+    assert off.new_lows == 3
     assert analyzer.analyze("IDX", None, up).benchmark_above_slow is None
 
 
@@ -87,13 +90,15 @@ def test_edge_samples_pool_events_in_signal_direction():
     outcome = forward_returns(df, 1)
     long_stats = _pooled([df, df], FixedSignal(positions=(1, 3)), 1)
     assert long_stats.events == 4
-    assert long_stats.mean_return == pytest.approx(outcome.iloc[[1, 3]].mean() * 100)
+    assert long_stats.mean_return == pytest.approx(outcome.take([1, 3]).mean() * 100)
     assert long_stats.baseline_return == pytest.approx(outcome.dropna().mean() * 100)
     assert long_stats.edge == pytest.approx(long_stats.mean_return - long_stats.baseline_return)
 
     short_stats = _pooled([df], FixedSignal(positions=(1, 3), side=Direction.SHORT), 1)
-    assert short_stats.mean_return == pytest.approx(-outcome.iloc[[1, 3]].mean() * 100)
+    assert short_stats.mean_return == pytest.approx(-outcome.take([1, 3]).mean() * 100)
 
     empty = _pooled([df], FixedSignal(positions=()), 1)
-    assert empty.events == 0 and math.isnan(empty.win_rate)
-    assert isinstance(empty.baseline_return, float) and not pd.isna(empty.baseline_return)
+    assert empty.events == 0
+    assert math.isnan(empty.win_rate)
+    assert isinstance(empty.baseline_return, float)
+    assert not pd.isna(empty.baseline_return)

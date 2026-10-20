@@ -1,14 +1,26 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, type SubmitEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
-import type { ConfigOut, SignalOut, SweepOut } from "../api/client";
+import type { ConfigOut, SignalOut, SweepCellOut, SweepOut } from "../api/client";
 import { useConfig, useSignals, useSweep } from "../api/hooks";
 import { METRICS, MetricsTable } from "../components/BacktestResults";
 import { BacktestSetupFields } from "../components/BacktestSetupFields";
 import { describeSplit, PERIOD_NOTE } from "../components/OutOfSample";
 import { SweptParameters } from "../components/SweepAxisFields";
 import { cellText, describeCombination, SweepHeatmap, SweepLegend } from "../components/SweepHeatmap";
-import { Button, DirectionBadge, EmptyState, ErrorBox, Field, Loading, Notice, PageHeader, Panel, Select, StatTile } from "../components/ui";
+import {
+  Button,
+  DirectionBadge,
+  EmptyState,
+  ErrorBox,
+  Field,
+  Loading,
+  Notice,
+  PageHeader,
+  Panel,
+  Select,
+  StatTile,
+} from "../components/ui";
 import { MIN_TRADES, type MetricKey } from "../lib/compare";
 import { DASH, fmtNumber, fmtPct } from "../lib/format";
 import { writeBacktestForm } from "../lib/params";
@@ -33,10 +45,12 @@ import {
   type SweepForm,
   type SweepParam,
 } from "../lib/sweep";
+import { useResettableState } from "../lib/useResettableState";
 import { useAccount, withAccount } from "../state/account";
 
 const METRIC_KEYS = new Set<string>(METRICS.map((metric) => metric.key));
-const readMetric = (value: string | null): MetricKey => (value && METRIC_KEYS.has(value) ? (value as MetricKey) : DEFAULT_METRIC);
+const readMetric = (value: string | null): MetricKey =>
+  value && METRIC_KEYS.has(value) ? (value as MetricKey) : DEFAULT_METRIC;
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
@@ -53,8 +67,7 @@ function SweepFormPanel({
   busy: boolean;
   onSubmit: (form: SweepForm) => void;
 }) {
-  const [draft, setDraft] = useState(initial);
-  useEffect(() => setDraft(initial), [initial]);
+  const [draft, setDraft] = useResettableState(initial);
   const limits = config.sweep;
   const params = useMemo(() => sweepParams(draft, config, signals), [draft, config, signals]);
   const ranges = draft.axes.map((axis) => {
@@ -65,7 +78,7 @@ function SweepFormPanel({
   const changes = setupChanges(draft, config);
   const invalid = hasSetupProblems(draft, config, signals) || sweepBody(draft, params, limits) === null;
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: SubmitEvent) => {
     event.preventDefault();
     if (!invalid) onSubmit(draft);
   };
@@ -74,9 +87,17 @@ function SweepFormPanel({
     <Panel>
       <form onSubmit={submit} noValidate className="space-y-4">
         <BacktestSetupFields draft={draft} onChange={setDraft} config={config} signals={signals} />
-        <SweptParameters axes={draft.axes} params={params} limits={limits} canAdd={Boolean(draft.signal)} onChange={(axes) => setDraft({ ...draft, axes })} />
+        <SweptParameters
+          axes={draft.axes}
+          params={params}
+          limits={limits}
+          canAdd={Boolean(draft.signal)}
+          onChange={(axes) => setDraft({ ...draft, axes })}
+        />
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className={`num text-sm ${count !== null && count > limits.max_combinations ? "text-down" : "text-muted"}`}>
+          <p
+            className={`num text-sm ${count !== null && count > limits.max_combinations ? "text-down" : "text-muted"}`}
+          >
             {count === null
               ? draft.axes.length
                 ? "Fix the ranges above."
@@ -100,7 +121,10 @@ function SweepFormPanel({
 }
 
 function sameValues(left: number[], right: number[]): boolean {
-  return left.length === right.length && left.every((value, index) => Math.abs(value - (right[index] ?? NaN)) <= 1e-9 * Math.max(1, Math.abs(value)));
+  return (
+    left.length === right.length &&
+    left.every((value, index) => Math.abs(value - (right[index] ?? NaN)) <= 1e-9 * Math.max(1, Math.abs(value)))
+  );
 }
 
 function SweepView({
@@ -123,15 +147,22 @@ function SweepView({
   const scale = useMemo(() => heatScale(cells, metric), [cells, metric]);
   const best = useMemo(() => bestCell(cells, metric), [cells, metric]);
   const current = useMemo(() => {
-    const index = cells.findIndex((cell) => sameValues(cell.values, axes.map((axis) => axis.current)));
+    const index = cells.findIndex((cell) =>
+      sameValues(
+        cell.values,
+        axes.map((axis) => axis.current),
+      ),
+    );
     return index < 0 ? null : index;
   }, [cells, axes]);
-  const [selected, setSelected] = useState<number | null>(best);
-  useEffect(() => setSelected(best), [result]); // a new sweep starts on its best cell, a new metric keeps the pick
+  // A new sweep starts on its best cell; a new metric keeps the pick.
+  const [selected, setSelected] = useResettableState<number | null>(best, result);
 
   const metricLabel = METRICS.find((item) => item.key === metric)?.label ?? metric;
   const errors = cells.filter((cell) => cell.error);
-  const value = (index: number | null, period: Period) => (index === null ? DASH : cellText(cells[index]!, period, metric));
+  const bestOut = best === null ? undefined : cells[best];
+  const value = (target: SweepCellOut | undefined, period: Period) =>
+    target ? cellText(target, period, metric) : DASH;
   const medianText = (period: Period) => {
     const middle = median(periodValues(cells, period, metric));
     return middle === null ? DASH : fmtNumber(middle);
@@ -156,7 +187,7 @@ function SweepView({
       </div>
       {errors.length > 0 && (
         <Notice>
-          {plural(errors.length, "combination")} could not run, e.g. {errors[0]!.error}
+          {plural(errors.length, "combination")} could not run, e.g. {errors[0]?.error}
         </Notice>
       )}
       <div className="flex flex-wrap items-end gap-3">
@@ -171,9 +202,21 @@ function SweepView({
         </Field>
       </div>
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <StatTile label={`Best in-sample ${metricLabel}`} value={value(best, "in_sample")} sub={best === null ? undefined : describeCombination(axes, cells[best]!.values)} />
-        <StatTile label="Same setting out-of-sample" value={value(best, "out_of_sample")} sub={best === null ? undefined : `${cells[best]!.out_of_sample?.trades ?? 0} trades`} />
-        <StatTile label={`Median ${metricLabel}`} value={`${medianText("in_sample")} → ${medianText("out_of_sample")}`} sub="in-sample → out-of-sample" />
+        <StatTile
+          label={`Best in-sample ${metricLabel}`}
+          value={value(bestOut, "in_sample")}
+          sub={bestOut && describeCombination(axes, bestOut.values)}
+        />
+        <StatTile
+          label="Same setting out-of-sample"
+          value={value(bestOut, "out_of_sample")}
+          sub={bestOut && `${bestOut.out_of_sample?.trades ?? 0} trades`}
+        />
+        <StatTile
+          label={`Median ${metricLabel}`}
+          value={`${medianText("in_sample")} → ${medianText("out_of_sample")}`}
+          sub="in-sample → out-of-sample"
+        />
         <StatTile
           label="Above break-even out-of-sample"
           value={share === null ? DASH : fmtPct(share * 100, 0)}
@@ -243,7 +286,8 @@ function SweepView({
                 const trades = cell[period]?.trades ?? 0;
                 return trades < MIN_TRADES ? (
                   <p key={period} className="text-xs text-warn">
-                    {period === "in_sample" ? "In-sample" : "Out-of-sample"}: only {trades} trades, too few to trust the metrics.
+                    {period === "in_sample" ? "In-sample" : "Out-of-sample"}: only {trades} trades, too few to trust the
+                    metrics.
                   </p>
                 ) : null;
               })}
@@ -262,7 +306,10 @@ export function SweepPage() {
   const { account } = useAccount();
   const form = useMemo(() => (config.data ? readSweepForm(params, config.data) : null), [params, config.data]);
   const metric = readMetric(params.get("m"));
-  const sweepable = useMemo(() => (form && config.data && signals.data ? sweepParams(form, config.data, signals.data) : []), [form, config.data, signals.data]);
+  const sweepable = useMemo(
+    () => (form && config.data && signals.data ? sweepParams(form, config.data, signals.data) : []),
+    [form, config.data, signals.data],
+  );
   const body = useMemo(() => {
     const request = form && config.data && sweepBody(form, sweepable, config.data.sweep);
     return request ? { ...request, settings: withAccount(request.settings ?? {}, account) } : null;
@@ -298,7 +345,7 @@ export function SweepPage() {
         </EmptyState>
       )}
       {sweep.isLoading && <Loading message="Running every combination in-sample and out-of-sample…" />}
-      {sweep.isError && <ErrorBox error={sweep.error} onRetry={() => sweep.refetch()} />}
+      {sweep.isError && <ErrorBox error={sweep.error} onRetry={() => void sweep.refetch()} />}
       {sweep.data && (
         <SweepView
           result={sweep.data}

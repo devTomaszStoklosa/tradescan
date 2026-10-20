@@ -32,7 +32,9 @@ export function useSortable<T>(
   /** First click sorts descending (biggest first, what traders usually want), the next flips it. */
   const toggle = (key: string) =>
     setSort((current) =>
-      current?.key === key ? { key, direction: current.direction === "desc" ? "asc" : "desc" } : { key, direction: "desc" },
+      current?.key === key
+        ? { key, direction: current.direction === "desc" ? "asc" : "desc" }
+        : { key, direction: "desc" },
     );
 
   return { sorted, sort, toggle };

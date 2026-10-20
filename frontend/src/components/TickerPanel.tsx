@@ -73,7 +73,12 @@ export function TickerPanel({
 
   const { score, risk } = hit;
   return (
-    <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label={`${hit.ticker} details`}>
+    <div
+      className="fixed inset-0 z-40 flex justify-end"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${hit.ticker} details`}
+    >
       <button type="button" aria-label="Close details" className="absolute inset-0 bg-black/40" onClick={onClose} />
       <aside className="relative flex h-full w-full max-w-4xl flex-col gap-4 overflow-y-auto bg-bg p-4 shadow-2xl sm:p-6">
         <header className="flex flex-wrap items-start justify-between gap-3">
@@ -83,8 +88,8 @@ export function TickerPanel({
               <DirectionBadge direction={hit.direction} />
             </div>
             <p className="num text-sm text-muted">
-              {fmtPrice(hit.close)} <span className={tone(hit.change_pct)}>{fmtPct(hit.change_pct, 2, true)}</span> · as of {hit.date} ·
-              ADX {fmtNumber(hit.adx, 0)}
+              {fmtPrice(hit.close)} <span className={tone(hit.change_pct)}>{fmtPct(hit.change_pct, 2, true)}</span> · as
+              of {hit.date} · ADX {fmtNumber(hit.adx, 0)}
             </p>
           </div>
           <Button ref={closeButton} onClick={onClose}>
@@ -94,7 +99,7 @@ export function TickerPanel({
 
         <section className="rounded-xl border border-line bg-panel p-3">
           {chart.isLoading && <Loading message="Loading chart…" />}
-          {chart.isError && <ErrorBox error={chart.error} onRetry={() => chart.refetch()} />}
+          {chart.isError && <ErrorBox error={chart.error} onRetry={() => void chart.refetch()} />}
           {chart.data && (
             <PriceChart
               label={`${hit.ticker} price chart with signal events and trade levels`}
@@ -112,7 +117,12 @@ export function TickerPanel({
           <h3 className="mb-2 text-sm font-semibold">Risk plan</h3>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <StatTile label="Entry (last close)" value={fmtPrice(risk.entry)} />
-            <StatTile label="Stop" value={fmtPrice(risk.stop)} valueClass="text-down" sub={`risk ${fmtPrice(risk.risk_per_share)} / unit`} />
+            <StatTile
+              label="Stop"
+              value={fmtPrice(risk.stop)}
+              valueClass="text-down"
+              sub={`risk ${fmtPrice(risk.risk_per_share)} / unit`}
+            />
             <StatTile
               label="Targets"
               value={risk.targets.map((target) => fmtPrice(target)).join(" / ")}
@@ -127,9 +137,7 @@ export function TickerPanel({
         </section>
 
         <section>
-          <h3 className="mb-2 text-sm font-semibold">
-            Score {fmtNumber(score.total, 1)}
-          </h3>
+          <h3 className="mb-2 text-sm font-semibold">Score {fmtNumber(score.total, 1)}</h3>
           <dl className="num grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
             {[
               ["Signals", score.signals],
@@ -174,7 +182,7 @@ export function TickerPanel({
               ))}
           </div>
           {edge.isLoading && <Loading message="Computing historical edge…" />}
-          {edge.isError && <ErrorBox error={edge.error} onRetry={() => edge.refetch()} />}
+          {edge.isError && <ErrorBox error={edge.error} onRetry={() => void edge.refetch()} />}
           {edge.data && <EdgeTable rows={edge.data.rows} horizons={edge.data.horizons} />}
         </section>
       </aside>

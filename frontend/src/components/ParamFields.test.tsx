@@ -10,7 +10,9 @@ import { ParamFields } from "./ParamFields";
 const SPECS = [
   spec("period", "Channel length", 20, [2, 300, 1], "int", { unit: "bars" }),
   spec("targets_r", "Targets", [2, 3], [0.25, 50, 0.25], "float_list"),
-  spec("family_weights", "Family weights", { trend: 1, breakout: 1.5 }, [-10, 10, 0.5], "weights", { keys: ["trend", "breakout"] }),
+  spec("family_weights", "Family weights", { trend: 1, breakout: 1.5 }, [-10, 10, 0.5], "weights", {
+    keys: ["trend", "breakout"],
+  }),
 ];
 
 function Harness({ initial = {}, seen }: { initial?: Values; seen: Values[] }) {

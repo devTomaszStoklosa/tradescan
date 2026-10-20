@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter
 
 from tradescan.api import schemas
@@ -9,7 +11,9 @@ from tradescan.api.context import ApiContext
 from tradescan.api.mappers import pinned_run_out
 from tradescan.storage.runs import PinnedRun
 
-_NOT_FOUND = {404: {"model": schemas.ErrorOut, "description": "No pinned run has this id"}}
+_NOT_FOUND: dict[int | str, dict[str, Any]] = {
+    404: {"model": schemas.ErrorOut, "description": "No pinned run has this id"}
+}
 
 
 def build_router(context: ApiContext) -> APIRouter:

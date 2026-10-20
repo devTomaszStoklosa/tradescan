@@ -85,7 +85,9 @@ def combine_samples(signal: str, horizon: int, samples: Iterable[EdgeSample]) ->
         win_rate=float((returns > 0).mean() * 100.0) if has_events else math.nan,
         mean_return=float(returns.mean() * 100.0) if has_events else math.nan,
         median_return=float(np.median(returns) * 100.0) if has_events else math.nan,
-        baseline_return=sum(part.baseline_sum for part in parts) / baseline_count * 100.0 if baseline_count else math.nan,
+        baseline_return=sum(part.baseline_sum for part in parts) / baseline_count * 100.0
+        if baseline_count
+        else math.nan,
     )
 
 

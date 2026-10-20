@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Any
 
 import pytest
 
@@ -9,8 +10,14 @@ OPENED = date(2026, 3, 2)
 CLOSED = date(2026, 3, 20)
 
 
-def trade(**changes) -> TradeEntry:
-    values = {"ticker": "AAPL", "direction": Direction.LONG, "opened": OPENED, "entry_price": 100.0, "quantity": 10.0}
+def trade(**changes: Any) -> TradeEntry:
+    values: dict[str, Any] = {
+        "ticker": "AAPL",
+        "direction": Direction.LONG,
+        "opened": OPENED,
+        "entry_price": 100.0,
+        "quantity": 10.0,
+    }
     return TradeEntry(**(values | changes))
 
 
@@ -28,7 +35,8 @@ def test_a_short_trade_earns_when_the_price_falls():
     assert entry.profit == 80.0
     assert entry.r_multiple == pytest.approx(2.0)
     loser = trade(direction=Direction.SHORT, stop=104.0, closed=CLOSED, exit_price=106.0)
-    assert loser.profit == -60.0 and loser.r_multiple == pytest.approx(-1.5)
+    assert loser.profit == -60.0
+    assert loser.r_multiple == pytest.approx(-1.5)
 
 
 def test_an_open_trade_has_no_result_yet():
@@ -40,7 +48,8 @@ def test_an_open_trade_has_no_result_yet():
 
 def test_a_trade_without_a_stop_has_no_r_multiple():
     entry = trade(closed=CLOSED, exit_price=105.0)
-    assert entry.risk is None and entry.r_multiple is None
+    assert entry.risk is None
+    assert entry.r_multiple is None
     assert entry.profit == 50.0
 
 

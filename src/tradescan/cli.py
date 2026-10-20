@@ -51,6 +51,7 @@ from tradescan.report.tables import (
     watchlist_rows_frame,
 )
 from tradescan.services import (
+    SWEEP_SECTIONS,
     BacktestRequest,
     EdgeRequest,
     MarketRequest,
@@ -58,7 +59,6 @@ from tradescan.services import (
     RotationRequest,
     ScanRequest,
     SignalFilter,
-    SWEEP_SECTIONS,
     SweepRequest,
     UseCases,
     WalkForwardRequest,
@@ -164,7 +164,11 @@ def _backtest_request(args: argparse.Namespace, ticker: str, engines: tuple[str,
             {
                 "account": _account(args),
                 "risk": {"atr_mult": args.atr_mult},
-                "backtest": {"commission_pct": args.commission_pct, "slippage_pct": args.slippage_pct, "oos_pct": args.oos},
+                "backtest": {
+                    "commission_pct": args.commission_pct,
+                    "slippage_pct": args.slippage_pct,
+                    "oos_pct": args.oos,
+                },
                 "pyramid": {"max_units": args.max_units, "add_every_atr": args.add_every_atr},
             }
         ),
@@ -185,7 +189,9 @@ def _axis(text: str) -> SweepAxis:
     if not separator or len(parts) not in (2, 3) or not all(parts):
         raise ValueError(usage)
     if parts[0] not in {target.value for target in SweepTarget}:
-        raise ValueError(f"--axis {text}: the target must be one of {', '.join(target.value for target in SweepTarget)}")
+        raise ValueError(
+            f"--axis {text}: the target must be one of {', '.join(target.value for target in SweepTarget)}"
+        )
     try:
         numbers = _axis_values(values)
     except ValueError as error:
@@ -323,7 +329,8 @@ def cmd_backtest(args: argparse.Namespace, settings: Settings, report: ConsoleRe
         report.frame(
             periods_to_frame(result.runs),
             title=f"In-sample {split.in_sample[0].date()} to {split.in_sample[1].date()}, "
-            f"out-of-sample (last {split.oos_pct:g}%) {split.out_of_sample[0].date()} to {split.out_of_sample[1].date()}",
+            f"out-of-sample (last {split.oos_pct:g}%) "
+            f"{split.out_of_sample[0].date()} to {split.out_of_sample[1].date()}",
             caption="Each period starts with fresh equity; out-of-sample signals only fire from the split on",
             show_index=True,
         )
@@ -341,7 +348,9 @@ def cmd_backtest(args: argparse.Namespace, settings: Settings, report: ConsoleRe
 def cmd_sweep(args: argparse.Namespace, settings: Settings, report: ConsoleReport) -> int:
     _loading(report, 1, args.period or settings.backtest.period)
     axes = tuple(_axis(text) for text in args.axis)
-    result = _use_cases(settings, args).sweep.run(SweepRequest(setup=_backtest_request(args, args.ticker, ()), axes=axes))
+    result = _use_cases(settings, args).sweep.run(
+        SweepRequest(setup=_backtest_request(args, args.ticker, ()), axes=axes)
+    )
     signal, split = result.base.signal, result.split
     names = " x ".join(f"{item.axis.name} ({item.spec.label})" for item in result.parameters)
     report.note(
@@ -373,7 +382,13 @@ def cmd_walk_forward(args: argparse.Namespace, settings: Settings, report: Conso
     _loading(report, 1, args.period or settings.backtest.period)
     setup = _backtest_request(args, args.ticker, ())
     windows = _overrides(
-        {"walk_forward": {"windows": args.windows, "in_sample_ratio": args.in_sample_ratio, "min_trades": args.min_trades}}
+        {
+            "walk_forward": {
+                "windows": args.windows,
+                "in_sample_ratio": args.in_sample_ratio,
+                "min_trades": args.min_trades,
+            }
+        }
     )
     request = WalkForwardRequest(
         setup=replace(setup, settings={**setup.settings, **windows}),
@@ -387,8 +402,9 @@ def cmd_walk_forward(args: argparse.Namespace, settings: Settings, report: Conso
     names = " x ".join(f"{item.axis.name} ({item.spec.label})" for item in result.parameters)
     longer = " or more" if plan.scheme is WindowScheme.ANCHORED else ""
     report.note(
-        f"{len(result.combinations)} combinations of {names} on {result.ticker} {signal.name} ({signal.direction.value}), "
-        f"vectorized engine: {walk.windows} {plan.scheme.value} windows of {first.out_of_sample.bars} bars, "
+        f"{len(result.combinations)} combinations of {names} on {result.ticker} "
+        f"{signal.name} ({signal.direction.value}), vectorized engine: "
+        f"{walk.windows} {plan.scheme.value} windows of {first.out_of_sample.bars} bars, "
         f"each after an in-sample window of {first.in_sample.bars} bars{longer}"
     )
     report.frame(
@@ -428,9 +444,9 @@ def cmd_watchlist_backtest(args: argparse.Namespace, settings: Settings, report:
     filters = "; ".join(rule.describe() for rule in rules.filters) or "none"
     benchmark = f" (benchmark {base.benchmark})" if base.benchmark else ""
     report.note(
-        f"{signal.name} ({signal.direction.value}) on {len(result.rows)} tickers of {universe.name}, vectorized engine. "
-        f"Filters: {filters}{benchmark}. Entry: {rules.entry.describe()}. Stop {config.atr_mult:g} ATR{_pyramiding(config)}, "
-        f"exits: {exits}. "
+        f"{signal.name} ({signal.direction.value}) on {len(result.rows)} tickers of {universe.name}, "
+        f"vectorized engine. Filters: {filters}{benchmark}. Entry: {rules.entry.describe()}. "
+        f"Stop {config.atr_mult:g} ATR{_pyramiding(config)}, exits: {exits}. "
         f"Risk {config.risk_pct:g}%/trade, costs {config.commission_pct:g}% + {config.slippage_pct:g}% slippage"
     )
     rows = watchlist_rows_frame(result, metric)
@@ -472,7 +488,8 @@ def cmd_portfolio_backtest(args: argparse.Namespace, settings: Settings, report:
     tickers = len(result.runs[0].contributions)
     report.note(
         f"{signal.name} ({signal.direction.value}) on {tickers} tickers of {universe.name} with one equity: at most "
-        f"{portfolio.max_positions} positions and {portfolio.max_exposure_pct:g}% exposure, priority: {result.priority.describe()}. "
+        f"{portfolio.max_positions} positions and {portfolio.max_exposure_pct:g}% exposure, "
+        f"priority: {result.priority.describe()}. "
         f"Filters: {filters}. Entry: {rules.entry.describe()}. Stop {config.atr_mult:g} ATR, exits: {exits}. "
         f"Risk {config.risk_pct:g}%/trade, costs {config.commission_pct:g}% + {config.slippage_pct:g}% slippage"
     )
@@ -483,7 +500,8 @@ def cmd_portfolio_backtest(args: argparse.Namespace, settings: Settings, report:
         title=f"{universe.name} portfolio, {calendar[0].date()} to {calendar[-1].date()}",
         caption=f"buy & hold is {result.benchmark}'s, exposure the share of days with a position"
         + (
-            f"; out-of-sample from {split.out_of_sample[0].date()} (last {split.oos_pct:g}%), each period with fresh equity"
+            f"; out-of-sample from {split.out_of_sample[0].date()} (last {split.oos_pct:g}%), "
+            "each period with fresh equity"
             if split
             else ""
         ),
@@ -501,7 +519,9 @@ def cmd_portfolio_backtest(args: argparse.Namespace, settings: Settings, report:
     )
     _export(
         report,
-        pd.concat([portfolio_trades_frame(run.result.trades, run.result.engine) for run in result.runs], ignore_index=True),
+        pd.concat(
+            [portfolio_trades_frame(run.result.trades, run.result.engine) for run in result.runs], ignore_index=True
+        ),
         args.export,
     )
     return 0
@@ -551,7 +571,8 @@ def cmd_rotation_backtest(args: argparse.Namespace, settings: Settings, report: 
         caption=f"from the first rebalance with a pick; buy & hold is {result.benchmark}'s, exposure the share of days "
         "with a holding"
         + (
-            f"; out-of-sample from {split.out_of_sample[0].date()} (last {split.oos_pct:g}%), each period with fresh equity"
+            f"; out-of-sample from {split.out_of_sample[0].date()} (last {split.oos_pct:g}%), "
+            "each period with fresh equity"
             if split
             else ""
         ),
@@ -581,7 +602,9 @@ def cmd_update_universes(args: argparse.Namespace, settings: Settings, report: C
     wanted = set(_split(args.only))
     unknown = wanted - {source.name for source in SOURCES}
     if unknown:
-        raise ValueError(f"Unknown universe(s): {', '.join(sorted(unknown))}. Use: {', '.join(s.name for s in SOURCES)}")
+        raise ValueError(
+            f"Unknown universe(s): {', '.join(sorted(unknown))}. Use: {', '.join(s.name for s in SOURCES)}"
+        )
     failures = 0
     for source in SOURCES:
         if wanted and source.name not in wanted:
@@ -672,7 +695,11 @@ def _add_backtest_setup_args(
     parser.add_argument("signal", help="signal name, see list-signals")
     _add_data_args(parser)
     _add_account_args(parser)
-    parser.add_argument("--entry", choices=default_catalog.entries.names(), help=f"entry order (default {default_catalog.default_entry})")
+    parser.add_argument(
+        "--entry",
+        choices=default_catalog.entries.names(),
+        help=f"entry order (default {default_catalog.default_entry})",
+    )
     parser.add_argument(
         "--exits",
         help=f"exit rules on top of the stop, comma separated ({', '.join(default_catalog.exits.names())}); "
@@ -688,9 +715,13 @@ def _add_backtest_setup_args(
     parser.add_argument("--target-r", type=float, help="target as a multiple of the risk (target exit)")
     parser.add_argument("--max-hold", type=int, help="time exit after N bars (time exit)")
     parser.add_argument(
-        "--max-units", type=int, help="pyramiding: the first entry plus the adds (1 turns it off; not for portfolio-backtest)"
+        "--max-units",
+        type=int,
+        help="pyramiding: the first entry plus the adds (1 turns it off; not for portfolio-backtest)",
     )
-    parser.add_argument("--add-every-atr", type=float, help="pyramiding: another unit every N ATRs in the trade's favour")
+    parser.add_argument(
+        "--add-every-atr", type=float, help="pyramiding: another unit every N ATRs in the trade's favour"
+    )
     parser.add_argument("--commission-pct", type=float)
     parser.add_argument("--slippage-pct", type=float)
     parser.add_argument("--oos", type=float, help="out-of-sample share of the history in %% (10-50, default 30)")
@@ -744,7 +775,9 @@ def build_parser() -> argparse.ArgumentParser:
     backtest.add_argument("--export", help="save trades to .csv or .json")
     backtest.set_defaults(handler=cmd_backtest)
 
-    sweep = commands.add_parser("sweep", help="backtest one or two parameters over a range, in-sample and out-of-sample")
+    sweep = commands.add_parser(
+        "sweep", help="backtest one or two parameters over a range, in-sample and out-of-sample"
+    )
     sweep.add_argument("ticker")
     _add_backtest_setup_args(sweep)
     sweep.add_argument("--axis", action="append", required=True, help=AXIS_HELP)
@@ -753,7 +786,8 @@ def build_parser() -> argparse.ArgumentParser:
     sweep.set_defaults(handler=cmd_sweep)
 
     walk_forward = commands.add_parser(
-        "walk-forward", help="re-tune one or two parameters on rolling in-sample windows and trade each pick on the next window"
+        "walk-forward",
+        help="re-tune one or two parameters on rolling in-sample windows and trade each pick on the next window",
     )
     walk_forward.add_argument("ticker")
     _add_backtest_setup_args(walk_forward)
@@ -770,12 +804,19 @@ def build_parser() -> argparse.ArgumentParser:
         default=WindowScheme.ROLLING.value,
         help="rolling: in-sample windows of fixed length; anchored: in-sample windows from the first bar",
     )
-    walk_forward.add_argument("--min-trades", type=int, help="closed in-sample trades a setting needs to be picked (default 10)")
     walk_forward.add_argument(
-        "--metric", choices=SELECTION_METRICS, default=DEFAULT_SELECTION_METRIC, help="metric each in-sample window picks by"
+        "--min-trades", type=int, help="closed in-sample trades a setting needs to be picked (default 10)"
+    )
+    walk_forward.add_argument(
+        "--metric",
+        choices=SELECTION_METRICS,
+        default=DEFAULT_SELECTION_METRIC,
+        help="metric each in-sample window picks by",
     )
     walk_forward.add_argument("--trades", type=int, default=10, help="recent out-of-sample trades to show")
-    walk_forward.add_argument("--export", help="save every window with its pick and both periods' metrics to .csv or .json")
+    walk_forward.add_argument(
+        "--export", help="save every window with its pick and both periods' metrics to .csv or .json"
+    )
     walk_forward.set_defaults(handler=cmd_walk_forward)
 
     watchlist_backtest = commands.add_parser(
@@ -806,7 +847,9 @@ def build_parser() -> argparse.ArgumentParser:
     portfolio.add_argument("--max-positions", type=int, help="open positions plus waiting entry orders (default 10)")
     portfolio.add_argument("--max-exposure", type=float, help="gross exposure cap in %% of equity (default 100)")
     portfolio.add_argument(
-        "--priority", choices=priority_rules.names(), help=f"which signals go first when more fire than fit (default {DEFAULT_PRIORITY})"
+        "--priority",
+        choices=priority_rules.names(),
+        help=f"which signals go first when more fire than fit (default {DEFAULT_PRIORITY})",
     )
     portfolio.add_argument("--engine", choices=ENGINE_CHOICES, default="vectorized")
     portfolio.add_argument("--top", type=int, default=15, help="tickers to show, largest P&L first (0: all)")
@@ -819,17 +862,25 @@ def build_parser() -> argparse.ArgumentParser:
     _add_universe_args(rotation)
     _add_data_args(rotation)
     rotation.add_argument(
-        "--rank", choices=[rule.name for rule in ranking_rules(priority_rules)], help=f"how the tickers are ranked (default {DEFAULT_RANKING})"
+        "--rank",
+        choices=[rule.name for rule in ranking_rules(priority_rules)],
+        help=f"how the tickers are ranked (default {DEFAULT_RANKING})",
     )
     rotation.add_argument("--holdings", type=int, help="tickers picked at each rebalance (default 5)")
     rotation.add_argument("--rebalance", choices=[item.value for item in Rebalance], default=Rebalance.MONTHLY.value)
     rotation.add_argument(
-        "--weighting", choices=weight_rules.names(), help=f"how the picks share the equity (default {DEFAULT_WEIGHTING})"
+        "--weighting",
+        choices=weight_rules.names(),
+        help=f"how the picks share the equity (default {DEFAULT_WEIGHTING})",
     )
     rotation.add_argument(
-        "--absolute-lookback", type=int, help="a pick at or below 0 over this many bars goes to the safe asset (0: off, default 252)"
+        "--absolute-lookback",
+        type=int,
+        help="a pick at or below 0 over this many bars goes to the safe asset (0: off, default 252)",
     )
-    rotation.add_argument("--safe-asset", help="ticker for the slots of picks that fail the check, e.g. TLT (default: cash)")
+    rotation.add_argument(
+        "--safe-asset", help="ticker for the slots of picks that fail the check, e.g. TLT (default: cash)"
+    )
     rotation.add_argument("--benchmark", help="buy & hold benchmark (default: the watchlist's, else scan.benchmark)")
     rotation.add_argument("--equity", type=float, help="account size")
     rotation.add_argument("--lot-size", type=float, help="size step, e.g. 0.0001 for crypto")
@@ -840,7 +891,9 @@ def build_parser() -> argparse.ArgumentParser:
     rotation.add_argument("--export", help="save the trades to .csv or .json")
     rotation.set_defaults(handler=cmd_rotation_backtest)
 
-    universes = commands.add_parser("update-universes", help="refresh the S&P 500 and Nasdaq-100 watchlists from Wikipedia")
+    universes = commands.add_parser(
+        "update-universes", help="refresh the S&P 500 and Nasdaq-100 watchlists from Wikipedia"
+    )
     universes.add_argument("--only", help=f"comma separated: {', '.join(source.name for source in SOURCES)}")
     universes.set_defaults(handler=cmd_update_universes)
 

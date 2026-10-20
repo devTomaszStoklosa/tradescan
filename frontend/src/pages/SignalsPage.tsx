@@ -6,12 +6,22 @@ import { DataTable, type Column } from "../components/DataTable";
 import { FAMILY_LABELS, SignalChip } from "../components/SignalChip";
 import { FamilyPicker } from "../components/UniverseFilters";
 import { DirectionBadge, ErrorBox, Field, Input, Loading, PageHeader, Panel } from "../components/ui";
-import { fmtNumber } from "../lib/format";
+import { fmtNumber, fmtParam } from "../lib/format";
 
 const columns: Column<SignalOut>[] = [
-  { key: "name", header: "Signal", sortValue: (s) => s.name, render: (s) => <SignalChip name={s.name} family={s.family} /> },
+  {
+    key: "name",
+    header: "Signal",
+    sortValue: (s) => s.name,
+    render: (s) => <SignalChip name={s.name} family={s.family} />,
+  },
   { key: "family", header: "Family", sortValue: (s) => s.family, render: (s) => FAMILY_LABELS[s.family] },
-  { key: "dir", header: "Dir", sortValue: (s) => s.direction, render: (s) => <DirectionBadge direction={s.direction} /> },
+  {
+    key: "dir",
+    header: "Dir",
+    sortValue: (s) => s.direction,
+    render: (s) => <DirectionBadge direction={s.direction} />,
+  },
   {
     key: "weight",
     header: "Weight",
@@ -31,8 +41,11 @@ const columns: Column<SignalOut>[] = [
       <ul>
         {s.params.map((spec) => (
           <li key={spec.name} title={spec.help || undefined}>
-            {spec.label}: <span className="num text-fg">{String(spec.default)}</span>
-            {spec.unit && ` ${spec.unit}`} <span className="num">({spec.minimum}–{spec.maximum})</span>
+            {spec.label}: <span className="num text-fg">{fmtParam(spec.default)}</span>
+            {spec.unit && ` ${spec.unit}`}{" "}
+            <span className="num">
+              ({spec.minimum}–{spec.maximum})
+            </span>
           </li>
         ))}
       </ul>
@@ -55,21 +68,35 @@ export function SignalsPage() {
     );
   }, [signals.data, query, families]);
 
-  if (signals.isError) return <ErrorBox error={signals.error} onRetry={() => signals.refetch()} />;
+  if (signals.isError) return <ErrorBox error={signals.error} onRetry={() => void signals.refetch()} />;
   if (!signals.data || !config.data) return <Loading message="Loading signals…" />;
 
   return (
     <>
-      <PageHeader title="Signals" subtitle="Every rule is evaluated on the bar's close; only the first bar of each run counts as an event." />
+      <PageHeader
+        title="Signals"
+        subtitle="Every rule is evaluated on the bar's close; only the first bar of each run counts as an event."
+      />
       <Panel className="flex flex-wrap items-end gap-4">
         <div className="w-64 max-w-full">
           <Field label="Search">
-            <Input type="search" value={query} placeholder="breakout, RSI, volume…" onChange={(event) => setQuery(event.target.value)} />
+            <Input
+              type="search"
+              value={query}
+              placeholder="breakout, RSI, volume…"
+              onChange={(event) => setQuery(event.target.value)}
+            />
           </Field>
         </div>
         <FamilyPicker value={families} onChange={setFamilies} families={config.data.families} />
       </Panel>
-      <DataTable rows={visible} columns={columns} rowKey={(signal) => signal.name} initialSort={{ key: "family", direction: "asc" }} caption="Signals" />
+      <DataTable
+        rows={visible}
+        columns={columns}
+        rowKey={(signal) => signal.name}
+        initialSort={{ key: "family", direction: "asc" }}
+        caption="Signals"
+      />
     </>
   );
 }

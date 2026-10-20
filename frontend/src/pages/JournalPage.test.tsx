@@ -10,10 +10,19 @@ import { PinnedRunsProvider } from "../state/pinnedRuns";
 import { makeRun } from "../test/fixtures";
 import { MemoryRunStore } from "../test/runStore";
 import { JournalPage } from "./JournalPage";
+import { requestBody, requestUrl } from "../test/fetch";
 
 const baseline = makeRun(1, {}, { name: "baseline" });
 
-const SUMMARY: JournalSummaryOut = { open_trades: 0, closed_trades: 0, win_rate_pct: null, average_return_pct: null, r_trades: 0, average_r: null, total_r: null };
+const SUMMARY: JournalSummaryOut = {
+  open_trades: 0,
+  closed_trades: 0,
+  win_rate_pct: null,
+  average_return_pct: null,
+  r_trades: 0,
+  average_r: null,
+  total_r: null,
+};
 
 /** What a test logs: fees and notes may be left out, as the server allows. */
 type TradeInput = Omit<JournalTradeIn, "fees" | "notes"> & Partial<Pick<JournalTradeIn, "fees" | "notes">>;
@@ -50,25 +59,30 @@ let summary: JournalSummaryOut = SUMMARY;
 const sent = (method: string) =>
   vi
     .mocked(globalThis.fetch)
-    .mock.calls.filter(([input, init]) => String(input).includes("/journal/trades") && init?.method === method)
-    .map(([input, init]) => ({ url: String(input), body: init?.body ? (JSON.parse(String(init.body)) as JournalTradeIn) : null }));
+    .mock.calls.filter(([input, init]) => requestUrl(input).includes("/journal/trades") && init?.method === method)
+    .map(([input, init]) => ({
+      url: requestUrl(input),
+      body: init?.body ? (requestBody(init) as JournalTradeIn) : null,
+    }));
 
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
 function renderPage(path = "/journal", store = new MemoryRunStore([baseline])) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-    const url = String(input);
+    const url = requestUrl(input);
     const method = init?.method ?? "GET";
     if (url.endsWith("/api/journal")) return json({ trades, summary });
     if (method === "POST") {
-      const body = JSON.parse(String(init?.body)) as JournalTradeIn;
-      if (body.stop != null && body.stop >= body.entry_price) return json({ detail: "The stop of a long trade must be below the entry price" }, 400);
+      const body = requestBody(init) as JournalTradeIn;
+      if (body.stop != null && body.stop >= body.entry_price)
+        return json({ detail: "The stop of a long trade must be below the entry price" }, 400);
       trades = [tradeOut(trades.length + 1, body), ...trades];
       return json(trades[0], 201);
     }
     const id = Number(url.split("/").at(-1));
     if (method === "PUT") {
-      trades = trades.map((trade) => (trade.id === id ? tradeOut(id, JSON.parse(String(init?.body)) as JournalTradeIn) : trade));
+      trades = trades.map((trade) => (trade.id === id ? tradeOut(id, requestBody(init) as JournalTradeIn) : trade));
       return json(trades.find((trade) => trade.id === id));
     }
     if (method === "DELETE") {
@@ -155,15 +169,42 @@ describe("JournalPage", () => {
     expect(within(table).getByText("baseline")).toBeInTheDocument();
     // The backtest's win rate and expectancy, next to the real result.
     expect(within(table).getByText("SPY · 62% wins · +0.21 R per trade · 42 trades")).toBeInTheDocument();
-    expect(within(table).getByRole("link", { name: "Open in Backtest" })).toHaveAttribute("href", expect.stringMatching(/^\/backtest\?ticker=SPY/));
+    expect(within(table).getByRole("link", { name: "Open in Backtest" })).toHaveAttribute(
+      "href",
+      expect.stringMatching(/^\/backtest\?ticker=SPY/),
+    );
   });
 
   it("shows each trade's result and the summary, closes a trade and deletes one", async () => {
     trades = [
-      tradeOut(2, { ticker: "QQQ", direction: "short", opened: "2026-04-01", entry_price: 400, quantity: 5, stop: 410 }),
-      tradeOut(1, { ticker: "SPY", direction: "long", opened: "2026-03-02", entry_price: 500, quantity: 2, stop: 490, run: suggestingRun(baseline) }),
+      tradeOut(2, {
+        ticker: "QQQ",
+        direction: "short",
+        opened: "2026-04-01",
+        entry_price: 400,
+        quantity: 5,
+        stop: 410,
+      }),
+      tradeOut(1, {
+        ticker: "SPY",
+        direction: "long",
+        opened: "2026-03-02",
+        entry_price: 500,
+        quantity: 2,
+        stop: 490,
+        run: suggestingRun(baseline),
+      }),
     ];
-    summary = { ...SUMMARY, open_trades: 1, closed_trades: 1, win_rate_pct: 100, average_return_pct: 5.8, r_trades: 1, average_r: 2.9, total_r: 2.9 };
+    summary = {
+      ...SUMMARY,
+      open_trades: 1,
+      closed_trades: 1,
+      win_rate_pct: 100,
+      average_return_pct: 5.8,
+      r_trades: 1,
+      average_r: 2.9,
+      total_r: 2.9,
+    };
     renderPage("/journal", new MemoryRunStore());
     const table = await screen.findByRole("table", { name: "Trades in the journal" });
     expect(screen.getByText("Total R").parentElement).toHaveTextContent("+2.90 R");
@@ -180,7 +221,12 @@ describe("JournalPage", () => {
     await waitFor(() => expect(sent("PUT")).toHaveLength(1));
     expect(sent("PUT")[0]).toMatchObject({
       url: "/api/journal/trades/1",
-      body: { closed: "2026-03-20", exit_price: 530, fees: 2, run: JSON.parse(JSON.stringify(suggestingRun(baseline))) },
+      body: {
+        closed: "2026-03-20",
+        exit_price: 530,
+        fees: 2,
+        run: JSON.parse(JSON.stringify(suggestingRun(baseline))) as unknown,
+      },
     });
     const spy = await within(table).findByRole("row", { name: /SPY/ });
     expect(spy).toHaveTextContent("+58.00");
@@ -204,7 +250,9 @@ describe("JournalPage", () => {
     fill(/^Quantity/, "2");
     fill(/^Initial stop/, "510");
     await userEvent.click(screen.getByRole("button", { name: "Log trade" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("The stop of a long trade must be below the entry price");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The stop of a long trade must be below the entry price",
+    );
     expect(field(/^Ticker/)).toHaveValue("SPY");
   });
 });

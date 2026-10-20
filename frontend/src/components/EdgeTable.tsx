@@ -15,7 +15,15 @@ function heatStyle(edge: number | null | undefined): CSSProperties | undefined {
 
 const statAt = (row: EdgeRowOut, index: number): EdgeStatsOut | undefined => row.stats[index];
 
-export function EdgeTable({ rows, horizons, minEvents = 0 }: { rows: EdgeRowOut[]; horizons: number[]; minEvents?: number }) {
+export function EdgeTable({
+  rows,
+  horizons,
+  minEvents = 0,
+}: {
+  rows: EdgeRowOut[];
+  horizons: number[];
+  minEvents?: number;
+}) {
   const columns: Column<EdgeRowOut>[] = [
     {
       key: "signal",
@@ -27,7 +35,12 @@ export function EdgeTable({ rows, horizons, minEvents = 0 }: { rows: EdgeRowOut[
         </span>
       ),
     },
-    { key: "dir", header: "Dir", sortValue: (row) => row.direction, render: (row) => <DirectionBadge direction={row.direction} /> },
+    {
+      key: "dir",
+      header: "Dir",
+      sortValue: (row) => row.direction,
+      render: (row) => <DirectionBadge direction={row.direction} />,
+    },
     ...horizons.flatMap((horizon, index): Column<EdgeRowOut>[] => [
       {
         key: `n${horizon}`,

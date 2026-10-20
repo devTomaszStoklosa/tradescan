@@ -8,14 +8,23 @@ import { AccountProvider } from "../state/account";
 import { ThemeProvider } from "../state/theme";
 import { config, scanResult, signals, watchlists } from "../test/fixtures";
 import { ScanPage } from "./ScanPage";
+import { requestBody, requestUrl } from "../test/fetch";
 
-const RESPONSES: Record<string, unknown> = { "/config": config, "/signals": signals, "/watchlists": watchlists, "/scan": scanResult };
+const RESPONSES: Record<string, unknown> = {
+  "/config": config,
+  "/signals": signals,
+  "/watchlists": watchlists,
+  "/scan": scanResult,
+};
 
 function mockServer() {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-    const url = String(input);
+    const url = requestUrl(input);
     const body = Object.entries(RESPONSES).find(([path]) => url.endsWith(path))?.[1] ?? null;
-    return new Response(JSON.stringify(body), { status: body ? 200 : 404, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify(body), {
+      status: body ? 200 : 404,
+      headers: { "Content-Type": "application/json" },
+    });
   });
 }
 
@@ -35,8 +44,8 @@ function renderPage(path = "/") {
 }
 
 const scanRequest = (fetch: ReturnType<typeof mockServer>) => {
-  const calls = fetch.mock.calls.filter(([url]) => String(url).endsWith("/scan"));
-  return JSON.parse(String(calls.at(-1)?.[1]?.body));
+  const calls = fetch.mock.calls.filter(([url]) => requestUrl(url).endsWith("/scan"));
+  return requestBody(calls.at(-1)?.[1]);
 };
 
 describe("ScanPage", () => {
@@ -69,7 +78,10 @@ describe("ScanPage", () => {
     renderPage("/?t=AAPL,MSFT");
 
     expect(await screen.findByText("MSFT")).toBeInTheDocument();
-    expect(scanRequest(fetch)).toMatchObject({ tickers: ["AAPL", "MSFT"], settings: { account: { equity: 50000, risk_pct: 0.5 } } });
+    expect(scanRequest(fetch)).toMatchObject({
+      tickers: ["AAPL", "MSFT"],
+      settings: { account: { equity: 50000, risk_pct: 0.5 } },
+    });
   });
 
   it("puts changed parameters in the URL and the request", async () => {

@@ -49,7 +49,15 @@ export function PinRunButton({ result, engine, form }: { result: BacktestOut; en
 }
 
 /** Pins the shown engine's portfolio run. */
-export function PinPortfolioRunButton({ result, engine, form }: { result: PortfolioOut; engine: string; form: PortfolioForm }) {
+export function PinPortfolioRunButton({
+  result,
+  engine,
+  form,
+}: {
+  result: PortfolioOut;
+  engine: string;
+  form: PortfolioForm;
+}) {
   const snapshot = useMemo(() => snapshotPortfolioRun(result, engine, form), [result, engine, form]);
   return <PinSnapshotButton snapshot={snapshot} what={runName(result.runs.length, engine)} />;
 }

@@ -4,6 +4,7 @@ import { countChanges, describeSignal, withOwner, withValue, type Overrides, typ
 import { ParamFields, SectionFields } from "./ParamFields";
 import { SignalChip } from "./SignalChip";
 import { Button } from "./ui";
+import { omit } from "../lib/records";
 
 const SCORING = "scoring";
 const SIGNAL_WEIGHTS = "signal_weights";
@@ -73,9 +74,7 @@ function SignalParameters({
 
   const setWeight = (name: string, value: number | null) => {
     if (!weightsSpec) return;
-    const next = { ...weights };
-    if (value === null) delete next[name];
-    else next[name] = value;
+    const next = value === null ? omit(weights, name) : { ...weights, [name]: value };
     onSettingsChange(withOwner(settings, SCORING, withValue(settings[SCORING] ?? {}, weightsSpec, next)));
   };
 
@@ -91,11 +90,24 @@ function SignalParameters({
                 key={signal.name}
                 signal={signal}
                 values={fixed ? {} : (params[signal.name] ?? {})}
-                onChange={fixed ? undefined : onParamsChange && ((values) => onParamsChange(withOwner(params, signal.name, values)))}
+                onChange={
+                  fixed
+                    ? undefined
+                    : onParamsChange && ((values) => onParamsChange(withOwner(params, signal.name, values)))
+                }
                 note={fixed ? FIXED_NOTE : undefined}
                 weight={
                   weightsSpec && {
-                    spec: { ...weightsSpec, name: signal.name, kind: "float", label: "Score weight", unit: "", help: "", default: signal.weight, keys: null },
+                    spec: {
+                      ...weightsSpec,
+                      name: signal.name,
+                      kind: "float",
+                      label: "Score weight",
+                      unit: "",
+                      help: "",
+                      default: signal.weight,
+                      keys: null,
+                    },
                     value: weights[signal.name],
                     onChange: (value) => setWeight(signal.name, value),
                   }
@@ -162,13 +174,20 @@ export function AdvancedSettings({
         </span>
       </summary>
       <div className="space-y-5 border-t border-line p-4">
-        {sections.filter((section) => section.params.some((spec) => !exclude[section.name]?.includes(spec.name))).map((section) => (
-          <section key={section.name} className="space-y-2">
-            <h3 className="text-sm font-semibold">{section.label}</h3>
-            <SectionFields section={section} overrides={settings} onChange={onSettingsChange} exclude={exclude[section.name]} />
-          </section>
-        ))}
-        {signals && (onSignalParamsChange || scoring) && (
+        {sections
+          .filter((section) => section.params.some((spec) => !exclude[section.name]?.includes(spec.name)))
+          .map((section) => (
+            <section key={section.name} className="space-y-2">
+              <h3 className="text-sm font-semibold">{section.label}</h3>
+              <SectionFields
+                section={section}
+                overrides={settings}
+                onChange={onSettingsChange}
+                exclude={exclude[section.name]}
+              />
+            </section>
+          ))}
+        {signals && (onSignalParamsChange ?? scoring) && (
           <SignalParameters
             signals={signals}
             params={signalParams}

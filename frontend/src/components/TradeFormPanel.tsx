@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type SubmitEvent } from "react";
 
 import type { Direction, JournalTradeIn } from "../api/client";
 import { suggestedBy, tradeBody, type TradeForm } from "../lib/journal";
@@ -17,7 +17,10 @@ function keptLabel(form: TradeForm): string {
   return "run" in shown ? `${shown.run.name} (as logged)` : "The logged run (unreadable)";
 }
 
-/** Logs a new trade or edits one; `editing` keeps the trade's own copy of its run on offer. */
+/**
+ * Logs a new trade or edits one; `editing` keeps the trade's own copy of its run on offer. The form starts from
+ * `initial` once: give it another `key` to start over.
+ */
 export function TradeFormPanel({
   initial,
   editing,
@@ -40,11 +43,6 @@ export function TradeFormPanel({
   };
   const [draft, setDraft] = useState(initial);
   const [choice, setChoice] = useState(() => choiceOf(initial));
-  useEffect(() => {
-    setDraft(initial);
-    setChoice(choiceOf(initial));
-    // Only another trade to fill in resets the form; pinning or renaming a run meanwhile does not.
-  }, [initial]);
   const body = tradeBody(draft);
   const set = <K extends keyof TradeForm>(key: K, value: TradeForm[K]) => setDraft({ ...draft, [key]: value });
 
@@ -54,7 +52,7 @@ export function TradeFormPanel({
     set("run", value === KEPT ? initial.run : pinned ? suggestingRun(pinned) : null);
   };
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: SubmitEvent) => {
     event.preventDefault();
     if (body) onSubmit(body);
   };
@@ -65,7 +63,12 @@ export function TradeFormPanel({
         <h2 className="text-sm font-semibold">{editing ? "Edit trade" : "Log a trade"}</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
           <Field label="Ticker">
-            <Input value={draft.ticker} onChange={(event) => set("ticker", event.target.value)} placeholder="AAPL" autoCapitalize="characters" />
+            <Input
+              value={draft.ticker}
+              onChange={(event) => set("ticker", event.target.value)}
+              placeholder="AAPL"
+              autoCapitalize="characters"
+            />
           </Field>
           <Field label="Direction">
             <Select value={draft.direction} onChange={(event) => set("direction", event.target.value as Direction)}>

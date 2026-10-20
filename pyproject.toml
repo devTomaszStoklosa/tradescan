@@ -20,7 +20,7 @@ dependencies = [
 [project.optional-dependencies]
 cerebro = ["backtrader>=1.9.78"]
 api = ["fastapi>=0.115", "uvicorn>=0.30"]
-dev = ["pytest>=8", "httpx2"]
+dev = ["pytest>=8", "httpx2", "ruff>=0.17", "mypy>=2.4", "pandas-stubs>=2.2"]
 
 [project.scripts]
 tradescan = "tradescan.cli:main"
@@ -31,3 +31,62 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["src", "."]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",  # pycodestyle
+    "F",       # pyflakes
+    "I",       # isort
+    "N",       # pep8-naming
+    "B",       # bugbear
+    "UP",      # pyupgrade
+    "SIM",     # simplify
+    "C4",      # comprehensions
+    "PIE",     # misc lints
+    "RET",     # return statements
+    "PERF",    # performance anti-patterns
+    "PT",      # pytest style
+    "RUF",     # ruff-specific
+]
+# Signal descriptions and labels print the multiplication sign on purpose ("2 × ATR").
+allowed-confusables = ["×"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Frozen dataclasses and declared parameters are immutable, so they are safe as defaults.
+extend-immutable-calls = [
+    "tradescan.params.param",
+    "tradescan.backtest.pyramid.Pyramiding",
+    "tradescan.backtest.weighting.EqualWeight",
+    "tests.test_portfolio.ClosePriority",
+    "tests.test_rotation.CloseRank",
+]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src", "tests", "scripts"]
+strict = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+# Tests are checked for type errors in their bodies, without requiring annotations on every test function.
+# They reach into optional results and concrete rule types on purpose; running them checks those accesses.
+module = ["tests.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_calls = false
+disable_error_code = ["union-attr", "attr-defined", "comparison-overlap"]
+
+[[tool.mypy.overrides]]
+# Neither ships type information.
+module = ["backtrader", "backtrader.*", "yfinance", "yfinance.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# The Cerebro engines subclass backtrader's untyped classes.
+module = ["tradescan.backtest.cerebro", "tradescan.backtest.cerebro_portfolio"]
+disallow_subclassing_any = false

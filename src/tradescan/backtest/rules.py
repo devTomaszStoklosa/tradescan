@@ -33,8 +33,18 @@ class Bars:
 
     @classmethod
     def from_frame(cls, df: pd.DataFrame, atr_period: int) -> Bars:
-        values = (df[column].to_numpy(dtype=float) for column in ("open", "high", "low", "close", "volume"))
-        return cls(*values, atr=atr(df, atr_period).to_numpy(dtype=float), dates=pd.DatetimeIndex(df.index))
+        def column(name: str) -> np.ndarray:
+            return df[name].to_numpy(dtype=float)
+
+        return cls(
+            open=column("open"),
+            high=column("high"),
+            low=column("low"),
+            close=column("close"),
+            volume=column("volume"),
+            atr=atr(df, atr_period).to_numpy(dtype=float),
+            dates=pd.DatetimeIndex(df.index),
+        )
 
     def __len__(self) -> int:
         return len(self.close)
