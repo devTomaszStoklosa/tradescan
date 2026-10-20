@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type SubmitEvent } from "react";
+import { useMemo, useState, type SubmitEvent } from "react";
 import { useSearchParams } from "react-router";
 
 import type { ConfigOut, HitOut, ScanOut, SignalOut, WatchlistOut } from "../api/client";
@@ -21,21 +21,17 @@ import {
   Panel,
   Select,
 } from "../components/ui";
-import { defaultWatchlist, LARGE_UNIVERSE, PERIODS, universeSize } from "../lib/choices";
+import { LARGE_UNIVERSE, PERIODS, universeSize, withDefaultUniverse } from "../lib/choices";
 import { downloadCsv, type CsvRow } from "../lib/csv";
 import { fmtNumber } from "../lib/format";
 import { hasProblems, pickSections, sectionSpecs, signalSpecs, visibleSignals, type Overrides } from "../lib/overrides";
 import { readScanForm, scanBody, tickerList, writeScanForm, type ScanForm } from "../lib/params";
+import { useResettableState } from "../lib/useResettableState";
 import { useAccount, withAccount } from "../state/account";
 
 /** Settings sections that shape a scan; `scan` first because its two main fields sit in the form row. */
 const SCAN_SECTIONS = ["scan", "risk", "scoring", "trend", "regime"] as const;
 const MAIN_FIELDS = ["fresh_bars", "min_score"] as const;
-
-function withDefaultUniverse(form: ScanForm, watchlists: WatchlistOut[]): ScanForm {
-  if (form.universe.watchlist || form.universe.tickers) return form;
-  return { ...form, universe: { watchlist: defaultWatchlist(watchlists), tickers: "" } };
-}
 
 function hitsToCsv(hits: HitOut[]): CsvRow[] {
   return hits.map((hit) => ({
@@ -77,8 +73,8 @@ function ScanFormPanel({
   busy: boolean;
   onSubmit: (form: ScanForm) => void;
 }) {
-  const [draft, setDraft] = useState(() => withDefaultUniverse(initial, watchlists));
-  useEffect(() => setDraft(withDefaultUniverse(initial, watchlists)), [initial, watchlists]);
+  const source = useMemo(() => withDefaultUniverse(initial, watchlists), [initial, watchlists]);
+  const [draft, setDraft] = useResettableState(source);
   const sections = pickSections(config.sections, SCAN_SECTIONS);
   const scanSection = sections.find((section) => section.name === "scan");
   const setSettings = (settings: Overrides) => setDraft({ ...draft, settings });

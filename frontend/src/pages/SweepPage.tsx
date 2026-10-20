@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type SubmitEvent } from "react";
+import { useMemo, type SubmitEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import type { ConfigOut, SignalOut, SweepCellOut, SweepOut } from "../api/client";
@@ -45,6 +45,7 @@ import {
   type SweepForm,
   type SweepParam,
 } from "../lib/sweep";
+import { useResettableState } from "../lib/useResettableState";
 import { useAccount, withAccount } from "../state/account";
 
 const METRIC_KEYS = new Set<string>(METRICS.map((metric) => metric.key));
@@ -66,8 +67,7 @@ function SweepFormPanel({
   busy: boolean;
   onSubmit: (form: SweepForm) => void;
 }) {
-  const [draft, setDraft] = useState(initial);
-  useEffect(() => setDraft(initial), [initial]);
+  const [draft, setDraft] = useResettableState(initial);
   const limits = config.sweep;
   const params = useMemo(() => sweepParams(draft, config, signals), [draft, config, signals]);
   const ranges = draft.axes.map((axis) => {
@@ -155,8 +155,8 @@ function SweepView({
     );
     return index < 0 ? null : index;
   }, [cells, axes]);
-  const [selected, setSelected] = useState<number | null>(best);
-  useEffect(() => setSelected(best), [result]); // a new sweep starts on its best cell, a new metric keeps the pick
+  // A new sweep starts on its best cell; a new metric keeps the pick.
+  const [selected, setSelected] = useResettableState<number | null>(best, result);
 
   const metricLabel = METRICS.find((item) => item.key === metric)?.label ?? metric;
   const errors = cells.filter((cell) => cell.error);

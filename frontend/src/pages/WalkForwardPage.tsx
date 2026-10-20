@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type SubmitEvent } from "react";
+import { useMemo, type SubmitEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import type {
@@ -38,6 +38,7 @@ import { downloadCsv, tradeRow } from "../lib/csv";
 import { DASH, fmtNumber, fmtPct, tone } from "../lib/format";
 import { hasSetupProblems } from "../lib/setup";
 import type { SweepParam } from "../lib/sweep";
+import { useResettableState } from "../lib/useResettableState";
 import {
   backtestLink,
   readWalkForwardForm,
@@ -79,8 +80,7 @@ function WalkForwardFormPanel({
   busy: boolean;
   onSubmit: (form: WalkForwardForm) => void;
 }) {
-  const [draft, setDraft] = useState(initial);
-  useEffect(() => setDraft(initial), [initial]);
+  const [draft, setDraft] = useResettableState(initial);
   const limits = config.walk_forward;
   const params = useMemo(() => walkForwardParams(draft, config, signals), [draft, config, signals]);
   const runs = walkForwardRuns(draft, params, config);

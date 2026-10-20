@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router";
 
 import { MIN_TRADES } from "../lib/compare";
@@ -6,6 +5,7 @@ import { fmtPct } from "../lib/format";
 import { writeBacktestForm } from "../lib/params";
 import { writePortfolioForm } from "../lib/portfolio";
 import { runColorVar, runSubject, type PinnedRun, type RunKind } from "../lib/runs";
+import { useResettableState } from "../lib/useResettableState";
 import { Button, DirectionBadge, Input } from "./ui";
 
 /** What a card shows only for one kind of run; a new kind of run adds its entry here. */
@@ -58,8 +58,7 @@ export function RunCard({
   onToggle: () => void;
   onRemove: () => void;
 }) {
-  const [name, setName] = useState(run.name);
-  useEffect(() => setName(run.name), [run.name]);
+  const [name, setName] = useResettableState(run.name);
   // Saved on blur rather than per keystroke: each save is a request to the server.
   const commit = () => {
     const next = name.trim();

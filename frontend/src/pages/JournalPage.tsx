@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { api, type JournalSummaryOut, type JournalTradeIn, type JournalTradeOut } from "../api/client";
@@ -47,13 +47,10 @@ export function JournalPage() {
   const [round, setRound] = useState(0);
   const runId = params.get("run");
 
-  // A fresh form only for another trade to edit, another run to log from or after a save: runs that reload
-  // when the tab regains focus must not wipe what is typed.
-  const initial = useMemo(
-    () => (editing ? tradeFormOf(editing) : newTradeForm(pinned.runs.find((run) => run.id === runId))),
-    // The runs themselves are left out on purpose; `loading` is in, so the run is found once the runs arrive.
-    [editing, runId, pinned.loading, round],
-  );
+  const initial = editing ? tradeFormOf(editing) : newTradeForm(pinned.runs.find((run) => run.id === runId));
+  // The form starts over only for another trade to edit, another run to log from, once the runs arrive (so the
+  // run is found) or after a save: runs that reload when the tab regains focus must not wipe what is typed.
+  const formKey = [editing?.id ?? "new", runId ?? "", pinned.loading, round].join(":");
 
   const refresh = () => void queryClient.invalidateQueries({ queryKey: JOURNAL_KEY });
   const save = useMutation({
@@ -92,6 +89,7 @@ export function JournalPage() {
       />
       <div id={FORM_ID}>
         <TradeFormPanel
+          key={formKey}
           initial={initial}
           editing={editing !== null}
           runs={pinned.runs}

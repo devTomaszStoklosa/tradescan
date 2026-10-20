@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type SubmitEvent } from "react";
+import { useMemo, type SubmitEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import type {
@@ -29,11 +29,12 @@ import {
   Select,
   StatTile,
 } from "../components/ui";
-import { defaultWatchlist, LARGE_UNIVERSE, universeSize } from "../lib/choices";
+import { LARGE_UNIVERSE, universeSize, withDefaultUniverse } from "../lib/choices";
 import { MIN_TRADES, type MetricKey } from "../lib/compare";
 import { downloadCsv } from "../lib/csv";
 import { DASH, fmtNumber, fmtPct, fmtSigned, tone } from "../lib/format";
 import { hasSetupProblems, resetSetup, setupChanges } from "../lib/setup";
+import { useResettableState } from "../lib/useResettableState";
 import {
   backtestLink,
   DEFAULT_WATCHLIST_METRIC,
@@ -72,12 +73,8 @@ function WatchlistFormPanel({
   busy: boolean;
   onSubmit: (form: WatchlistForm) => void;
 }) {
-  const withUniverse = (form: WatchlistForm): WatchlistForm =>
-    form.universe.watchlist || form.universe.tickers
-      ? form
-      : { ...form, universe: { watchlist: defaultWatchlist(watchlists), tickers: "" } };
-  const [draft, setDraft] = useState(() => withUniverse(initial));
-  useEffect(() => setDraft(withUniverse(initial)), [initial, watchlists]);
+  const source = useMemo(() => withDefaultUniverse(initial, watchlists), [initial, watchlists]);
+  const [draft, setDraft] = useResettableState(source);
   const changes = setupChanges(draft, config);
   const invalid = !watchlistBody(draft) || hasSetupProblems(draft, config, signals);
   const watchlistBenchmark = watchlists.find((item) => item.name === draft.universe.watchlist)?.benchmark;

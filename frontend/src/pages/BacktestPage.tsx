@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type SubmitEvent } from "react";
+import { useMemo, type SubmitEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import type { BacktestOut, ConfigOut, SignalOut } from "../api/client";
@@ -29,6 +29,7 @@ import { fmtNumber } from "../lib/format";
 import { backtestBody, readBacktestForm, writeBacktestForm, type BacktestForm } from "../lib/params";
 import { hasSetupProblems, resetSetup, setupChanges } from "../lib/setup";
 import { newSweepForm, writeSweepForm } from "../lib/sweep";
+import { useResettableState } from "../lib/useResettableState";
 import { useAccount, withAccount } from "../state/account";
 
 const ENGINE_COLORS = ["--accent", "--warn"];
@@ -46,8 +47,7 @@ function BacktestFormPanel({
   busy: boolean;
   onSubmit: (form: BacktestForm) => void;
 }) {
-  const [draft, setDraft] = useState(initial);
-  useEffect(() => setDraft(initial), [initial]);
+  const [draft, setDraft] = useResettableState(initial);
   const toggleEngine = (engine: string) =>
     setDraft({
       ...draft,
@@ -110,8 +110,8 @@ function BacktestFormPanel({
 }
 
 function BacktestView({ result, form, config }: { result: BacktestOut; form: BacktestForm; config: ConfigOut }) {
-  const [engine, setEngine] = useState(result.runs[0]?.engine ?? "");
-  useEffect(() => setEngine(result.runs[0]?.engine ?? ""), [result]);
+  // A new result shows its first engine.
+  const [engine, setEngine] = useResettableState(result.runs[0]?.engine ?? "", result);
   const run = result.runs.find((item) => item.engine === engine) ?? result.runs[0];
   const chartBody = useMemo(() => ({ ticker: result.ticker }), [result.ticker]);
   const chart = useChart(chartBody);

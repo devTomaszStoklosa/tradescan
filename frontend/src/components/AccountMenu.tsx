@@ -27,7 +27,6 @@ export function AccountMenu() {
 
   useEffect(() => {
     if (!open) return;
-    setDraft(account);
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && setOpen(false);
     const onClick = (event: MouseEvent) => {
       if (panel.current && !panel.current.contains(event.target as Node)) setOpen(false);
@@ -54,7 +53,10 @@ export function AccountMenu() {
   return (
     <div className="relative" ref={panel}>
       <Button
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          if (!open) setDraft(account); // the menu opens on the account in use
+          setOpen(!open);
+        }}
         aria-expanded={open}
         aria-haspopup="dialog"
         title="Account size and risk per trade"

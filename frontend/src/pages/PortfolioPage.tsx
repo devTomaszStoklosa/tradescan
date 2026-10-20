@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type SubmitEvent } from "react";
+import { useMemo, type SubmitEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import type {
@@ -36,7 +36,7 @@ import {
   StatTile,
   ToggleChip,
 } from "../components/ui";
-import { defaultWatchlist, LARGE_UNIVERSE, PORTFOLIO_SECTION, universeSize } from "../lib/choices";
+import { LARGE_UNIVERSE, PORTFOLIO_SECTION, universeSize, withDefaultUniverse } from "../lib/choices";
 import { downloadCsv, tradeRow } from "../lib/csv";
 import { DASH, fmtNumber, fmtPct, fmtSigned, tone } from "../lib/format";
 import { pickSections } from "../lib/overrides";
@@ -59,6 +59,7 @@ import {
   type PortfolioForm,
 } from "../lib/portfolio";
 import { hasSetupProblems, setupChanges } from "../lib/setup";
+import { useResettableState } from "../lib/useResettableState";
 import { useAccount, withAccount } from "../state/account";
 
 const ENGINE_COLORS = ["--accent", "--warn"];
@@ -80,12 +81,8 @@ function PortfolioFormPanel({
   busy: boolean;
   onSubmit: (form: PortfolioForm) => void;
 }) {
-  const withUniverse = (form: PortfolioForm): PortfolioForm =>
-    form.universe.watchlist || form.universe.tickers
-      ? form
-      : { ...form, universe: { watchlist: defaultWatchlist(watchlists), tickers: "" } };
-  const [draft, setDraft] = useState(() => withUniverse(initial));
-  useEffect(() => setDraft(withUniverse(initial)), [initial, watchlists]);
+  const source = useMemo(() => withDefaultUniverse(initial, watchlists), [initial, watchlists]);
+  const [draft, setDraft] = useResettableState(source);
   const toggleEngine = (engine: string) =>
     setDraft({
       ...draft,
@@ -251,10 +248,13 @@ const PERIOD_KEYS = [
 ] as const;
 
 function PeriodsTables({ run }: { run: PortfolioRunOut }) {
-  const periods = PERIOD_KEYS.map(({ key, label }) => ({ key, label, period: key === "full" ? run.full : run[key] }));
+  const periods = useMemo(
+    () => PERIOD_KEYS.map(({ key, label }) => ({ key, label, period: key === "full" ? run.full : run[key] })),
+    [run],
+  );
   const statColumns = useMemo(
     () => periods.map(({ key, label, period }) => ({ key, header: label, stats: period?.stats ?? null })),
-    [run],
+    [periods],
   );
   return (
     <div className="grid gap-4 xl:grid-cols-2">
@@ -350,8 +350,8 @@ function ContributionTable({
 }
 
 function PortfolioView({ result, form, config }: { result: PortfolioOut; form: PortfolioForm; config: ConfigOut }) {
-  const [engine, setEngine] = useState(result.runs[0]?.engine ?? "");
-  useEffect(() => setEngine(result.runs[0]?.engine ?? ""), [result]);
+  // A new result shows its first engine.
+  const [engine, setEngine] = useResettableState(result.runs[0]?.engine ?? "", result);
   const run = result.runs.find((item) => item.engine === engine) ?? result.runs[0];
 
   const equitySeries = useMemo<EquitySeries[]>(

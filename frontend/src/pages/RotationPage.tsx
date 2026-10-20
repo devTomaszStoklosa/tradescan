@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type SubmitEvent } from "react";
+import { useMemo, type SubmitEvent } from "react";
 import { useSearchParams } from "react-router";
 
 import type { ConfigOut, PickOut, RotationOut, TickerContributionOut, WatchlistOut } from "../api/client";
@@ -24,7 +24,7 @@ import {
   Select,
   StatTile,
 } from "../components/ui";
-import { defaultWatchlist, LARGE_UNIVERSE, PERIODS, ROTATION_SECTION, universeSize } from "../lib/choices";
+import { LARGE_UNIVERSE, PERIODS, ROTATION_SECTION, universeSize, withDefaultUniverse } from "../lib/choices";
 import { downloadCsv, tradeRow } from "../lib/csv";
 import { DASH, fmtNumber, fmtPct, fmtSigned, fmtSize, tone } from "../lib/format";
 import {
@@ -36,6 +36,7 @@ import {
   writeRotationForm,
   type RotationForm,
 } from "../lib/rotation";
+import { useResettableState } from "../lib/useResettableState";
 import { useAccount, withAccount } from "../state/account";
 
 const REBALANCES = [
@@ -56,12 +57,8 @@ function RotationFormPanel({
   busy: boolean;
   onSubmit: (form: RotationForm) => void;
 }) {
-  const withUniverse = (form: RotationForm): RotationForm =>
-    form.universe.watchlist || form.universe.tickers
-      ? form
-      : { ...form, universe: { watchlist: defaultWatchlist(watchlists), tickers: "" } };
-  const [draft, setDraft] = useState(() => withUniverse(initial));
-  useEffect(() => setDraft(withUniverse(initial)), [initial, watchlists]);
+  const source = useMemo(() => withDefaultUniverse(initial, watchlists), [initial, watchlists]);
+  const [draft, setDraft] = useResettableState(source);
   const set = <K extends keyof RotationForm>(key: K, value: RotationForm[K]) => setDraft({ ...draft, [key]: value });
   const changes = rotationChanges(draft, config);
   const invalid = hasRotationProblems(draft, config);
@@ -217,10 +214,10 @@ const PERIOD_KEYS = [
 ] as const;
 
 function PeriodsTables({ result }: { result: RotationOut }) {
-  const periods = PERIOD_KEYS.map(({ key, label }) => ({ key, label, period: result[key] }));
+  const periods = useMemo(() => PERIOD_KEYS.map(({ key, label }) => ({ key, label, period: result[key] })), [result]);
   const statColumns = useMemo(
     () => periods.map(({ key, label, period }) => ({ key, header: label, stats: period?.stats ?? null })),
-    [result],
+    [periods],
   );
   return (
     <div className="grid gap-4 xl:grid-cols-2">

@@ -1,4 +1,4 @@
-import { useEffect, useState, type SubmitEvent } from "react";
+import { useState, type SubmitEvent } from "react";
 
 import type { Direction, JournalTradeIn } from "../api/client";
 import { suggestedBy, tradeBody, type TradeForm } from "../lib/journal";
@@ -17,7 +17,10 @@ function keptLabel(form: TradeForm): string {
   return "run" in shown ? `${shown.run.name} (as logged)` : "The logged run (unreadable)";
 }
 
-/** Logs a new trade or edits one; `editing` keeps the trade's own copy of its run on offer. */
+/**
+ * Logs a new trade or edits one; `editing` keeps the trade's own copy of its run on offer. The form starts from
+ * `initial` once: give it another `key` to start over.
+ */
 export function TradeFormPanel({
   initial,
   editing,
@@ -40,11 +43,6 @@ export function TradeFormPanel({
   };
   const [draft, setDraft] = useState(initial);
   const [choice, setChoice] = useState(() => choiceOf(initial));
-  useEffect(() => {
-    setDraft(initial);
-    setChoice(choiceOf(initial));
-    // Only another trade to fill in resets the form; pinning or renaming a run meanwhile does not.
-  }, [initial]);
   const body = tradeBody(draft);
   const set = <K extends keyof TradeForm>(key: K, value: TradeForm[K]) => setDraft({ ...draft, [key]: value });
 

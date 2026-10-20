@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type SubmitEvent } from "react";
+import { useMemo, type SubmitEvent } from "react";
 import { useSearchParams } from "react-router";
 
 import type { EdgeOut, Family, SignalOut, WatchlistOut } from "../api/client";
@@ -19,10 +19,11 @@ import {
   Panel,
   Select,
 } from "../components/ui";
-import { defaultWatchlist, LARGE_UNIVERSE, PERIODS, universeSize } from "../lib/choices";
+import { LARGE_UNIVERSE, PERIODS, universeSize, withDefaultUniverse } from "../lib/choices";
 import { downloadCsv, type CsvRow } from "../lib/csv";
 import { hasProblems, signalSpecs, visibleSignals } from "../lib/overrides";
 import { edgeBody, parseHorizons, readEdgeForm, writeEdgeForm, type EdgeForm } from "../lib/params";
+import { useResettableState } from "../lib/useResettableState";
 
 function edgeToCsv(data: EdgeOut): CsvRow[] {
   return data.rows.map((row) => ({
@@ -57,12 +58,8 @@ function EdgeFormPanel({
   busy: boolean;
   onSubmit: (form: EdgeForm) => void;
 }) {
-  const withUniverse = (form: EdgeForm): EdgeForm =>
-    form.universe.watchlist || form.universe.tickers
-      ? form
-      : { ...form, universe: { watchlist: defaultWatchlist(watchlists), tickers: "" } };
-  const [draft, setDraft] = useState(() => withUniverse(initial));
-  useEffect(() => setDraft(withUniverse(initial)), [initial, watchlists]);
+  const source = useMemo(() => withDefaultUniverse(initial, watchlists), [initial, watchlists]);
+  const [draft, setDraft] = useResettableState(source);
   const invalid = !edgeBody(draft) || hasProblems(draft.signalParams, signalSpecs(signals));
 
   const submit = (event: SubmitEvent) => {

@@ -43,3 +43,9 @@ export const SCORE_FIELDS: Readonly<Record<string, readonly string[]>> = { scan:
 export function defaultWatchlist(watchlists: WatchlistOut[]): string {
   return watchlists.find((item) => item.name === "us_large")?.name ?? watchlists[0]?.name ?? "";
 }
+
+/** `form` with the default watchlist when it names no watchlist or tickers yet. */
+export function withDefaultUniverse<F extends { universe: Universe }>(form: F, watchlists: WatchlistOut[]): F {
+  if (form.universe.watchlist || form.universe.tickers) return form;
+  return { ...form, universe: { watchlist: defaultWatchlist(watchlists), tickers: "" } };
+}

@@ -2,7 +2,7 @@
  * Inputs generated from the API's parameter declarations, so every parameter the server knows about
  * can be set here without frontend changes. Empty inputs show the default; only changes are kept.
  */
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 
 import type { ParamSpecOut, SettingsSectionOut } from "../api/client";
 import {
@@ -101,6 +101,14 @@ const parseList = (text: string): number[] | null => {
   return items.every(Number.isFinite) ? items : null;
 };
 
+/** True when `text` already reads as `value`, or as no value when it is empty. */
+function readsAs(text: string, value: ParamValue | undefined, spec: ParamSpecOut): boolean {
+  const typed = parseList(text);
+  const effective = value ?? spec.default;
+  const current = typeof effective === "number" ? [effective] : effective;
+  return typed !== null && (typed.length === 0 ? value === undefined : sameValue(typed, current));
+}
+
 function ListParam({
   spec,
   value,
@@ -113,13 +121,11 @@ function ListParam({
   const id = useId();
   const [text, setText] = useState(listText(value));
   // Follow outside changes (reset, back navigation) without rewriting what is being typed, e.g. "2, ".
-  useEffect(() => {
-    const typed = parseList(text);
-    const effective = value ?? spec.default;
-    const current = typeof effective === "number" ? [effective] : effective;
-    const typedMatches = typed !== null && (typed.length === 0 ? value === undefined : sameValue(typed, current));
-    if (!typedMatches) setText(listText(value));
-  }, [value]); // only outside changes of `value` matter, not every keystroke
+  const [shownValue, setShownValue] = useState(value);
+  if (value !== shownValue) {
+    setShownValue(value);
+    if (!readsAs(text, value, spec)) setText(listText(value));
+  }
 
   const update = (next: string) => {
     setText(next);
