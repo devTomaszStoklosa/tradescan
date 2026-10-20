@@ -590,3 +590,16 @@ npm --prefix frontend run typecheck
 
 Python tests run on deterministic synthetic data and never touch the network; frontend tests mock
 the API.
+
+Linting, formatting and type checking, configured in `pyproject.toml` (Ruff, mypy in strict mode) and in
+`frontend/` (ESLint, Prettier):
+
+```bash
+.venv\Scripts\python -m ruff check .
+.venv\Scripts\python -m ruff format --check .
+.venv\Scripts\python -m mypy
+npm --prefix frontend run lint
+npm --prefix frontend run format:check
+```
+
+`ruff format .` and `npm --prefix frontend run format` rewrite the files instead of checking them.
