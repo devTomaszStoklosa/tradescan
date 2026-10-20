@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from tradescan.api.context import ApiContext
-from tradescan.api.mappers import watchlist_out
+from tradescan.api.mappers.watchlists import watchlist_out
 from tradescan.api.schemas.watchlists import WatchlistOut
 from tradescan.watchlist import load_watchlist
 

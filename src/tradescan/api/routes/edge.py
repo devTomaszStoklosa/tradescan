@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from tradescan.api.context import ApiContext
-from tradescan.api.mappers import edge_out
+from tradescan.api.mappers.edge import edge_out
 from tradescan.api.schemas.edge import EdgeIn, EdgeOut
 from tradescan.services.edge import EdgeRequest
 

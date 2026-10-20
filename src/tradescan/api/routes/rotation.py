@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from tradescan.api.context import ApiContext
-from tradescan.api.mappers import rotation_out
+from tradescan.api.mappers.rotation import rotation_out
 from tradescan.api.routes.backtest import rule_choice
 from tradescan.api.schemas.rotation import RotationIn, RotationOut
 from tradescan.services.rotation import RotationRequest

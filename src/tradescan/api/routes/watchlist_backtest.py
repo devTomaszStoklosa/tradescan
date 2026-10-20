@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from tradescan.api.context import ApiContext
-from tradescan.api.mappers import watchlist_backtest_out
+from tradescan.api.mappers.watchlist_backtest import watchlist_backtest_out
 from tradescan.api.routes.backtest import backtest_request
 from tradescan.api.schemas.watchlist_backtest import WatchlistBacktestIn, WatchlistBacktestOut
 from tradescan.services.watchlist_backtest import WatchlistBacktestRequest

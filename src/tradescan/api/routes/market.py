@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from tradescan.api.context import ApiContext
-from tradescan.api.mappers import market_out
+from tradescan.api.mappers.market import market_out
 from tradescan.api.schemas.market import MarketIn, MarketOut
 from tradescan.services.market import MarketRequest
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from tradescan.api.context import ApiContext
-from tradescan.api.mappers import backtest_out
+from tradescan.api.mappers.backtest import backtest_out
 from tradescan.api.schemas.backtest import BacktestIn, BacktestOut, BacktestRulesIn, RuleIn
 from tradescan.backtest.trade_rules import RuleChoice
 from tradescan.services.backtest import BacktestRequest

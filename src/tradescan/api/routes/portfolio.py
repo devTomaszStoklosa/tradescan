@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from tradescan.api.context import ApiContext
-from tradescan.api.mappers import portfolio_out
+from tradescan.api.mappers.portfolio import portfolio_out
 from tradescan.api.routes.backtest import backtest_request, rule_choice
 from tradescan.api.schemas.portfolio import PortfolioIn, PortfolioOut
 from tradescan.services.portfolio import PortfolioRequest

@@ -6,7 +6,7 @@ from fastapi import APIRouter
 
 from tradescan import __version__
 from tradescan.api.context import ApiContext
-from tradescan.api.mappers import filter_rule_out, priority_rule_out, rule_out, section_out
+from tradescan.api.mappers.meta import filter_rule_out, priority_rule_out, rule_out, section_out
 from tradescan.api.schemas.meta import ConfigOut, SweepLimitsOut, WalkForwardLimitsOut
 from tradescan.backtest import sweep, walk_forward
 from tradescan.backtest.oos import MIN_PERIOD_BARS

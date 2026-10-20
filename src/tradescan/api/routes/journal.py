@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter
 
 from tradescan.api.context import ApiContext
-from tradescan.api.mappers import journal_out, journal_trade_out
+from tradescan.api.mappers.journal import journal_out, journal_trade_out
 from tradescan.api.schemas.common import ErrorOut
 from tradescan.api.schemas.journal import JournalOut, JournalTradeIn, JournalTradeOut
 from tradescan.journal import SuggestedBy, TradeEntry

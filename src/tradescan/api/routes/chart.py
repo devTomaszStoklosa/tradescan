@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from tradescan.api.context import ApiContext
-from tradescan.api.mappers import chart_out
+from tradescan.api.mappers.chart import chart_out
 from tradescan.api.schemas.chart import ChartIn, ChartOut
 from tradescan.services.chart import ChartRequest
 

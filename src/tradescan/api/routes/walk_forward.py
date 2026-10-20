@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from tradescan.api.context import ApiContext
-from tradescan.api.mappers import walk_forward_out
+from tradescan.api.mappers.walk_forward import walk_forward_out
 from tradescan.api.routes.backtest import backtest_request
 from tradescan.api.routes.sweep import sweep_axes
 from tradescan.api.schemas.walk_forward import WalkForwardIn, WalkForwardOut

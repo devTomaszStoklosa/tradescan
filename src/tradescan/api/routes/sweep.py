@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from tradescan.api.context import ApiContext
-from tradescan.api.mappers import sweep_out
+from tradescan.api.mappers.sweep import sweep_out
 from tradescan.api.routes.backtest import backtest_request
 from tradescan.api.schemas.sweep import SweepIn, SweepOut
 from tradescan.backtest.sweep import SweepAxis
