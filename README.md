@@ -119,7 +119,8 @@ already there stay in the browser until a slot is free and the page is reloaded.
 copy of the run that suggested it, so unpinning the run leaves the trade as it was.
 
 > The API has no authentication. `serve` binds to 127.0.0.1; do not expose it to a network, all the more
-> as the journal holds your real trades.
+> as the journal holds your real trades. It answers only requests addressed to `localhost`, `127.0.0.1`, `[::1]`
+> or the `--host` it was given, and refuses others with 400, so a web page cannot reach it through DNS rebinding.
 
 For frontend development run the API and Vite's dev server side by side (Vite proxies `/api`):
 

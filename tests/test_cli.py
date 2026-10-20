@@ -331,9 +331,27 @@ def test_serve_keeps_runs_and_the_journal_in_the_db_file(provider, monkeypatch, 
     path = tmp_path / "journal" / "trades.db"
     trade = {"ticker": "AAA", "direction": "long", "opened": "2026-03-02", "entry_price": 10.0, "quantity": 5.0}
     assert cli.main(["serve", "--static", str(tmp_path / "no-ui"), "--db", str(path)]) == 0
-    assert TestClient(served[0]).post("/api/journal/trades", json=trade).status_code == 201
+    first = TestClient(served[0], base_url="http://localhost")
+    assert first.post("/api/journal/trades", json=trade).status_code == 201
     assert cli.main(["serve", "--static", str(tmp_path / "no-ui"), "--db", str(path)]) == 0
-    assert [item["ticker"] for item in TestClient(served[1]).get("/api/journal").json()["trades"]] == ["AAA"]
+    second = TestClient(served[1], base_url="http://localhost")
+    assert [item["ticker"] for item in second.get("/api/journal").json()["trades"]] == ["AAA"]
+
+
+@pytest.mark.parametrize(("bind", "host"), [("192.168.1.5", "192.168.1.5:8000"), ("fd00::5", "[fd00::5]:8000")])
+def test_serve_answers_the_bound_address_and_this_machine_only(provider, monkeypatch, tmp_path, bind, host):
+    uvicorn = pytest.importorskip("uvicorn")
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    served = []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **options: served.append(app))
+    serve = ["serve", "--host", bind, "--static", str(tmp_path / "no-ui"), "--db", str(tmp_path / "tradescan.db")]
+    assert cli.main(serve) == 0
+    client = TestClient(served[0])
+    assert client.get("/api/health", headers={"host": host}).status_code == 200
+    assert client.get("/api/health", headers={"host": "localhost:8000"}).status_code == 200
+    assert client.get("/api/health", headers={"host": "evil.example:8000"}).status_code == 400
 
 
 def test_serve_refuses_a_file_that_is_not_a_database(provider, monkeypatch, tmp_path):

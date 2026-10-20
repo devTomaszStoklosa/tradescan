@@ -24,11 +24,16 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
+def host_header(host: str) -> str:
+    """How a browser names the bound address in the Host header: IPv6 literals in brackets."""
+    return f"[{host}]" if ":" in host else host
+
+
 def run(args: argparse.Namespace, settings: Settings, report: ConsoleReport) -> int:
     try:
         import uvicorn
 
-        from tradescan.api.app import create_app
+        from tradescan.api.app import LOCAL_HOSTS, create_app
     except ImportError as error:
         raise ImportError(f"The web server needs the api extra: pip install -e .[api] ({error})") from error
 
@@ -46,6 +51,7 @@ def run(args: argparse.Namespace, settings: Settings, report: ConsoleReport) -> 
         static_dir=static if static.is_dir() else None,
         runner=ProcessRunner(),
         database=database,
+        allowed_hosts=(*LOCAL_HOSTS, host_header(args.host)),
     )
     report.note(f"tradescan UI on http://{args.host}:{args.port}, pinned runs and the journal in {database.location}")
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
