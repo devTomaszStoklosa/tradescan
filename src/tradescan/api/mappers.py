@@ -8,7 +8,63 @@ from dataclasses import fields
 
 import pandas as pd
 
-from tradescan.api import schemas
+from tradescan.api.schemas.backtest import (
+    AppliedRuleOut,
+    BacktestConfigOut,
+    BacktestOut,
+    EngineRunOut,
+    FillOut,
+    MetricsOut,
+    MonteCarloMethodOut,
+    MonteCarloOut,
+    MonteCarloPathOut,
+    PercentilesOut,
+    SplitOut,
+    TradeOut,
+)
+from tradescan.api.schemas.chart import Candle, ChartEventOut, ChartOut
+from tradescan.api.schemas.common import ParamSpecOut, Point
+from tradescan.api.schemas.edge import EdgeOut, EdgeRowOut, EdgeStatsOut
+from tradescan.api.schemas.journal import JournalOut, JournalSummaryOut, JournalTradeOut, SuggestingRun
+from tradescan.api.schemas.market import MarketOut, RegimeOut
+from tradescan.api.schemas.meta import FilterRuleOut, PriorityRuleOut, RuleOut, SettingsSectionOut
+from tradescan.api.schemas.portfolio import (
+    PortfolioConfigOut,
+    PortfolioOut,
+    PortfolioPeriodOut,
+    PortfolioRunOut,
+    PortfolioStatsOut,
+    PortfolioTradeOut,
+    ScanInputsOut,
+    TickerContributionOut,
+)
+from tradescan.api.schemas.rotation import (
+    PickOut,
+    RotationConfigOut,
+    RotationOut,
+    RotationPeriodOut,
+    RotationStatsOut,
+    TargetsOut,
+)
+from tradescan.api.schemas.runs import PinnedRunOut
+from tradescan.api.schemas.scan import FiredSignalOut, HitOut, RiskOut, ScanOut, ScoreOut
+from tradescan.api.schemas.signals import SignalOut
+from tradescan.api.schemas.sweep import SweepAxisOut, SweepCellOut, SweepOut
+from tradescan.api.schemas.walk_forward import (
+    CombinationErrorOut,
+    WalkForwardOut,
+    WalkForwardSettingsOut,
+    WalkForwardWindowOut,
+    WindowPickOut,
+)
+from tradescan.api.schemas.watchlist_backtest import (
+    MetricSpreadOut,
+    PeriodSummaryOut,
+    PooledTradesOut,
+    TickerRunOut,
+    WatchlistBacktestOut,
+)
+from tradescan.api.schemas.watchlists import WatchlistOut
 from tradescan.backtest.base import BacktestConfig, Trade
 from tradescan.backtest.edge import EdgeStats
 from tradescan.backtest.filters import EntryFilter
@@ -57,10 +113,10 @@ def day(timestamp: pd.Timestamp) -> str:
     return pd.Timestamp(timestamp).strftime("%Y-%m-%d")
 
 
-def points(series: pd.Series) -> list[schemas.Point]:
+def points(series: pd.Series) -> list[Point]:
     clean = series.dropna()
     return [
-        schemas.Point(time=day(date), value=float(value))
+        Point(time=day(date), value=float(value))
         for date, value in zip(bar_dates(clean), clean.to_numpy(), strict=True)
     ]
 
@@ -74,8 +130,8 @@ def _value(value: object) -> object:
     return value
 
 
-def param_spec_out(spec: ParamSpec) -> schemas.ParamSpecOut:
-    return schemas.ParamSpecOut(
+def param_spec_out(spec: ParamSpec) -> ParamSpecOut:
+    return ParamSpecOut(
         name=spec.name,
         kind=spec.kind,
         label=spec.label,
@@ -89,8 +145,8 @@ def param_spec_out(spec: ParamSpec) -> schemas.ParamSpecOut:
     )
 
 
-def section_out(section: SettingsSection) -> schemas.SettingsSectionOut:
-    return schemas.SettingsSectionOut(
+def section_out(section: SettingsSection) -> SettingsSectionOut:
+    return SettingsSectionOut(
         name=section.name, label=section.label, params=[param_spec_out(spec) for spec in section.parameters]
     )
 
@@ -100,8 +156,8 @@ def signal_params(signal: Signal | Rule) -> dict[str, float | list[float]]:
     return {spec.name: _value(spec.default) for spec in parameters_of(signal)}  # type: ignore[misc]
 
 
-def rule_out(rule: type[Rule]) -> schemas.RuleOut:
-    return schemas.RuleOut(
+def rule_out(rule: type[Rule]) -> RuleOut:
+    return RuleOut(
         name=rule.name,
         label=rule.label,
         description=rule().describe(),
@@ -110,22 +166,20 @@ def rule_out(rule: type[Rule]) -> schemas.RuleOut:
     )
 
 
-def filter_rule_out(rule: type[EntryFilter]) -> schemas.FilterRuleOut:
-    return schemas.FilterRuleOut(**rule_out(rule).model_dump(), needs_benchmark=rule.needs_benchmark)
+def filter_rule_out(rule: type[EntryFilter]) -> FilterRuleOut:
+    return FilterRuleOut(**rule_out(rule).model_dump(), needs_benchmark=rule.needs_benchmark)
 
 
-def priority_rule_out(rule: type[PriorityRule]) -> schemas.PriorityRuleOut:
-    return schemas.PriorityRuleOut(**rule_out(rule).model_dump(), needs_scan=rule.needs_scan)
+def priority_rule_out(rule: type[PriorityRule]) -> PriorityRuleOut:
+    return PriorityRuleOut(**rule_out(rule).model_dump(), needs_scan=rule.needs_scan)
 
 
-def applied_rule_out(rule: Rule) -> schemas.AppliedRuleOut:
-    return schemas.AppliedRuleOut(
-        name=rule.name, label=rule.label, description=rule.describe(), params=signal_params(rule)
-    )
+def applied_rule_out(rule: Rule) -> AppliedRuleOut:
+    return AppliedRuleOut(name=rule.name, label=rule.label, description=rule.describe(), params=signal_params(rule))
 
 
-def signal_out(signal: Signal, scorer: Scorer) -> schemas.SignalOut:
-    return schemas.SignalOut(
+def signal_out(signal: Signal, scorer: Scorer) -> SignalOut:
+    return SignalOut(
         name=signal.name,
         family=signal.family,
         direction=signal.direction,
@@ -136,12 +190,12 @@ def signal_out(signal: Signal, scorer: Scorer) -> schemas.SignalOut:
     )
 
 
-def watchlist_out(watchlist: Watchlist) -> schemas.WatchlistOut:
-    return schemas.WatchlistOut(name=watchlist.name, tickers=list(watchlist.tickers), benchmark=watchlist.benchmark)
+def watchlist_out(watchlist: Watchlist) -> WatchlistOut:
+    return WatchlistOut(name=watchlist.name, tickers=list(watchlist.tickers), benchmark=watchlist.benchmark)
 
 
-def regime_out(regime: MarketRegime) -> schemas.RegimeOut:
-    return schemas.RegimeOut(
+def regime_out(regime: MarketRegime) -> RegimeOut:
+    return RegimeOut(
         benchmark=regime.benchmark,
         benchmark_close=finite(regime.benchmark_close),
         benchmark_above_slow=regime.benchmark_above_slow,
@@ -155,8 +209,8 @@ def regime_out(regime: MarketRegime) -> schemas.RegimeOut:
     )
 
 
-def edge_stats_out(stats: EdgeStats) -> schemas.EdgeStatsOut:
-    return schemas.EdgeStatsOut(
+def edge_stats_out(stats: EdgeStats) -> EdgeStatsOut:
+    return EdgeStatsOut(
         signal=stats.signal,
         horizon=stats.horizon,
         events=stats.events,
@@ -168,9 +222,9 @@ def edge_stats_out(stats: EdgeStats) -> schemas.EdgeStatsOut:
     )
 
 
-def hit_out(hit: ScanHit, scorer: Scorer) -> schemas.HitOut:
+def hit_out(hit: ScanHit, scorer: Scorer) -> HitOut:
     context, risk, score = hit.context, hit.risk, hit.score
-    return schemas.HitOut(
+    return HitOut(
         ticker=hit.ticker,
         direction=hit.direction,
         date=day(context.date),
@@ -183,7 +237,7 @@ def hit_out(hit: ScanHit, scorer: Scorer) -> schemas.HitOut:
         weekly_trend=context.weekly_trend.value,
         rs_percentile=finite(hit.rs_percentile),
         fired=[
-            schemas.FiredSignalOut(
+            FiredSignalOut(
                 name=item.signal.name,
                 family=item.signal.family,
                 bars_ago=item.bars_ago,
@@ -191,14 +245,14 @@ def hit_out(hit: ScanHit, scorer: Scorer) -> schemas.HitOut:
             )
             for item in hit.fired
         ],
-        score=schemas.ScoreOut(
+        score=ScoreOut(
             total=score.total,
             signals=score.signals,
             trend=score.trend,
             weekly=score.weekly,
             relative_strength=score.relative_strength,
         ),
-        risk=schemas.RiskOut(
+        risk=RiskOut(
             entry=risk.entry,
             stop=finite(risk.stop),
             targets=[finite(target) for target in risk.targets],
@@ -211,8 +265,8 @@ def hit_out(hit: ScanHit, scorer: Scorer) -> schemas.HitOut:
     )
 
 
-def scan_out(report: ScanReport) -> schemas.ScanOut:
-    return schemas.ScanOut(
+def scan_out(report: ScanReport) -> ScanOut:
+    return ScanOut(
         universe=report.universe.name,
         regime=regime_out(report.regime),
         hits=[hit_out(hit, report.scorer) for hit in report.hits],
@@ -224,17 +278,17 @@ def scan_out(report: ScanReport) -> schemas.ScanOut:
     )
 
 
-def market_out(report: MarketReport) -> schemas.MarketOut:
-    return schemas.MarketOut(universe=report.universe.name, regime=regime_out(report.regime), missing=report.missing)
+def market_out(report: MarketReport) -> MarketOut:
+    return MarketOut(universe=report.universe.name, regime=regime_out(report.regime), missing=report.missing)
 
 
-def edge_out(report: EdgeReport) -> schemas.EdgeOut:
-    return schemas.EdgeOut(
+def edge_out(report: EdgeReport) -> EdgeOut:
+    return EdgeOut(
         universe=report.universe.name,
         horizons=list(report.horizons),
         tickers=report.tickers,
         rows=[
-            schemas.EdgeRowOut(
+            EdgeRowOut(
                 signal=row.signal.name,
                 family=row.signal.family,
                 direction=row.signal.direction,
@@ -247,18 +301,18 @@ def edge_out(report: EdgeReport) -> schemas.EdgeOut:
     )
 
 
-def metrics_out(metrics: Metrics) -> schemas.MetricsOut:
+def metrics_out(metrics: Metrics) -> MetricsOut:
     values = {item.name: getattr(metrics, item.name) for item in fields(metrics)}
     floats = {name: finite(value) for name, value in values.items() if name != "trades"}
-    return schemas.MetricsOut(
+    return MetricsOut(
         **floats,
         trades=metrics.trades,
         profit_factor_infinite=math.isinf(metrics.profit_factor),
     )
 
 
-def trade_out(trade: Trade) -> schemas.TradeOut:
-    return schemas.TradeOut(
+def trade_out(trade: Trade) -> TradeOut:
+    return TradeOut(
         direction=trade.direction,
         signal_date=day(trade.signal_date),
         entry_date=day(trade.entry_date),
@@ -269,27 +323,25 @@ def trade_out(trade: Trade) -> schemas.TradeOut:
         pnl=trade.pnl,
         r_multiple=finite(trade.r_multiple),
         exit_reason=trade.exit_reason,
-        adds=[schemas.FillOut(date=day(fill.date), price=fill.price) for fill in trade.adds],
+        adds=[FillOut(date=day(fill.date), price=fill.price) for fill in trade.adds],
     )
 
 
-def percentiles_out(percentiles: Percentiles) -> schemas.PercentilesOut:
-    return schemas.PercentilesOut(
-        **{item.name: finite(getattr(percentiles, item.name)) for item in fields(percentiles)}
-    )
+def percentiles_out(percentiles: Percentiles) -> PercentilesOut:
+    return PercentilesOut(**{item.name: finite(getattr(percentiles, item.name)) for item in fields(percentiles)})
 
 
-def path_out(path: PathStats) -> schemas.MonteCarloPathOut:
-    return schemas.MonteCarloPathOut(
+def path_out(path: PathStats) -> MonteCarloPathOut:
+    return MonteCarloPathOut(
         final_return_pct=finite(path.final_return_pct),
         max_drawdown_pct=finite(path.max_drawdown_pct),
         longest_losing_streak=path.longest_losing_streak,
     )
 
 
-def distribution_out(distribution: Distribution) -> schemas.MonteCarloMethodOut:
+def distribution_out(distribution: Distribution) -> MonteCarloMethodOut:
     method = distribution.method
-    return schemas.MonteCarloMethodOut(
+    return MonteCarloMethodOut(
         name=method.name,
         label=method.label,
         description=method.description,
@@ -300,9 +352,9 @@ def distribution_out(distribution: Distribution) -> schemas.MonteCarloMethodOut:
     )
 
 
-def monte_carlo_out(monte_carlo: MonteCarlo) -> schemas.MonteCarloOut:
+def monte_carlo_out(monte_carlo: MonteCarlo) -> MonteCarloOut:
     config = monte_carlo.config
-    return schemas.MonteCarloOut(
+    return MonteCarloOut(
         simulations=config.simulations,
         ruin_drawdown_pct=config.ruin_drawdown_pct,
         seed=config.seed,
@@ -332,7 +384,7 @@ def _rules_out(signal: Signal, config: BacktestConfig, rules: TradeRules, benchm
         "direction": signal.direction,
         "description": signal.describe(),
         "params": signal_params(signal),
-        "config": schemas.BacktestConfigOut(**{item.name: getattr(config, item.name) for item in fields(config)}),
+        "config": BacktestConfigOut(**{item.name: getattr(config, item.name) for item in fields(config)}),
         "entry": applied_rule_out(rules.entry),
         "exits": [applied_rule_out(rule) for rule in rules.exits],
         "filters": [applied_rule_out(rule) for rule in rules.filters],
@@ -340,8 +392,8 @@ def _rules_out(signal: Signal, config: BacktestConfig, rules: TradeRules, benchm
     }
 
 
-def split_out(split: Split) -> schemas.SplitOut:
-    return schemas.SplitOut(
+def split_out(split: Split) -> SplitOut:
+    return SplitOut(
         oos_pct=split.oos_pct,
         in_sample_start=day(split.in_sample[0]),
         in_sample_end=day(split.in_sample[1]),
@@ -350,15 +402,15 @@ def split_out(split: Split) -> schemas.SplitOut:
     )
 
 
-def backtest_out(report: BacktestReport) -> schemas.BacktestOut:
+def backtest_out(report: BacktestReport) -> BacktestOut:
     close = report.close
     buy_hold = close / close.iloc[0] * report.config.initial_equity
-    return schemas.BacktestOut(
+    return BacktestOut(
         **_setup_out(report.ticker, report.signal, report.config, report.rules, report.benchmark, close),
         split=split_out(report.split) if report.split else None,
         buy_hold=points(buy_hold),
         runs=[
-            schemas.EngineRunOut(
+            EngineRunOut(
                 engine=run.result.engine,
                 metrics=metrics_out(run.metrics),
                 in_sample=metrics_out(run.periods.in_sample) if run.periods else None,
@@ -372,15 +424,15 @@ def backtest_out(report: BacktestReport) -> schemas.BacktestOut:
     )
 
 
-def sweep_out(report: SweepReport) -> schemas.SweepOut:
+def sweep_out(report: SweepReport) -> SweepOut:
     base = report.base
-    return schemas.SweepOut(
+    return SweepOut(
         **_setup_out(report.ticker, base.signal, base.config, base.rules, base.benchmark, report.close),
         engine=VectorizedEngine.name,
         split=split_out(report.split),
         axes=_axes_out(report.parameters),
         cells=[
-            schemas.SweepCellOut(
+            SweepCellOut(
                 values=list(cell.values),
                 in_sample=metrics_out(cell.periods.in_sample) if cell.periods else None,
                 out_of_sample=metrics_out(cell.periods.out_of_sample) if cell.periods else None,
@@ -391,9 +443,9 @@ def sweep_out(report: SweepReport) -> schemas.SweepOut:
     )
 
 
-def _axes_out(parameters: tuple[SweptParameter, ...]) -> list[schemas.SweepAxisOut]:
+def _axes_out(parameters: tuple[SweptParameter, ...]) -> list[SweepAxisOut]:
     return [
-        schemas.SweepAxisOut(
+        SweepAxisOut(
             target=item.axis.target,
             owner=item.axis.owner or None,
             name=item.axis.name,
@@ -420,7 +472,7 @@ def _pick_fields(report: WalkForwardReport, pick: WindowPick) -> dict[str, objec
     }
 
 
-def walk_forward_out(report: WalkForwardReport) -> schemas.WalkForwardOut:
+def walk_forward_out(report: WalkForwardReport) -> WalkForwardOut:
     base, plan, index = report.base, report.plan, report.close.index
     start = plan.start
     close = report.close.iloc[start:]
@@ -429,7 +481,7 @@ def walk_forward_out(report: WalkForwardReport) -> schemas.WalkForwardOut:
     for item in report.windows:
         segment = item.segment
         windows.append(
-            schemas.WalkForwardWindowOut(
+            WalkForwardWindowOut(
                 **_pick_fields(report, item.pick),
                 out_of_sample_start=day(index[item.window.out_of_sample.start]),
                 out_of_sample_end=day(index[item.window.out_of_sample.end - 1]),
@@ -438,12 +490,12 @@ def walk_forward_out(report: WalkForwardReport) -> schemas.WalkForwardOut:
                 out_of_sample=metrics_out(item.out_of_sample) if item.out_of_sample else None,
             )
         )
-    return schemas.WalkForwardOut(
+    return WalkForwardOut(
         **_setup_out(report.ticker, base.signal, base.config, base.rules, base.benchmark, report.close),
         engine=VectorizedEngine.name,
         scheme=plan.scheme,
         metric=report.metric,
-        walk_forward=schemas.WalkForwardSettingsOut(
+        walk_forward=WalkForwardSettingsOut(
             windows=report.settings.windows,
             in_sample_ratio=report.settings.in_sample_ratio,
             min_trades=report.settings.min_trades,
@@ -453,13 +505,13 @@ def walk_forward_out(report: WalkForwardReport) -> schemas.WalkForwardOut:
         axes=_axes_out(report.parameters),
         combinations=len(report.combinations),
         errors=[
-            schemas.CombinationErrorOut(values=list(item.values), error=item.error)
+            CombinationErrorOut(values=list(item.values), error=item.error)
             for item in report.combinations
             if item.error is not None
         ],
         out_of_sample_start=day(index[start]),
         windows=windows,
-        next=schemas.WindowPickOut(**_pick_fields(report, report.next_pick)),
+        next=WindowPickOut(**_pick_fields(report, report.next_pick)),
         metrics=metrics_out(report.metrics),
         unchanged=metrics_out(report.unchanged_metrics),
         efficiency=finite(report.efficiency),
@@ -470,8 +522,8 @@ def walk_forward_out(report: WalkForwardReport) -> schemas.WalkForwardOut:
     )
 
 
-def pooled_trades_out(pooled: PooledTrades) -> schemas.PooledTradesOut:
-    return schemas.PooledTradesOut(
+def pooled_trades_out(pooled: PooledTrades) -> PooledTradesOut:
+    return PooledTradesOut(
         trades=pooled.trades,
         win_rate_pct=finite(pooled.win_rate_pct),
         expectancy_r=finite(pooled.expectancy_r),
@@ -481,8 +533,8 @@ def pooled_trades_out(pooled: PooledTrades) -> schemas.PooledTradesOut:
     )
 
 
-def spread_out(metric: str, spread: Spread) -> schemas.MetricSpreadOut:
-    return schemas.MetricSpreadOut(
+def spread_out(metric: str, spread: Spread) -> MetricSpreadOut:
+    return MetricSpreadOut(
         metric=metric,
         tickers=spread.tickers,
         median=finite(spread.median),
@@ -494,18 +546,18 @@ def spread_out(metric: str, spread: Spread) -> schemas.MetricSpreadOut:
     )
 
 
-def watchlist_backtest_out(report: WatchlistBacktestReport) -> schemas.WatchlistBacktestOut:
+def watchlist_backtest_out(report: WatchlistBacktestReport) -> WatchlistBacktestOut:
     base = report.base
 
-    def metrics(run: PeriodRun | None) -> schemas.MetricsOut | None:
+    def metrics(run: PeriodRun | None) -> MetricsOut | None:
         return metrics_out(run.metrics) if run else None
 
-    return schemas.WatchlistBacktestOut(
+    return WatchlistBacktestOut(
         **_rules_out(base.signal, base.config, base.rules, base.benchmark),
         universe=report.universe.name,
         engine=VectorizedEngine.name,
         rows=[
-            schemas.TickerRunOut(
+            TickerRunOut(
                 ticker=row.ticker,
                 start=day(row.start),
                 end=day(row.end),
@@ -517,7 +569,7 @@ def watchlist_backtest_out(report: WatchlistBacktestReport) -> schemas.Watchlist
             for row in report.rows
         ],
         periods=[
-            schemas.PeriodSummaryOut(
+            PeriodSummaryOut(
                 period=period,
                 tickers=summary.tickers,
                 pooled=pooled_trades_out(summary.pooled),
@@ -529,11 +581,11 @@ def watchlist_backtest_out(report: WatchlistBacktestReport) -> schemas.Watchlist
     )
 
 
-def portfolio_period_out(period: PortfolioMetrics) -> schemas.PortfolioPeriodOut:
+def portfolio_period_out(period: PortfolioMetrics) -> PortfolioPeriodOut:
     stats = period.stats
-    return schemas.PortfolioPeriodOut(
+    return PortfolioPeriodOut(
         metrics=metrics_out(period.metrics),
-        stats=schemas.PortfolioStatsOut(
+        stats=PortfolioStatsOut(
             average_positions=finite(stats.average_positions),
             max_positions=stats.max_positions,
             average_exposure_pct=finite(stats.average_exposure_pct),
@@ -545,8 +597,8 @@ def portfolio_period_out(period: PortfolioMetrics) -> schemas.PortfolioPeriodOut
     )
 
 
-def contribution_out(row: TickerContribution) -> schemas.TickerContributionOut:
-    return schemas.TickerContributionOut(
+def contribution_out(row: TickerContribution) -> TickerContributionOut:
+    return TickerContributionOut(
         ticker=row.ticker,
         trades=row.trades,
         pnl=row.pnl,
@@ -556,8 +608,8 @@ def contribution_out(row: TickerContribution) -> schemas.TickerContributionOut:
     )
 
 
-def scan_inputs_out(scan: ScanInputs) -> schemas.ScanInputsOut:
-    return schemas.ScanInputsOut(
+def scan_inputs_out(scan: ScanInputs) -> ScanInputsOut:
+    return ScanInputsOut(
         settings={
             section: {name: _value(value) for name, value in values.items()}
             for section, values in scan.settings.items()
@@ -566,16 +618,16 @@ def scan_inputs_out(scan: ScanInputs) -> schemas.ScanInputsOut:
     )
 
 
-def portfolio_out(report: PortfolioReport) -> schemas.PortfolioOut:
+def portfolio_out(report: PortfolioReport) -> PortfolioOut:
     base = report.base
     close = report.benchmark_close.dropna()
     buy_hold = close / close.iloc[0] * base.config.initial_equity if len(close) else close
-    return schemas.PortfolioOut(
+    return PortfolioOut(
         **_rules_out(base.signal, base.config, base.rules, base.benchmark),
         universe=report.universe.name,
         start=day(report.calendar[0]),
         end=day(report.calendar[-1]),
-        portfolio=schemas.PortfolioConfigOut(
+        portfolio=PortfolioConfigOut(
             max_positions=report.portfolio.max_positions, max_exposure_pct=report.portfolio.max_exposure_pct
         ),
         priority=applied_rule_out(report.priority),
@@ -584,7 +636,7 @@ def portfolio_out(report: PortfolioReport) -> schemas.PortfolioOut:
         buy_hold=points(buy_hold),
         split=split_out(report.split) if report.split else None,
         runs=[
-            schemas.PortfolioRunOut(
+            PortfolioRunOut(
                 engine=run.result.engine,
                 full=portfolio_period_out(run.full),
                 in_sample=portfolio_period_out(run.in_sample) if run.in_sample else None,
@@ -592,7 +644,7 @@ def portfolio_out(report: PortfolioReport) -> schemas.PortfolioOut:
                 equity=points(run.result.equity),
                 positions=points(run.result.positions.astype(float)),
                 trades=[
-                    schemas.PortfolioTradeOut(ticker=item.ticker, **trade_out(item.trade).model_dump())
+                    PortfolioTradeOut(ticker=item.ticker, **trade_out(item.trade).model_dump())
                     for item in run.result.trades
                 ],
                 tickers=[contribution_out(row) for row in run.contributions],
@@ -603,11 +655,11 @@ def portfolio_out(report: PortfolioReport) -> schemas.PortfolioOut:
     )
 
 
-def rotation_period_out(period: RotationMetrics) -> schemas.RotationPeriodOut:
+def rotation_period_out(period: RotationMetrics) -> RotationPeriodOut:
     stats = period.stats
-    return schemas.RotationPeriodOut(
+    return RotationPeriodOut(
         metrics=metrics_out(period.metrics),
-        stats=schemas.RotationStatsOut(
+        stats=RotationStatsOut(
             rebalances=stats.rebalances,
             orders=stats.orders,
             unfilled_orders=stats.unfilled_orders,
@@ -622,11 +674,11 @@ def rotation_period_out(period: RotationMetrics) -> schemas.RotationPeriodOut:
     )
 
 
-def targets_out(targets: Targets) -> schemas.TargetsOut:
-    return schemas.TargetsOut(
+def targets_out(targets: Targets) -> TargetsOut:
+    return TargetsOut(
         date=day(targets.date),
         picks=[
-            schemas.PickOut(
+            PickOut(
                 ticker=pick.ticker,
                 score=finite(pick.score),
                 momentum_pct=finite(pick.momentum * 100.0),
@@ -640,17 +692,17 @@ def targets_out(targets: Targets) -> schemas.TargetsOut:
     )
 
 
-def rotation_out(report: RotationReport) -> schemas.RotationOut:
+def rotation_out(report: RotationReport) -> RotationOut:
     result, config, rotation = report.result, report.config, report.rotation
     close = report.benchmark_close.dropna()
     buy_hold = close / close.iloc[0] * config.initial_equity if len(close) else close
-    return schemas.RotationOut(
+    return RotationOut(
         universe=report.universe.name,
         engine=result.engine,
         start=day(result.equity.index[0]),
         end=day(result.equity.index[-1]),
-        config=schemas.BacktestConfigOut(**{item.name: getattr(config, item.name) for item in fields(config)}),
-        rotation=schemas.RotationConfigOut(
+        config=BacktestConfigOut(**{item.name: getattr(config, item.name) for item in fields(config)}),
+        rotation=RotationConfigOut(
             holdings=rotation.holdings,
             absolute_lookback=rotation.absolute_lookback,
             rebalance=rotation.rebalance,
@@ -667,36 +719,30 @@ def rotation_out(report: RotationReport) -> schemas.RotationOut:
         equity=points(result.equity),
         holdings=points(result.holdings.astype(float)),
         targets=targets_out(result.targets),
-        trades=[
-            schemas.PortfolioTradeOut(ticker=item.ticker, **trade_out(item.trade).model_dump())
-            for item in result.trades
-        ],
+        trades=[PortfolioTradeOut(ticker=item.ticker, **trade_out(item.trade).model_dump()) for item in result.trades],
         tickers=[contribution_out(row) for row in report.contributions],
         missing=report.missing,
     )
 
 
-def chart_out(data: ChartData) -> schemas.ChartOut:
+def chart_out(data: ChartData) -> ChartOut:
     bars = data.bars
-    return schemas.ChartOut(
+    return ChartOut(
         ticker=data.ticker,
         candles=[
-            schemas.Candle(
-                time=day(index), open=row.open, high=row.high, low=row.low, close=row.close, volume=row.volume
-            )
+            Candle(time=day(index), open=row.open, high=row.high, low=row.low, close=row.close, volume=row.volume)
             for index, row in zip(bars.index, bars.itertuples(index=False), strict=True)
         ],
         sma_fast=points(data.sma_fast),
         sma_slow=points(data.sma_slow),
         events=[
-            schemas.ChartEventOut(time=day(event.date), signal=event.signal, direction=event.direction)
-            for event in data.events
+            ChartEventOut(time=day(event.date), signal=event.signal, direction=event.direction) for event in data.events
         ],
     )
 
 
-def pinned_run_out(run: PinnedRun) -> schemas.PinnedRunOut:
-    return schemas.PinnedRunOut(
+def pinned_run_out(run: PinnedRun) -> PinnedRunOut:
+    return PinnedRunOut(
         id=run.id,
         slot=run.slot,
         name=run.name,
@@ -707,10 +753,10 @@ def pinned_run_out(run: PinnedRun) -> schemas.PinnedRunOut:
     )
 
 
-def journal_trade_out(trade: JournalTrade) -> schemas.JournalTradeOut:
+def journal_trade_out(trade: JournalTrade) -> JournalTradeOut:
     entry = trade.entry
     run = entry.run
-    return schemas.JournalTradeOut(
+    return JournalTradeOut(
         id=trade.id,
         ticker=entry.ticker,
         direction=entry.direction,
@@ -722,7 +768,7 @@ def journal_trade_out(trade: JournalTrade) -> schemas.JournalTradeOut:
         exit_price=entry.exit_price,
         fees=entry.fees,
         notes=entry.notes,
-        run=schemas.SuggestingRun(format=run.format, snapshot=run.snapshot) if run else None,
+        run=SuggestingRun(format=run.format, snapshot=run.snapshot) if run else None,
         created_at=trade.created_at,
         updated_at=trade.updated_at,
         is_open=entry.is_open,
@@ -733,11 +779,11 @@ def journal_trade_out(trade: JournalTrade) -> schemas.JournalTradeOut:
     )
 
 
-def journal_out(trades: Sequence[JournalTrade]) -> schemas.JournalOut:
+def journal_out(trades: Sequence[JournalTrade]) -> JournalOut:
     summary = summarize([trade.entry for trade in trades])
-    return schemas.JournalOut(
+    return JournalOut(
         trades=[journal_trade_out(trade) for trade in trades],
-        summary=schemas.JournalSummaryOut(
+        summary=JournalSummaryOut(
             open_trades=summary.open_trades,
             closed_trades=summary.closed_trades,
             win_rate_pct=finite(summary.win_rate_pct),

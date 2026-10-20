@@ -5,9 +5,9 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from tradescan import __version__
-from tradescan.api import schemas
 from tradescan.api.context import ApiContext
 from tradescan.api.mappers import filter_rule_out, priority_rule_out, rule_out, section_out
+from tradescan.api.schemas.meta import ConfigOut, SweepLimitsOut, WalkForwardLimitsOut
 from tradescan.backtest import sweep, walk_forward
 from tradescan.backtest.oos import MIN_PERIOD_BARS
 from tradescan.backtest.priority import DEFAULT_PRIORITY
@@ -27,10 +27,10 @@ def build_router(context: ApiContext) -> APIRouter:
     def health() -> dict[str, str]:
         return {"status": "ok", "version": __version__}
 
-    @router.get("/config", response_model=schemas.ConfigOut)
-    def config() -> schemas.ConfigOut:
+    @router.get("/config", response_model=ConfigOut)
+    def config() -> ConfigOut:
         rules = context.use_cases.backtest.rules
-        return schemas.ConfigOut(
+        return ConfigOut(
             version=__version__,
             scan_period=settings.data.period,
             backtest_period=settings.backtest.period,
@@ -50,7 +50,7 @@ def build_router(context: ApiContext) -> APIRouter:
             weight_rules=[rule_out(rule) for rule in context.use_cases.rotation.weightings.classes()],
             default_weighting=DEFAULT_WEIGHTING,
             rebalances=list(Rebalance),
-            sweep=schemas.SweepLimitsOut(
+            sweep=SweepLimitsOut(
                 max_axes=sweep.MAX_AXES,
                 min_values=sweep.MIN_VALUES,
                 max_values=sweep.MAX_VALUES,
@@ -59,7 +59,7 @@ def build_router(context: ApiContext) -> APIRouter:
                 fixed=sorted(f"{section}.{name}" for section, name in NOT_SWEEPABLE),
                 min_period_bars=MIN_PERIOD_BARS,
             ),
-            walk_forward=schemas.WalkForwardLimitsOut(
+            walk_forward=WalkForwardLimitsOut(
                 max_runs=walk_forward.MAX_RUNS,
                 schemes=list(walk_forward.WindowScheme),
                 default_scheme=walk_forward.WindowScheme.ROLLING,

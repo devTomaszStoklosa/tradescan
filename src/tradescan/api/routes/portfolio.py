@@ -4,18 +4,18 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from tradescan.api import schemas
 from tradescan.api.context import ApiContext
 from tradescan.api.mappers import portfolio_out
 from tradescan.api.routes.backtest import backtest_request, rule_choice
+from tradescan.api.schemas.portfolio import PortfolioIn, PortfolioOut
 from tradescan.services.portfolio import PortfolioRequest
 
 
 def build_router(context: ApiContext) -> APIRouter:
     router = APIRouter(tags=["backtest"])
 
-    @router.post("/portfolio-backtest", response_model=schemas.PortfolioOut)
-    def portfolio_backtest(body: schemas.PortfolioIn) -> schemas.PortfolioOut:
+    @router.post("/portfolio-backtest", response_model=PortfolioOut)
+    def portfolio_backtest(body: PortfolioIn) -> PortfolioOut:
         context.check_signals([body.signal])
         request = PortfolioRequest(
             universe=context.universe(body),

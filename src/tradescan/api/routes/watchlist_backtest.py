@@ -4,18 +4,18 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from tradescan.api import schemas
 from tradescan.api.context import ApiContext
 from tradescan.api.mappers import watchlist_backtest_out
 from tradescan.api.routes.backtest import backtest_request
+from tradescan.api.schemas.watchlist_backtest import WatchlistBacktestIn, WatchlistBacktestOut
 from tradescan.services.watchlist_backtest import WatchlistBacktestRequest
 
 
 def build_router(context: ApiContext) -> APIRouter:
     router = APIRouter(tags=["backtest"])
 
-    @router.post("/watchlist-backtest", response_model=schemas.WatchlistBacktestOut)
-    def watchlist_backtest(body: schemas.WatchlistBacktestIn) -> schemas.WatchlistBacktestOut:
+    @router.post("/watchlist-backtest", response_model=WatchlistBacktestOut)
+    def watchlist_backtest(body: WatchlistBacktestIn) -> WatchlistBacktestOut:
         context.check_signals([body.signal])
         request = WatchlistBacktestRequest(universe=context.universe(body), setup=backtest_request(body, "", ()))
         return watchlist_backtest_out(context.use_cases.watchlist_backtest.run(request))

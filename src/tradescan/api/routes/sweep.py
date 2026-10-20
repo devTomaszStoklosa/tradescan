@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from tradescan.api import schemas
 from tradescan.api.context import ApiContext
 from tradescan.api.mappers import sweep_out
 from tradescan.api.routes.backtest import backtest_request
+from tradescan.api.schemas.sweep import SweepIn, SweepOut
 from tradescan.backtest.sweep import SweepAxis
 from tradescan.services.sweep import SweepRequest
 
@@ -15,8 +15,8 @@ from tradescan.services.sweep import SweepRequest
 def build_router(context: ApiContext) -> APIRouter:
     router = APIRouter(tags=["backtest"])
 
-    @router.post("/sweep", response_model=schemas.SweepOut)
-    def sweep(body: schemas.SweepIn) -> schemas.SweepOut:
+    @router.post("/sweep", response_model=SweepOut)
+    def sweep(body: SweepIn) -> SweepOut:
         context.check_signals([body.signal])
         report = context.use_cases.sweep.run(
             SweepRequest(setup=backtest_request(body, body.ticker, ()), axes=sweep_axes(body))
@@ -26,7 +26,7 @@ def build_router(context: ApiContext) -> APIRouter:
     return router
 
 
-def sweep_axes(body: schemas.SweepIn) -> tuple[SweepAxis, ...]:
+def sweep_axes(body: SweepIn) -> tuple[SweepAxis, ...]:
     """The swept axes of a sweep or a walk-forward request."""
     return tuple(
         SweepAxis(target=axis.target, name=axis.name, values=tuple(axis.values), owner=axis.owner or "")

@@ -4,17 +4,17 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from tradescan.api import schemas
 from tradescan.api.context import ApiContext
 from tradescan.api.mappers import edge_out
+from tradescan.api.schemas.edge import EdgeIn, EdgeOut
 from tradescan.services.edge import EdgeRequest
 
 
 def build_router(context: ApiContext) -> APIRouter:
     router = APIRouter(tags=["edge"])
 
-    @router.post("/edge", response_model=schemas.EdgeOut)
-    def edge(body: schemas.EdgeIn) -> schemas.EdgeOut:
+    @router.post("/edge", response_model=EdgeOut)
+    def edge(body: EdgeIn) -> EdgeOut:
         report = context.use_cases.edge.run(
             EdgeRequest(
                 universe=context.universe(body),
