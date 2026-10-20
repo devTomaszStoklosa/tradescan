@@ -27,7 +27,7 @@ import {
   DirectionBadge,
   EmptyState,
   ErrorBox,
-  Field,
+  FieldGroup,
   Loading,
   Notice,
   PageHeader,
@@ -166,7 +166,7 @@ function PortfolioFormPanel({
           )}
         </section>
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <Field label="Engines">
+          <FieldGroup label="Engines">
             <div className="flex gap-1.5 py-1">
               {config.engines.map((engine) => (
                 <ToggleChip
@@ -179,7 +179,7 @@ function PortfolioFormPanel({
                 </ToggleChip>
               ))}
             </div>
-          </Field>
+          </FieldGroup>
           <div className="flex items-center gap-2">
             {changes > 0 && (
               <Button variant="ghost" onClick={() => setDraft(resetPortfolio(draft, config))}>

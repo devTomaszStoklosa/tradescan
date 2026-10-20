@@ -2,7 +2,7 @@
 import type { Family, WatchlistOut } from "../api/client";
 import type { DirectionChoice, Universe } from "../lib/params";
 import { FAMILY_LABELS, familyColor } from "./SignalChip";
-import { Field, Input, Segmented, Select, ToggleChip } from "./ui";
+import { Field, FieldGroup, Input, Segmented, Select, ToggleChip } from "./ui";
 
 const CUSTOM = "__custom__";
 
@@ -47,12 +47,12 @@ export function UniversePicker({
           />
         </Field>
       ) : (
-        <Field label="Tickers">
+        <FieldGroup label="Tickers">
           <p className="truncate py-2 text-sm font-normal text-fg" title={selected?.tickers.join(", ")}>
             {selected?.tickers.join(", ")}
             {selected?.benchmark && <span className="text-muted"> · benchmark {selected.benchmark}</span>}
           </p>
-        </Field>
+        </FieldGroup>
       )}
     </div>
   );
@@ -66,7 +66,7 @@ export function DirectionPicker({
   onChange: (value: DirectionChoice) => void;
 }) {
   return (
-    <Field label="Direction">
+    <FieldGroup label="Direction">
       <Segmented
         label="Direction"
         value={value}
@@ -77,7 +77,7 @@ export function DirectionPicker({
           { value: "short", label: "Short" },
         ]}
       />
-    </Field>
+    </FieldGroup>
   );
 }
 
@@ -93,7 +93,7 @@ export function FamilyPicker({
   const toggle = (family: Family) =>
     onChange(value.includes(family) ? value.filter((item) => item !== family) : [...value, family]);
   return (
-    <Field label={value.length ? "Families" : "Families (all)"}>
+    <FieldGroup label={value.length ? "Families" : "Families (all)"}>
       <div className="flex flex-wrap gap-1.5 py-1">
         {families.map((family) => (
           <ToggleChip
@@ -106,6 +106,6 @@ export function FamilyPicker({
           </ToggleChip>
         ))}
       </div>
-    </Field>
+    </FieldGroup>
   );
 }

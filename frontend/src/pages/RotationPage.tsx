@@ -15,6 +15,7 @@ import {
   EmptyState,
   ErrorBox,
   Field,
+  FieldGroup,
   Input,
   Loading,
   Notice,
@@ -80,17 +81,14 @@ function RotationFormPanel({
           watchlists={watchlists}
         />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Not a Field: a label around the buttons would press the first one when its text is clicked. */}
-          <div className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted">
-            <span>Rebalance</span>
+          <FieldGroup label="Rebalance" hint="At the last close of every week or month">
             <Segmented
               label="Rebalance"
               value={draft.rebalance}
               options={REBALANCES}
               onChange={(rebalance) => set("rebalance", rebalance)}
             />
-            <span className="font-normal">At the last close of every week or month</span>
-          </div>
+          </FieldGroup>
           <Field label="Safe asset" hint="Takes the slots of picks with negative absolute momentum; empty for cash">
             <Input
               value={draft.safeAsset}
