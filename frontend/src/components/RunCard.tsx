@@ -4,6 +4,7 @@ import type { Direction } from "../api/client";
 import { MIN_TRADES } from "../lib/compare";
 import { fmtPct } from "../lib/format";
 import { writeBacktestForm } from "../lib/params";
+import { reopenedSettings } from "../lib/pinnedSettings";
 import { writePortfolioForm } from "../lib/portfolio";
 import { writeRotationForm } from "../lib/rotation";
 import { runColorVar, runStrategy, runSubject, type PinnedRun, type RunKind } from "../lib/runs";
@@ -27,19 +28,28 @@ const CARDS: { [K in RunKind]: CardSpec<Extract<PinnedRun, { kind: K }>> } = {
     scope: () => null,
     direction: (run) => run.direction,
     description: (run) => run.description,
-    open: (run) => ({ label: "Open in Backtest", to: `/backtest?${writeBacktestForm(run.form).toString()}` }),
+    open: (run) => ({
+      label: "Open in Backtest",
+      to: `/backtest?${writeBacktestForm({ ...run.form, settings: reopenedSettings(run) }).toString()}`,
+    }),
   },
   portfolio: {
     scope: (run) => `portfolio of ${run.tickers.length} tickers`,
     direction: (run) => run.direction,
     description: (run) => run.description,
-    open: (run) => ({ label: "Open in Portfolio", to: `/portfolio?${writePortfolioForm(run.form).toString()}` }),
+    open: (run) => ({
+      label: "Open in Portfolio",
+      to: `/portfolio?${writePortfolioForm({ ...run.form, settings: reopenedSettings(run) }).toString()}`,
+    }),
   },
   rotation: {
     scope: (run) => `rotation of ${run.tickers.length} tickers, top ${run.rotation.holdings} ${run.rotation.rebalance}`,
     direction: () => null,
     description: (run) => `Ranking: ${run.ranking.description} · weights: ${run.weighting.description}`,
-    open: (run) => ({ label: "Open in Rotation", to: `/rotation?${writeRotationForm(run.form).toString()}` }),
+    open: (run) => ({
+      label: "Open in Rotation",
+      to: `/rotation?${writeRotationForm({ ...run.form, settings: reopenedSettings(run) }).toString()}`,
+    }),
   },
 };
 

@@ -119,8 +119,8 @@ describe("ComparePage", () => {
       within(screen.getByRole("article", { name: "Run 1" })).getByRole("link", { name: "Open in Backtest" }),
     ).toHaveAttribute(
       "href",
-      // The rules are written out, so the run reopens with them even if the server's defaults change.
-      "/backtest?ticker=SPY&signal=connors_rsi2_long&eng=vectorized&entry=next_open&exit=target%2Ctime",
+      // The rules and settings are written out, so the run reopens with them even if the server's defaults change.
+      "/backtest?ticker=SPY&signal=connors_rsi2_long&eng=vectorized&entry=next_open&exit=target%2Ctime&set.risk.atr_period=14&set.risk.atr_mult=2&set.backtest.commission_pct=0.1&set.backtest.slippage_pct=0.05&set.backtest.bars_per_year=252&set.backtest.oos_pct=30&set.pyramid.max_units=1&set.pyramid.add_every_atr=0.5&set.monte_carlo.simulations=1000&set.monte_carlo.ruin_drawdown_pct=50&set.monte_carlo.seed=0",
     );
   });
 
@@ -256,7 +256,7 @@ describe("ComparePage", () => {
     expect(card).toHaveTextContent("portfolio of 2 tickers · vectorized · 2016-01-04 → 2026-10-13");
     expect(within(card).getByRole("link", { name: "Open in Portfolio" })).toHaveAttribute(
       "href",
-      "/portfolio?w=us_large&signal=connors_rsi2_long&eng=vectorized&entry=next_open&exit=target%2Ctime&filter=market&prio=momentum",
+      "/portfolio?w=us_large&signal=connors_rsi2_long&eng=vectorized&entry=next_open&exit=target%2Ctime&filter=market&set.risk.atr_period=14&set.risk.atr_mult=2&set.backtest.commission_pct=0.1&set.backtest.slippage_pct=0.05&set.backtest.bars_per_year=252&set.backtest.oos_pct=30&set.portfolio.max_positions=5&set.portfolio.max_exposure_pct=100&prio=momentum",
     );
 
     const parameters = table("Parameters of the pinned runs");
@@ -300,7 +300,7 @@ describe("ComparePage", () => {
     expect(card).toHaveTextContent("rotation of 2 tickers, top 3 monthly · vectorized · 2017-10-31 → 2026-10-16");
     expect(within(card).getByRole("link", { name: "Open in Rotation" })).toHaveAttribute(
       "href",
-      "/rotation?w=etf&rank=momentum&wt=inverse_volatility&safe=TLT&set.rotation.holdings=3",
+      "/rotation?w=etf&rank=momentum&wt=inverse_volatility&safe=TLT&set.rotation.holdings=3&set.rotation.absolute_lookback=252&set.backtest.commission_pct=0.1&set.backtest.slippage_pct=0.05&set.backtest.bars_per_year=252&set.backtest.oos_pct=30",
     );
 
     const parameters = table("Parameters of the pinned runs");
