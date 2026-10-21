@@ -4,6 +4,7 @@
  *
  * A sweep starts from a backtest setup (the same URL keys as the Backtest page) and adds up to two
  * axes: `ax1=signal.oversold&ax1v=5:20:1`. An axis key is `target[.owner].name`, as the API reports it.
+ * The axes, their value ranges and the heatmaps' summaries are shared with the rotation sweep (`rotationSweep`).
  */
 import type {
   ConfigOut,
@@ -37,30 +38,38 @@ export interface SweepForm extends BacktestSetup {
   axes: AxisForm[];
 }
 
-/** A parameter a sweep can change, with its value in the setup. */
-export interface SweepParam {
+/** A parameter an axis can change, with its value in the setup: what the axis fields read. */
+export interface AxisParam {
+  /** `target[.owner].name`. */
   key: string;
-  target: SweepTarget;
-  owner: string | null;
-  name: string;
   /** What holds it, for grouping the picker, e.g. "Exit: Profit target". */
   group: string;
   spec: ParamSpecOut;
   current: number;
 }
 
+/** An axis parameter with what a request names it by: `target` is a sweep's or a rotation sweep's. */
+export interface TargetParam<Target extends string> extends AxisParam {
+  target: Target;
+  owner: string | null;
+  name: string;
+}
+
+/** A parameter a sweep can change, with its value in the setup. */
+export type SweepParam = TargetParam<SweepTarget>;
+
 const isNumber = (spec: ParamSpecOut) => spec.kind === "int" || spec.kind === "float";
 
-const keyOf = (target: SweepTarget, owner: string | null, name: string) =>
-  [target, owner, name].filter(Boolean).join(".");
+const keyOf = (target: string, owner: string | null, name: string) => [target, owner, name].filter(Boolean).join(".");
 
-function paramsOf(
-  target: SweepTarget,
+/** The single-number parameters among `specs`, with their value in `values` or else their default. */
+export function paramsOf<Target extends string>(
+  target: Target,
   owner: string | null,
   group: string,
   specs: ParamSpecOut[],
   values: Values | undefined,
-): SweepParam[] {
+): TargetParam<Target>[] {
   return specs.filter(isNumber).map((spec) => {
     const value = values?.[spec.name];
     return {
@@ -126,7 +135,7 @@ function decimals(value: number): number {
 const round = (value: number, places: number) => Number(value.toFixed(Math.min(places, 12)));
 
 /** An axis around the setup's value: DEFAULT_VALUES steps of the declared step, kept inside the declared range. */
-export function defaultAxis(param: SweepParam, count = DEFAULT_VALUES): AxisForm {
+export function defaultAxis(param: AxisParam, count = DEFAULT_VALUES): AxisForm {
   const { minimum, maximum, step } = param.spec;
   const places = Math.max(decimals(param.current), decimals(step));
   const half = Math.floor((count - 1) / 2);
@@ -160,6 +169,14 @@ export function axisValues(axis: AxisForm, spec: ParamSpecOut, limits: ConfigOut
   if (count > limits.max_values) return problem(`${count} values: at most ${limits.max_values}`);
   const places = Math.max(decimals(from), decimals(step));
   return { values: Array.from({ length: count }, (_, index) => round(from + index * step, places)), problem: null };
+}
+
+/** Each axis's values, or what is wrong with it. */
+export function axisRanges(axes: AxisForm[], params: AxisParam[], limits: ConfigOut["sweep"]): AxisRange[] {
+  return axes.map((axis) => {
+    const param = params.find((item) => item.key === axis.key);
+    return param ? axisValues(axis, param.spec, limits) : problem("unknown parameter");
+  });
 }
 
 /** Product of the axes' value counts; null while an axis is invalid. */
@@ -211,7 +228,8 @@ const number = (text: string | undefined): number | null => {
   return Number.isFinite(value) ? value : null;
 };
 
-export function readSweepForm(params: URLSearchParams, defaults: RuleDefaults): SweepForm {
+/** The axes in the URL: `ax1`/`ax1v` and `ax2`/`ax2v`. */
+export function readAxes(params: URLSearchParams): AxisForm[] {
   const axes: AxisForm[] = [];
   for (const position of [1, 2]) {
     const key = params.get(`ax${position}`);
@@ -219,35 +237,52 @@ export function readSweepForm(params: URLSearchParams, defaults: RuleDefaults): 
     const [from, to, step] = (params.get(`ax${position}v`) ?? "").split(":");
     axes.push({ key, from: number(from), to: number(to), step: number(step) });
   }
-  return { ...newSweepForm(readBacktestSetup(params, defaults)), axes };
+  return axes;
 }
 
-export function writeSweepForm(form: SweepForm, defaults?: RuleDefaults): URLSearchParams {
-  const params = writeBacktestSetup(form, defaults);
-  form.axes.forEach((axis, index) => {
+export function writeAxes(params: URLSearchParams, axes: AxisForm[]): URLSearchParams {
+  axes.forEach((axis, index) => {
     params.set(`ax${index + 1}`, axis.key);
     params.set(`ax${index + 1}v`, [axis.from, axis.to, axis.step].map((value) => value ?? "").join(":"));
   });
   return params;
 }
 
-/** The sweep request without the account, which the page adds; null until the setup and every axis are valid. */
-export function sweepBody(form: SweepForm, params: SweepParam[], limits: ConfigOut["sweep"]): SweepIn | null {
-  const setup = setupBody(form);
-  if (!setup || !form.axes.length || form.axes.length > limits.max_axes) return null;
-  const axes: SweepAxisIn[] = [];
+export function readSweepForm(params: URLSearchParams, defaults: RuleDefaults): SweepForm {
+  return { ...newSweepForm(readBacktestSetup(params, defaults)), axes: readAxes(params) };
+}
+
+export function writeSweepForm(form: SweepForm, defaults?: RuleDefaults): URLSearchParams {
+  return writeAxes(writeBacktestSetup(form, defaults), form.axes);
+}
+
+/** The axes of a request: each with what names its parameter and its values; null until every axis is valid and the
+ * combinations fit the limits. */
+export function sweptAxes<Target extends string>(
+  axes: AxisForm[],
+  params: TargetParam<Target>[],
+  limits: ConfigOut["sweep"],
+): { target: Target; owner: string | null; name: string; values: number[] }[] | null {
+  if (!axes.length || axes.length > limits.max_axes) return null;
+  const result: { target: Target; owner: string | null; name: string; values: number[] }[] = [];
   const ranges: AxisRange[] = [];
-  for (const axis of form.axes) {
+  for (const axis of axes) {
     const param = params.find((item) => item.key === axis.key);
     if (!param) return null;
     const range = axisValues(axis, param.spec, limits);
     if (range.values === null) return null;
     ranges.push(range);
-    axes.push({ target: param.target, owner: param.owner, name: param.name, values: range.values });
+    result.push({ target: param.target, owner: param.owner, name: param.name, values: range.values });
   }
   const count = combinations(ranges);
-  if (count === null || count > limits.max_combinations) return null;
-  return { ...setup, axes };
+  return count === null || count > limits.max_combinations ? null : result;
+}
+
+/** The sweep request without the account, which the page adds; null until the setup and every axis are valid. */
+export function sweepBody(form: SweepForm, params: SweepParam[], limits: ConfigOut["sweep"]): SweepIn | null {
+  const setup = setupBody(form);
+  const axes: SweepAxisIn[] | null = sweptAxes(form.axes, params, limits);
+  return setup && axes ? { ...setup, axes } : null;
 }
 
 /** Where the setup keeps the values of parameters that belong to an owner, by sweep target. */

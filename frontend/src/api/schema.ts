@@ -225,6 +225,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rotation-sweep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rotation Sweep */
+        post: operations["rotation_sweep_api_rotation_sweep_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chart": {
         parameters: {
             query?: never;
@@ -612,6 +629,8 @@ export interface components {
              */
             rebalances: components["schemas"]["Rebalance"][];
             sweep: components["schemas"]["SweepLimitsOut"];
+            /** @description The rotation sweep's limits: the sweep's, with the settings a rotation reads */
+            rotation_sweep: components["schemas"]["SweepLimitsOut"];
             walk_forward: components["schemas"]["WalkForwardLimitsOut"];
         };
         /**
@@ -1651,10 +1670,7 @@ export interface components {
              */
             safe_asset: string | null;
         };
-        /**
-         * RotationIn
-         * @description `settings.rotation` sets the holdings and the absolute momentum lookback.
-         */
+        /** RotationIn */
         RotationIn: {
             /**
              * Watchlist
@@ -1666,8 +1682,6 @@ export interface components {
              * @description Ad-hoc tickers instead of a watchlist
              */
             tickers?: string[] | null;
-            /** Engines */
-            engines?: string[];
             /** @description How the tickers are ranked; omit for the default ranking */
             ranking?: components["schemas"]["RuleIn"] | null;
             /** @description How the picks share the equity; omit for the default weighting */
@@ -1700,6 +1714,8 @@ export interface components {
             benchmark?: string | null;
             /** Period */
             period?: string | null;
+            /** Engines */
+            engines?: string[];
         };
         /** RotationOut */
         RotationOut: {
@@ -1815,6 +1831,167 @@ export interface components {
             /** Commissions */
             commissions: number;
         };
+        /** RotationSweepAxisIn */
+        RotationSweepAxisIn: {
+            /** @description What holds the parameter: the ranking, the weighting or a settings section */
+            target: components["schemas"]["RotationSweepTarget"];
+            /**
+             * Owner
+             * @description The settings section; omit for the ranking and the weighting rule
+             */
+            owner?: string | null;
+            /**
+             * Name
+             * @description The parameter, e.g. lookback or holdings
+             */
+            name: string;
+            /**
+             * Values
+             * @description The values to try, in order
+             */
+            values: number[];
+        };
+        /** RotationSweepAxisOut */
+        RotationSweepAxisOut: {
+            target: components["schemas"]["RotationSweepTarget"];
+            /** Owner */
+            owner: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Key
+             * @description target[.owner].name
+             */
+            key: string;
+            /** Label */
+            label: string;
+            /** Unit */
+            unit: string;
+            kind: components["schemas"]["ParamKind"];
+            /**
+             * Current
+             * @description The value in the setup the sweep started from
+             */
+            current: number;
+            /** Values */
+            values: number[];
+        };
+        /** RotationSweepCellOut */
+        RotationSweepCellOut: {
+            /**
+             * Values
+             * @description One value per axis, in axis order
+             */
+            values: number[];
+            in_sample: components["schemas"]["MetricsOut"] | null;
+            out_of_sample: components["schemas"]["MetricsOut"] | null;
+            in_sample_stats: components["schemas"]["RotationStatsOut"] | null;
+            out_of_sample_stats: components["schemas"]["RotationStatsOut"] | null;
+            /**
+             * Error
+             * @description Why this combination could not run, e.g. a rule between two parameters or a lookback longer than a period
+             */
+            error: string | null;
+        };
+        /** RotationSweepIn */
+        RotationSweepIn: {
+            /**
+             * Watchlist
+             * @description Watchlist name, e.g. us_large
+             */
+            watchlist?: string | null;
+            /**
+             * Tickers
+             * @description Ad-hoc tickers instead of a watchlist
+             */
+            tickers?: string[] | null;
+            /** @description How the tickers are ranked; omit for the default ranking */
+            ranking?: components["schemas"]["RuleIn"] | null;
+            /** @description How the picks share the equity; omit for the default weighting */
+            weighting?: components["schemas"]["RuleIn"] | null;
+            /**
+             * @description Rebalance at the last close of every week or month
+             * @default monthly
+             */
+            rebalance: components["schemas"]["Rebalance"];
+            /**
+             * Safe Asset
+             * @description Takes the slots of picks whose absolute momentum is at or below 0; omit for cash
+             */
+            safe_asset?: string | null;
+            /**
+             * Settings
+             * @description Per-run overrides by settings section, e.g. {"rotation": {"holdings": 3}}; backtest.oos_pct sets the out-of-sample share
+             */
+            settings?: {
+                [key: string]: {
+                    [key: string]: number | number[] | {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /**
+             * Benchmark
+             * @description Benchmark for buy & hold; omit for the watchlist's, else the configured benchmark
+             */
+            benchmark?: string | null;
+            /** Period */
+            period?: string | null;
+            /**
+             * Axes
+             * @description One or two parameters; the first changes slowest
+             */
+            axes: components["schemas"]["RotationSweepAxisIn"][];
+        };
+        /** RotationSweepOut */
+        RotationSweepOut: {
+            /** Universe */
+            universe: string;
+            /**
+             * Engine
+             * @description Sweeps run on this engine
+             */
+            engine: string;
+            /**
+             * Start
+             * @description The setup's first rebalance with a pick
+             */
+            start: string;
+            /** End */
+            end: string;
+            /** @description The setup's */
+            config: components["schemas"]["BacktestConfigOut"];
+            /** @description The setup's */
+            rotation: components["schemas"]["RotationConfigOut"];
+            /** @description The setup's */
+            ranking: components["schemas"]["AppliedRuleOut"];
+            /** @description The setup's */
+            weighting: components["schemas"]["AppliedRuleOut"];
+            /**
+             * Buy Hold Benchmark
+             * @description The benchmark buy & hold compares
+             */
+            buy_hold_benchmark: string;
+            /** @description The split of the setup's run, the same for every combination */
+            split: components["schemas"]["SplitOut"];
+            /** Axes */
+            axes: components["schemas"]["RotationSweepAxisOut"][];
+            /**
+             * Cells
+             * @description Every combination; the first axis changes slowest
+             */
+            cells: components["schemas"]["RotationSweepCellOut"][];
+            /**
+             * Missing
+             * @description Tickers without data
+             */
+            missing: string[];
+        };
+        /**
+         * RotationSweepTarget
+         * @enum {string}
+         */
+        RotationSweepTarget: "ranking" | "weighting" | "settings";
         /** RuleIn */
         RuleIn: {
             /**
@@ -3070,6 +3247,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RotationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rotation_sweep_api_rotation_sweep_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RotationSweepIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RotationSweepOut"];
                 };
             };
             /** @description Validation Error */

@@ -15,12 +15,15 @@ const COLOR: Record<Shade["tone"], string> = {
   level: "var(--heat-good)",
 };
 
-export const axisTitle = (axis: SweepAxisOut) => (axis.unit ? `${axis.label} (${axis.unit})` : axis.label);
+/** What the heatmap reads of a swept axis, a sweep's or a rotation sweep's. */
+export type HeatmapAxis = Pick<SweepAxisOut, "label" | "unit" | "values">;
+
+export const axisTitle = (axis: HeatmapAxis) => (axis.unit ? `${axis.label} (${axis.unit})` : axis.label);
 
 export const formatValue = (value: number) => value.toLocaleString("en-US", { maximumFractionDigits: 6 });
 
 /** "Oversold level 10, Distance 2": a combination in words. */
-export const describeCombination = (axes: SweepAxisOut[], values: number[]) =>
+export const describeCombination = (axes: HeatmapAxis[], values: number[]) =>
   axes.map((axis, index) => `${axis.label} ${formatValue(values[index] ?? NaN)}`).join(", ");
 
 export function cellText(cell: SweepCellOut, period: Period, metric: MetricKey): string {
@@ -43,7 +46,7 @@ export function SweepHeatmap({
 }: {
   title: string;
   period: Period;
-  axes: SweepAxisOut[];
+  axes: HeatmapAxis[];
   cells: SweepCellOut[];
   metric: MetricKey;
   scale: HeatScale | null;

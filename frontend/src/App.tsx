@@ -25,6 +25,10 @@ const router = createBrowserRouter([
       { path: "watchlist", lazy: async () => ({ Component: (await import("./pages/WatchlistPage")).WatchlistPage }) },
       { path: "portfolio", lazy: async () => ({ Component: (await import("./pages/PortfolioPage")).PortfolioPage }) },
       { path: "rotation", lazy: async () => ({ Component: (await import("./pages/RotationPage")).RotationPage }) },
+      {
+        path: "rotation-sweep",
+        lazy: async () => ({ Component: (await import("./pages/RotationSweepPage")).RotationSweepPage }),
+      },
       { path: "compare", lazy: async () => ({ Component: (await import("./pages/ComparePage")).ComparePage }) },
       { path: "journal", lazy: async () => ({ Component: (await import("./pages/JournalPage")).JournalPage }) },
       { path: "signals", lazy: async () => ({ Component: (await import("./pages/SignalsPage")).SignalsPage }) },
