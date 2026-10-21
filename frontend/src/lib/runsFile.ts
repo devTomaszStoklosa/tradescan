@@ -6,14 +6,15 @@
  * Older runs are upgraded when read: version 1 is from
  * before entry and exit rules, version 2 from before out-of-sample results, version 3 from before entry filters,
  * version 4 from before Monte Carlo results, version 5 from before portfolio runs, version 6 from before the score
- * priority's signal parameters, version 7 from before portfolio results reported what the score read of the scanner.
+ * priority's signal parameters, version 7 from before portfolio results reported what the score read of the scanner,
+ * version 8 holds runs from before pyramiding.
  */
 import type { AppliedRuleOut, MetricsOut, PinnedRunIn, PinnedRunOut, SuggestingRun } from "../api/client";
 import { formatTemplate, type Overrides } from "./overrides";
 import { moveLegacyExitSettings } from "./rules";
 import { MAX_RUNS, type PinnedBacktestRun, type PinnedPortfolioRun, type PinnedRun, type RunKind } from "./runs";
 
-export const RUNS_FILE_VERSION = 8;
+export const RUNS_FILE_VERSION = 9;
 
 interface StoredEquity {
   time: string[];
@@ -312,14 +313,24 @@ const upgradeV6 = (value: unknown): unknown =>
 const upgradeV7 = (value: unknown): unknown =>
   isRecord(value) && value.kind === "portfolio" ? { ...value, scan: null } : value;
 
+// --- Version 8: runs pinned before pyramiding held one unit and have no pyramiding settings ------------
+// Pyramiding came without a new version, so a version 8 run may already have both settings: only missing ones are
+// filled, with one unit and the default distance between units, which one unit never uses.
+
+const upgradeV8 = (value: unknown): unknown =>
+  isRecord(value) && isRecord(value.config)
+    ? { ...value, config: { max_units: 1, add_every_atr: 0.5, ...value.config } }
+    : value;
+
 const UPGRADES: Record<number, (value: unknown) => unknown> = {
-  1: (value) => upgradeV7(upgradeV6(upgradeV5(upgradeV4(upgradeV3(upgradeV2(upgradeV1(value))))))),
-  2: (value) => upgradeV7(upgradeV6(upgradeV5(upgradeV4(upgradeV3(upgradeV2(value)))))),
-  3: (value) => upgradeV7(upgradeV6(upgradeV5(upgradeV4(upgradeV3(value))))),
-  4: (value) => upgradeV7(upgradeV6(upgradeV5(upgradeV4(value)))),
-  5: (value) => upgradeV7(upgradeV6(upgradeV5(value))),
-  6: (value) => upgradeV7(upgradeV6(value)),
-  7: upgradeV7,
+  1: (value) => upgradeV8(upgradeV7(upgradeV6(upgradeV5(upgradeV4(upgradeV3(upgradeV2(upgradeV1(value)))))))),
+  2: (value) => upgradeV8(upgradeV7(upgradeV6(upgradeV5(upgradeV4(upgradeV3(upgradeV2(value))))))),
+  3: (value) => upgradeV8(upgradeV7(upgradeV6(upgradeV5(upgradeV4(upgradeV3(value)))))),
+  4: (value) => upgradeV8(upgradeV7(upgradeV6(upgradeV5(upgradeV4(value))))),
+  5: (value) => upgradeV8(upgradeV7(upgradeV6(upgradeV5(value)))),
+  6: (value) => upgradeV8(upgradeV7(upgradeV6(value))),
+  7: (value) => upgradeV8(upgradeV7(value)),
+  8: upgradeV8,
   [RUNS_FILE_VERSION]: (value) => value,
 };
 

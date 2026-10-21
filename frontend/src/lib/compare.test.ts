@@ -16,6 +16,7 @@ import {
   signals,
 } from "../test/fixtures";
 import { bestIndexes, metricValue, parameterRows, returnCurve } from "./compare";
+import { decodeRuns, encodeRuns } from "./runsFile";
 
 const differing = (rows: ReturnType<typeof parameterRows>) => rows.filter((row) => row.differs);
 
@@ -45,6 +46,15 @@ describe("parameterRows", () => {
       { key: "config.max_units", label: "Max units", unit: "", values: ["1", "4"], differs: true },
       { key: "config.add_every_atr", label: "Add every", unit: "ATR", values: ["0.5", "1"], differs: true },
     ]);
+  });
+
+  it("does not tell a run pinned before pyramiding apart from one that did not pyramid", () => {
+    const stored = encodeRuns([makeRun(1)]).runs[0]!;
+    const { max_units: _units, add_every_atr: _every, ...unpyramided } = stored.config;
+    const [old] = decodeRuns({ version: 8, runs: [{ ...stored, config: unpyramided }] });
+    const rows = parameterRows([old!, makeRun(2)], config.sections, signals);
+    expect(differing(rows)).toEqual([]);
+    expect(rows.find((row) => row.key === "config.max_units")).toMatchObject({ values: ["1", "1"] });
   });
 
   it("shows the Monte Carlo settings of runs that have one", () => {

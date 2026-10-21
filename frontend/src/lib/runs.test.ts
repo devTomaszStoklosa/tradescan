@@ -354,6 +354,23 @@ describe("runs file", () => {
     );
   });
 
+  it("upgrades version 8 runs pinned before pyramiding, which held one unit", () => {
+    const pins = [makeRun(1), makePortfolioPin(2)];
+    const old = encodeRuns(pins).runs.map((run) => {
+      const { max_units: _units, add_every_atr: _every, ...config } = run.config;
+      return { ...run, config };
+    });
+    const runs = parseRunsFile(JSON.stringify({ version: 8, runs: old }));
+    for (const run of runs) expect(run.config).toMatchObject({ max_units: 1, add_every_atr: 0.5 });
+    expect(runs.map(runKey)).toEqual(pins.map(runKey));
+  });
+
+  it("keeps the pyramiding of version 8 runs pinned after it came", () => {
+    const pin = makeRun(1, { config: { ...makeRun(1).config, max_units: 3, add_every_atr: 1 } });
+    const [run] = parseRunsFile(JSON.stringify({ version: 8, runs: encodeRuns([pin]).runs }));
+    expect(run!.config).toMatchObject({ max_units: 3, add_every_atr: 1 });
+  });
+
   it("round-trips portfolio runs next to backtest runs", () => {
     const runs = [makeRun(1), makePortfolioPin(2, {}, { name: "top 5 by momentum" }), makeScorePin(3)];
     const decoded = parseRunsFile(JSON.stringify(encodeRuns(runs)));
