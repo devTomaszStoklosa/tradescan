@@ -5,25 +5,15 @@ import type { BacktestOut, ConfigOut, SignalOut } from "../api/client";
 import { useBacktest, useChart, useConfig, useSignals } from "../api/hooks";
 import { KeyMetrics, MetricsComparison, TradesTable } from "../components/BacktestResults";
 import { BacktestSetupFields } from "../components/BacktestSetupFields";
+import { EnginePicker } from "../components/EnginePicker";
 import { EquityChart, type EquityEvent, type EquitySeries } from "../components/charts/EquityChart";
 import { PriceChart, type ChartMarker } from "../components/charts/PriceChart";
 import { MonteCarloPanel } from "../components/MonteCarlo";
 import { PeriodsPanel } from "../components/OutOfSample";
 import { SectionFields } from "../components/ParamFields";
 import { PinRunButton } from "../components/PinRunButton";
-import {
-  Button,
-  DirectionBadge,
-  EmptyState,
-  ErrorBox,
-  FieldGroup,
-  Loading,
-  PageHeader,
-  Panel,
-  Segmented,
-  ToggleChip,
-} from "../components/ui";
-import { BACKTEST_PAGE_SECTIONS, MONTE_CARLO_SECTION } from "../lib/choices";
+import { Button, DirectionBadge, EmptyState, ErrorBox, Loading, PageHeader, Panel, Segmented } from "../components/ui";
+import { BACKTEST_PAGE_SECTIONS, ENGINE_COLORS, MONTE_CARLO_SECTION } from "../lib/choices";
 import { downloadCsv, tradeRow } from "../lib/csv";
 import { fmtNumber } from "../lib/format";
 import { backtestBody, readBacktestForm, writeBacktestForm, type BacktestForm } from "../lib/params";
@@ -31,8 +21,6 @@ import { hasSetupProblems, resetSetup, setupChanges } from "../lib/setup";
 import { newSweepForm, writeSweepForm } from "../lib/sweep";
 import { useResettableState } from "../lib/useResettableState";
 import { useAccount, withAccount } from "../state/account";
-
-const ENGINE_COLORS = ["--accent", "--warn"];
 
 function BacktestFormPanel({
   initial,
@@ -48,13 +36,6 @@ function BacktestFormPanel({
   onSubmit: (form: BacktestForm) => void;
 }) {
   const [draft, setDraft] = useResettableState(initial);
-  const toggleEngine = (engine: string) =>
-    setDraft({
-      ...draft,
-      engines: draft.engines.includes(engine)
-        ? draft.engines.filter((item) => item !== engine)
-        : [...draft.engines, engine],
-    });
   const changes = setupChanges(draft, config);
   const invalid = !draft.engines.length || hasSetupProblems(draft, config, signals, BACKTEST_PAGE_SECTIONS);
   const monteCarlo = config.sections.find((section) => section.name === MONTE_CARLO_SECTION);
@@ -79,20 +60,11 @@ function BacktestFormPanel({
           </section>
         )}
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <FieldGroup label="Engines">
-            <div className="flex gap-1.5 py-1">
-              {config.engines.map((engine) => (
-                <ToggleChip
-                  key={engine}
-                  active={draft.engines.includes(engine)}
-                  onClick={() => toggleEngine(engine)}
-                  color="var(--accent)"
-                >
-                  {engine}
-                </ToggleChip>
-              ))}
-            </div>
-          </FieldGroup>
+          <EnginePicker
+            available={config.engines}
+            value={draft.engines}
+            onChange={(engines) => setDraft({ ...draft, engines })}
+          />
           <div className="flex items-center gap-2">
             {changes > 0 && (
               <Button variant="ghost" onClick={() => setDraft(resetSetup(draft, config))}>

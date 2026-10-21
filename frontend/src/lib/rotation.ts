@@ -23,7 +23,7 @@ import {
   type Overrides,
   type Values,
 } from "./overrides";
-import { readUniverse, tickerList, universeBody, writeUniverse, type Universe } from "./params";
+import { commaList, readUniverse, tickerList, universeBody, writeUniverse, type Universe } from "./params";
 import { findRule } from "./rules";
 
 export const RANKING_PREFIX = "rk";
@@ -62,17 +62,11 @@ const ticker = (value: string | null): string => (value ?? "").trim().toUpperCas
 
 const rebalanceOf = (value: string | null): Rebalance => (value === "weekly" ? "weekly" : DEFAULT_REBALANCE);
 
-const engineList = (value: string | null): string[] =>
-  (value ?? "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-
 /** Rules the URL leaves out are the server's defaults; settings of other sections are left out. */
 export function readRotationForm(params: URLSearchParams, defaults: RotationDefaults): RotationForm {
   const ranking = params.get("rank") || defaults.default_ranking;
   const weighting = params.get("wt") || defaults.default_weighting;
-  const engines = engineList(params.get("eng"));
+  const engines = commaList(params.get("eng"));
   return {
     universe: readUniverse(params),
     engines: engines.length ? engines : [...DEFAULT_ENGINES],

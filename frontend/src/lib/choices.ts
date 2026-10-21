@@ -9,6 +9,20 @@ export function universeSize(universe: Universe, watchlists: WatchlistOut[]): nu
   return watchlists.find((item) => item.name === universe.watchlist)?.tickers.length ?? 0;
 }
 
+/** Above this many tickers, the Cerebro reference takes minutes. */
+const SLOW_CEREBRO_TICKERS = 20;
+
+/** True when the Cerebro reference is picked for a universe big enough to make it slow. */
+export const isSlowCerebro = (engines: readonly string[], universe: Universe, watchlists: WatchlistOut[]): boolean =>
+  engines.includes("cerebro") && universeSize(universe, watchlists) > SLOW_CEREBRO_TICKERS;
+
+/** `engines` with `engine` added when it is off and dropped when it is on. */
+export const toggleEngine = (engines: readonly string[], engine: string): string[] =>
+  engines.includes(engine) ? engines.filter((item) => item !== engine) : [...engines, engine];
+
+/** CSS variables of the equity lines, one per engine run. */
+export const ENGINE_COLORS = ["--accent", "--warn"];
+
 /** History lengths offered in forms (yfinance periods). */
 export const PERIODS = ["1y", "2y", "5y", "10y", "max"];
 

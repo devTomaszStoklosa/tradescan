@@ -11,6 +11,7 @@ import type {
 } from "../api/client";
 import { useConfig, useRotationBacktest, useWatchlists } from "../api/hooks";
 import { enginesAgree, MetricsTable, TradesTable } from "../components/BacktestResults";
+import { EnginePicker, SlowCerebroNotice } from "../components/EnginePicker";
 import { EquityChart, type EquityEvent, type EquitySeries } from "../components/charts/EquityChart";
 import { DataTable, type Column } from "../components/DataTable";
 import { PinRotationRunButton } from "../components/PinRunButton";
@@ -20,16 +21,14 @@ import {
   Button,
   EmptyState,
   ErrorBox,
-  FieldGroup,
   Loading,
   Notice,
   PageHeader,
   Panel,
   Segmented,
   StatTile,
-  ToggleChip,
 } from "../components/ui";
-import { LARGE_UNIVERSE, universeSize, withDefaultUniverse } from "../lib/choices";
+import { ENGINE_COLORS, isSlowCerebro, LARGE_UNIVERSE, universeSize, withDefaultUniverse } from "../lib/choices";
 import { downloadCsv, tradeRow } from "../lib/csv";
 import { DASH, fmtNumber, fmtPct, fmtSigned, fmtSize, tone } from "../lib/format";
 import {
@@ -43,10 +42,6 @@ import {
 } from "../lib/rotation";
 import { useResettableState } from "../lib/useResettableState";
 import { useAccount, withAccount } from "../state/account";
-
-const ENGINE_COLORS = ["--accent", "--warn"];
-/** Above this many tickers, the Cerebro reference takes minutes. */
-const SLOW_CEREBRO_TICKERS = 20;
 
 function RotationFormPanel({
   initial,
@@ -64,15 +59,9 @@ function RotationFormPanel({
   const source = useMemo(() => withDefaultUniverse(initial, watchlists), [initial, watchlists]);
   const [draft, setDraft] = useResettableState(source);
   const set = <K extends keyof RotationForm>(key: K, value: RotationForm[K]) => setDraft({ ...draft, [key]: value });
-  const toggleEngine = (engine: string) =>
-    set(
-      "engines",
-      draft.engines.includes(engine) ? draft.engines.filter((item) => item !== engine) : [...draft.engines, engine],
-    );
   const changes = rotationChanges(draft, config);
   const invalid = hasRotationProblems(draft, config);
-  const slowCerebro =
-    draft.engines.includes("cerebro") && universeSize(draft.universe, watchlists) > SLOW_CEREBRO_TICKERS;
+  const slowCerebro = isSlowCerebro(draft.engines, draft.universe, watchlists);
 
   const submit = (event: SubmitEvent) => {
     event.preventDefault();
@@ -84,20 +73,11 @@ function RotationFormPanel({
       <form onSubmit={submit} noValidate className="space-y-4">
         <RotationSetupFields draft={draft} onChange={setDraft} config={config} watchlists={watchlists} />
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <FieldGroup label="Engines">
-            <div className="flex gap-1.5 py-1">
-              {config.engines.map((engine) => (
-                <ToggleChip
-                  key={engine}
-                  active={draft.engines.includes(engine)}
-                  onClick={() => toggleEngine(engine)}
-                  color="var(--accent)"
-                >
-                  {engine}
-                </ToggleChip>
-              ))}
-            </div>
-          </FieldGroup>
+          <EnginePicker
+            available={config.engines}
+            value={draft.engines}
+            onChange={(engines) => set("engines", engines)}
+          />
           <div className="flex items-center gap-2">
             {changes > 0 && (
               <Button variant="ghost" onClick={() => setDraft(resetRotation(draft, config))}>
@@ -109,11 +89,7 @@ function RotationFormPanel({
             </Button>
           </div>
         </div>
-        {slowCerebro && (
-          <Notice>
-            Cerebro checks the vectorized engine and is slow: expect about a minute per 20 tickers of 10-year history.
-          </Notice>
-        )}
+        {slowCerebro && <SlowCerebroNotice />}
       </form>
     </Panel>
   );
