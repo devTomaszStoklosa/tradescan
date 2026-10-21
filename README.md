@@ -82,16 +82,18 @@ the built UI. The screens:
   lookback, the safe asset, the benchmark and the costs are editable; key metrics against the benchmark's buy
   & hold, the share held defensively and the turnover, equity and holdings over time, what a rebalance at the
   last close would pick, metrics and rotation stats in-sample and out-of-sample, each ticker's contribution
-  and every holding.
+  and every holding. **Pin run** keeps the shown engine's run for Compare.
 - **Edge**: signal statistics across a watchlist at several horizons, coloured by edge.
-- **Compare**: backtest and portfolio runs pinned with **Pin run** on the Backtest and Portfolio pages,
-  side by side: the parameters that differ (for a portfolio also its universe, max positions, max exposure
-  and priority rule with its parameters, and for the scan score priority the scoring, trend and fresh-signal
-  settings and the counted signals' parameters it read), an out-of-sample check (key metrics in-sample next to
-  out-of-sample), a Monte Carlo check (unlucky and median return, drawdown and losing streak, and the
-  chance of ruin, per method), every metric of the full history or of one period with the best value
-  highlighted, the portfolio stats (open positions, exposure, skipped signals) of the same period, and the
-  return curves on one chart. **Log a trade** on a run opens the Journal with that run picked.
+- **Compare**: backtest, portfolio and rotation runs pinned with **Pin run** on the Backtest, Portfolio and
+  Rotation pages, side by side: the parameters that differ (for a portfolio also its universe, max positions,
+  max exposure and priority rule with its parameters, and for the scan score priority the scoring, trend and
+  fresh-signal settings and the counted signals' parameters it read; for a rotation its universe, holdings,
+  absolute momentum lookback, rebalance, safe asset, ranking and weighting rules with their parameters and
+  buy & hold benchmark), an out-of-sample check (key metrics in-sample next to out-of-sample), a Monte Carlo
+  check (unlucky and median return, drawdown and losing streak, and the chance of ruin, per method), every
+  metric of the full history or of one period with the best value highlighted, the portfolio stats (open
+  positions, exposure, skipped signals) and the rotation stats (holdings, defensive share, turnover, costs) of
+  the same period, and the return curves on one chart. **Log a trade** on a run opens the Journal with that run picked.
 - **Journal**: your real trades: ticker, direction, entry date and price, quantity, initial stop, exit date and
   price, fees and notes, with the pinned run that suggested the trade. Each trade shows its profit after fees,
   its return and its R (from the initial stop) next to the win rate and expectancy of the backtest that suggested
