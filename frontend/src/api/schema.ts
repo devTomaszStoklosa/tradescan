@@ -1666,6 +1666,8 @@ export interface components {
              * @description Ad-hoc tickers instead of a watchlist
              */
             tickers?: string[] | null;
+            /** Engines */
+            engines?: string[];
             /** @description How the tickers are ranked; omit for the default ranking */
             ranking?: components["schemas"]["RuleIn"] | null;
             /** @description How the picks share the equity; omit for the default weighting */
@@ -1703,8 +1705,6 @@ export interface components {
         RotationOut: {
             /** Universe */
             universe: string;
-            /** Engine */
-            engine: string;
             /**
              * Start
              * @description The first rebalance with a pick: the lookbacks' warm-up is left out
@@ -1728,6 +1728,29 @@ export interface components {
             buy_hold: components["schemas"]["Point"][];
             /** @description The split of the run's dates; null when it is too short */
             split: components["schemas"]["SplitOut"] | null;
+            /** @description What a rebalance at the last close would hold, the same on every engine */
+            targets: components["schemas"]["TargetsOut"];
+            /**
+             * Runs
+             * @description One per engine, in the request's order
+             */
+            runs: components["schemas"]["RotationRunOut"][];
+            /**
+             * Missing
+             * @description Tickers without data
+             */
+            missing: string[];
+        };
+        /** RotationPeriodOut */
+        RotationPeriodOut: {
+            /** @description buy_hold_pct is the benchmark's; exposure_pct is the share of closes with a holding; without a stop, expectancy_r and sqn are null */
+            metrics: components["schemas"]["MetricsOut"];
+            stats: components["schemas"]["RotationStatsOut"];
+        };
+        /** RotationRunOut */
+        RotationRunOut: {
+            /** Engine */
+            engine: string;
             full: components["schemas"]["RotationPeriodOut"];
             /** @description The run on the bars before the split; null without a split */
             in_sample: components["schemas"]["RotationPeriodOut"] | null;
@@ -1740,8 +1763,6 @@ export interface components {
              * @description Tickers held at each close, the safe asset included
              */
             holdings: components["schemas"]["Point"][];
-            /** @description What a rebalance at the last close would hold */
-            targets: components["schemas"]["TargetsOut"];
             /**
              * Trades
              * @description Holdings: from the buy that opens a position to the sale that empties it, by entry date
@@ -1752,17 +1773,6 @@ export interface components {
              * @description Every ticker with data in watchlist order, the safe asset last
              */
             tickers: components["schemas"]["TickerContributionOut"][];
-            /**
-             * Missing
-             * @description Tickers without data
-             */
-            missing: string[];
-        };
-        /** RotationPeriodOut */
-        RotationPeriodOut: {
-            /** @description buy_hold_pct is the benchmark's; exposure_pct is the share of closes with a holding; without a stop, expectancy_r and sqn are null */
-            metrics: components["schemas"]["MetricsOut"];
-            stats: components["schemas"]["RotationStatsOut"];
         };
         /** RotationStatsOut */
         RotationStatsOut: {

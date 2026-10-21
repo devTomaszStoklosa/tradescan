@@ -33,6 +33,17 @@ _EXEC_TYPES = {OrderType.MARKET: bt.Order.Market, OrderType.STOP: bt.Order.Stop,
 LEVERAGE = 1e9  # buying takes 1e-9 of the price in cash, so cash never runs out
 
 
+class MultiFeedBroker(bt.brokers.BackBroker):
+    """The broker of the engines that trade several feeds: an order is only tried on a bar of its feed after the bar
+    it was placed on. Feeds on different dates move separately, and backtrader would otherwise try an order placed at
+    a close against that same bar whenever another feed moves on and the order's feed does not."""
+
+    def _try_exec(self, order: bt.Order) -> None:
+        if order.data.datetime[0] <= order.created.dt:
+            return  # the order's feed has no bar after the one the order was placed on yet
+        super()._try_exec(order)
+
+
 class TickerOrders:
     """One ticker's entry order, exit orders and trades inside a backtrader strategy, which may trade other
     tickers too: the strategy calls `update` at every close of the ticker and forwards its order notifications.

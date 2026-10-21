@@ -1,9 +1,16 @@
 import { useMemo, type SubmitEvent } from "react";
 import { useSearchParams } from "react-router";
 
-import type { ConfigOut, PickOut, RotationOut, TickerContributionOut, WatchlistOut } from "../api/client";
+import type {
+  ConfigOut,
+  PickOut,
+  RotationOut,
+  RotationRunOut,
+  TickerContributionOut,
+  WatchlistOut,
+} from "../api/client";
 import { useConfig, useRotationBacktest, useWatchlists } from "../api/hooks";
-import { MetricsTable, TradesTable } from "../components/BacktestResults";
+import { enginesAgree, MetricsTable, TradesTable } from "../components/BacktestResults";
 import { EquityChart, type EquityEvent, type EquitySeries } from "../components/charts/EquityChart";
 import { DataTable, type Column } from "../components/DataTable";
 import { SectionFields } from "../components/ParamFields";
@@ -24,6 +31,7 @@ import {
   Segmented,
   Select,
   StatTile,
+  ToggleChip,
 } from "../components/ui";
 import { LARGE_UNIVERSE, PERIODS, ROTATION_SECTION, universeSize, withDefaultUniverse } from "../lib/choices";
 import { downloadCsv, tradeRow } from "../lib/csv";
@@ -44,6 +52,9 @@ const REBALANCES = [
   { value: "weekly" as const, label: "Weekly" },
   { value: "monthly" as const, label: "Monthly" },
 ];
+const ENGINE_COLORS = ["--accent", "--warn"];
+/** Above this many tickers, the Cerebro reference takes minutes. */
+const SLOW_CEREBRO_TICKERS = 20;
 
 function RotationFormPanel({
   initial,
@@ -61,11 +72,18 @@ function RotationFormPanel({
   const source = useMemo(() => withDefaultUniverse(initial, watchlists), [initial, watchlists]);
   const [draft, setDraft] = useResettableState(source);
   const set = <K extends keyof RotationForm>(key: K, value: RotationForm[K]) => setDraft({ ...draft, [key]: value });
+  const toggleEngine = (engine: string) =>
+    set(
+      "engines",
+      draft.engines.includes(engine) ? draft.engines.filter((item) => item !== engine) : [...draft.engines, engine],
+    );
   const changes = rotationChanges(draft, config);
   const invalid = hasRotationProblems(draft, config);
   const watchlistBenchmark = watchlists.find((item) => item.name === draft.universe.watchlist)?.benchmark;
   const rotation = config.sections.find((section) => section.name === ROTATION_SECTION);
   const costs = config.sections.find((section) => section.name === "backtest");
+  const slowCerebro =
+    draft.engines.includes("cerebro") && universeSize(draft.universe, watchlists) > SLOW_CEREBRO_TICKERS;
 
   const submit = (event: SubmitEvent) => {
     event.preventDefault();
@@ -154,30 +172,51 @@ function RotationFormPanel({
             </div>
           )}
         </section>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {changes > 0 && (
-            <Button variant="ghost" onClick={() => setDraft(resetRotation(draft, config))}>
-              Reset {changes} changed
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <FieldGroup label="Engines">
+            <div className="flex gap-1.5 py-1">
+              {config.engines.map((engine) => (
+                <ToggleChip
+                  key={engine}
+                  active={draft.engines.includes(engine)}
+                  onClick={() => toggleEngine(engine)}
+                  color="var(--accent)"
+                >
+                  {engine}
+                </ToggleChip>
+              ))}
+            </div>
+          </FieldGroup>
+          <div className="flex items-center gap-2">
+            {changes > 0 && (
+              <Button variant="ghost" onClick={() => setDraft(resetRotation(draft, config))}>
+                Reset {changes} changed
+              </Button>
+            )}
+            <Button type="submit" variant="primary" disabled={busy || invalid} className="h-9 px-5">
+              {busy ? "Running…" : "Run rotation"}
             </Button>
-          )}
-          <Button type="submit" variant="primary" disabled={busy || invalid} className="h-9 px-5">
-            {busy ? "Running…" : "Run rotation"}
-          </Button>
+          </div>
         </div>
+        {slowCerebro && (
+          <Notice>
+            Cerebro checks the vectorized engine and is slow: expect about a minute per 20 tickers of 10-year history.
+          </Notice>
+        )}
       </form>
     </Panel>
   );
 }
 
-function RotationTiles({ result }: { result: RotationOut }) {
-  const { metrics: m, stats: s } = result.full;
+function RotationTiles({ run, benchmark }: { run: RotationRunOut; benchmark: string }) {
+  const { metrics: m, stats: s } = run.full;
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
       <StatTile
         label="Total return"
         value={fmtPct(m.total_return_pct, 1, true)}
         valueClass={tone(m.total_return_pct)}
-        sub={`${result.buy_hold_benchmark} buy & hold ${fmtPct(m.buy_hold_pct, 1, true)}`}
+        sub={`${benchmark} buy & hold ${fmtPct(m.buy_hold_pct, 1, true)}`}
       />
       <StatTile
         label="Max drawdown"
@@ -211,8 +250,8 @@ const PERIOD_KEYS = [
   { key: "out_of_sample", label: "Out-of-sample" },
 ] as const;
 
-function PeriodsTables({ result }: { result: RotationOut }) {
-  const periods = useMemo(() => PERIOD_KEYS.map(({ key, label }) => ({ key, label, period: result[key] })), [result]);
+function PeriodsTables({ run }: { run: RotationRunOut }) {
+  const periods = useMemo(() => PERIOD_KEYS.map(({ key, label }) => ({ key, label, period: run[key] })), [run]);
   const statColumns = useMemo(
     () => periods.map(({ key, label, period }) => ({ key, header: label, stats: period?.stats ?? null })),
     [periods],
@@ -277,7 +316,7 @@ function TargetsTable({ result }: { result: RotationOut }) {
   );
 }
 
-function ContributionTable({ result }: { result: RotationOut }) {
+function ContributionTable({ run }: { run: RotationRunOut }) {
   const columns = useMemo<Column<TickerContributionOut>[]>(
     () => [
       {
@@ -320,7 +359,7 @@ function ContributionTable({ result }: { result: RotationOut }) {
   );
   return (
     <DataTable
-      rows={result.tickers}
+      rows={run.tickers}
       columns={columns}
       rowKey={(row) => row.ticker}
       initialSort={{ key: "pnl", direction: "desc" }}
@@ -331,9 +370,17 @@ function ContributionTable({ result }: { result: RotationOut }) {
 }
 
 function RotationView({ result }: { result: RotationOut }) {
+  // A new result shows its first engine.
+  const [engine, setEngine] = useResettableState(result.runs[0]?.engine ?? "", result);
+  const run = result.runs.find((item) => item.engine === engine) ?? result.runs[0];
   const equitySeries = useMemo<EquitySeries[]>(
     () => [
-      { label: "rotation equity", points: result.equity, colorVar: "--accent" },
+      ...result.runs.map((item, index) => ({
+        label: `${item.engine} equity`,
+        points: item.equity,
+        colorVar: ENGINE_COLORS[index % ENGINE_COLORS.length] ?? "--accent",
+        dashed: index > 0,
+      })),
       {
         label: `${result.buy_hold_benchmark} buy & hold`,
         points: result.buy_hold,
@@ -345,19 +392,21 @@ function RotationView({ result }: { result: RotationOut }) {
     [result],
   );
   const holdingSeries = useMemo<EquitySeries[]>(
-    () => [{ label: "holdings", points: result.holdings, colorVar: "--accent" }],
-    [result],
+    () => (run ? [{ label: `holdings (${run.engine})`, points: run.holdings, colorVar: "--accent" }] : []),
+    [run],
   );
   const splitEvents = useMemo<EquityEvent[]>(
     () => (result.split ? [{ time: result.split.out_of_sample_start, text: "out-of-sample" }] : []),
     [result.split],
   );
+  if (!run) return null;
   const used = result.config;
   const rotation = result.rotation;
   const check = rotation.absolute_lookback
     ? `a pick at or below 0 over ${rotation.absolute_lookback} bars goes to ${rotation.safe_asset ?? "cash"}`
     : "no absolute momentum check";
   const file = `tradescan-rotation-${result.universe}-${result.ranking.name}`;
+  const agree = enginesAgree(result.runs.map((item) => ({ metrics: item.full.metrics })));
   return (
     <div className="space-y-4">
       <div className="space-y-1 text-sm">
@@ -368,7 +417,7 @@ function RotationView({ result }: { result: RotationOut }) {
           </span>
         </div>
         <p className="text-muted">
-          {result.start} → {result.end} (from the first rebalance with a pick) · {result.tickers.length} tickers, one
+          {result.start} → {result.end} (from the first rebalance with a pick) · {run.tickers.length} tickers, one
           equity · {check}
         </p>
         <p className="text-muted">
@@ -380,7 +429,20 @@ function RotationView({ result }: { result: RotationOut }) {
         </p>
       </div>
       {result.missing.length > 0 && <Notice>No data for: {result.missing.join(", ")}</Notice>}
-      <RotationTiles result={result} />
+      {result.runs.length > 1 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <Segmented
+            label="Engine"
+            value={engine}
+            onChange={setEngine}
+            options={result.runs.map((item) => ({ value: item.engine, label: item.engine }))}
+          />
+          <p className={`text-sm ${agree ? "text-up" : "text-warn"}`}>
+            {agree ? "✓ Both engines produced identical results." : "Engines differ: compare the holdings below."}
+          </p>
+        </div>
+      )}
+      <RotationTiles run={run} benchmark={result.buy_hold_benchmark} />
       <Panel>
         <h2 className="mb-2 text-sm font-semibold">Equity</h2>
         <EquityChart series={equitySeries} events={splitEvents} />
@@ -392,7 +454,7 @@ function RotationView({ result }: { result: RotationOut }) {
       <TargetsTable result={result} />
       <section className="space-y-2">
         <h2 className="text-sm font-semibold">In-sample and out-of-sample</h2>
-        <PeriodsTables result={result} />
+        <PeriodsTables run={run} />
         <p className="text-xs text-muted">
           Each period starts with fresh equity; the out-of-sample run rebalances from the split on, with its lookbacks
           already warm. Buy & hold is {result.buy_hold_benchmark}'s; exposure is the share of days with a holding. A
@@ -401,26 +463,28 @@ function RotationView({ result }: { result: RotationOut }) {
       </section>
       <section className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold">Each ticker's contribution</h2>
+          <h2 className="text-sm font-semibold">Each ticker's contribution ({run.engine})</h2>
           <Button
             onClick={() =>
               downloadCsv(
-                `${file}-tickers.csv`,
-                result.tickers.map((row) => ({ ...row })),
+                `${file}-${run.engine}-tickers.csv`,
+                run.tickers.map((row) => ({ ...row })),
               )
             }
           >
             Export CSV
           </Button>
         </div>
-        <ContributionTable result={result} />
+        <ContributionTable run={run} />
         <p className="text-xs text-muted">Today's index members carry survivorship bias.</p>
       </section>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold">{result.trades.length} holdings</h2>
+        <h2 className="text-sm font-semibold">
+          {run.trades.length} holdings ({run.engine})
+        </h2>
         <Button
-          onClick={() => downloadCsv(`${file}.csv`, result.trades.map(tradeRow))}
-          disabled={!result.trades.length}
+          onClick={() => downloadCsv(`${file}-${run.engine}.csv`, run.trades.map(tradeRow))}
+          disabled={!run.trades.length}
         >
           Export CSV
         </Button>
@@ -429,8 +493,8 @@ function RotationView({ result }: { result: RotationOut }) {
         A holding runs from the buy that opens a position to the sale that empties it; its prices are averages of every
         add and trim.
       </p>
-      {result.trades.length ? (
-        <TradesTable trades={result.trades} />
+      {run.trades.length ? (
+        <TradesTable trades={run.trades} />
       ) : (
         <EmptyState title="The rotation never bought anything" />
       )}

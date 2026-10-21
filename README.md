@@ -18,7 +18,7 @@ Trading signal scanner for daily bars: **vectorized pandas signals on yfinance d
 - one setup as a portfolio with one shared equity: a cap on open positions and on exposure, a priority when
   more signals fire than fit, and portfolio metrics, with Cerebro as a reference that produces the same trades
 - a momentum rotation: the strongest tickers of a watchlist, rebalanced weekly or monthly, with the slots of
-  falling picks in a safe asset or cash
+  falling picks in a safe asset or cash, and Cerebro as a reference that produces the same trades
 - a trade journal: real trades with notes and the pinned backtest that suggested each, its R next to the
   backtest's
 - a React web UI on top of a small FastAPI server (`tradescan serve`), which keeps pinned runs and the journal
@@ -77,12 +77,12 @@ the built UI. The screens:
   the benchmark's buy & hold, skipped signals, equity and open positions over time, metrics and portfolio
   stats in-sample and out-of-sample, each ticker's contribution (a ticker opens its own backtest) and every
   trade with its ticker. **Pin run** keeps the shown engine's run for Compare.
-- **Rotation**: hold the strongest tickers of a watchlist, rebalanced weekly or monthly: the ranking and
-  weighting rules with their parameters, the holdings, the absolute momentum lookback, the safe asset,
-  the benchmark and the costs are editable; key metrics against the benchmark's buy & hold, the share held
-  defensively and the turnover, equity and holdings over time, what a rebalance at the last close would
-  pick, metrics and rotation stats in-sample and out-of-sample, each ticker's contribution and every
-  holding.
+- **Rotation**: hold the strongest tickers of a watchlist, rebalanced weekly or monthly, on either or both
+  engines: the ranking and weighting rules with their parameters, the holdings, the absolute momentum
+  lookback, the safe asset, the benchmark and the costs are editable; key metrics against the benchmark's buy
+  & hold, the share held defensively and the turnover, equity and holdings over time, what a rebalance at the
+  last close would pick, metrics and rotation stats in-sample and out-of-sample, each ticker's contribution
+  and every holding.
 - **Edge**: signal statistics across a watchlist at several horizons, coloured by edge.
 - **Compare**: backtest and portfolio runs pinned with **Pin run** on the Backtest and Portfolio pages,
   side by side: the parameters that differ (for a portfolio also its universe, max positions, max exposure
@@ -175,7 +175,7 @@ tradescan update-universes
 | `walk-forward` | The `backtest` setup with one or two `--axis` parameters as in `sweep`, re-tuned on `--windows` in-sample windows `--in-sample-ratio` times as long as the out-of-sample windows after them (`--scheme rolling` or `anchored`), each window picking the highest in-sample `--metric` with at least `--min-trades` trades: every window with its pick, the stitched out-of-sample metrics next to the unchanged setup, the walk-forward efficiency and the next setting; `--export` saves every window with both periods' metrics. |
 | `watchlist-backtest` | The `backtest` setup (without the ticker) on every ticker of `-w`/`-t` with the vectorized engine: the best `--top` tickers by `--metric` with their in-sample and out-of-sample values, the spread of `--metric` across tickers and all trades pooled; `--export` saves every ticker with every period's metrics. |
 | `portfolio-backtest` | The `backtest` setup (without the ticker and without pyramiding) on every ticker of `-w`/`-t` with one shared equity: `--max-positions` and `--max-exposure` (% of equity) cap it, `--priority` ranks the signals when more fire than fit (`score` reads `[scoring]`, `[trend]` and `[scan] fresh_bars` from the settings file), `--engine` picks the engine (or `both`). Prints every engine's metrics and portfolio stats for the full history and both periods and the `--top` tickers by P&L; `--export` saves every engine's trades. |
-| `rotation-backtest` | A momentum rotation over every ticker of `-w`/`-t`: `--rank` ranks them (default `momentum`), `--holdings` picks the top N, `--rebalance` is `weekly` or `monthly` (default), `--weighting` is `equal` (default) or `inverse_volatility`, `--absolute-lookback` sets the absolute momentum check (0 turns it off) and `--safe-asset` takes the slots of the picks that fail it (default cash). Prints the metrics and rotation stats for the full run and both periods, what a rebalance at the last close would pick and the `--top` tickers by P&L; `--export` saves the trades. |
+| `rotation-backtest` | A momentum rotation over every ticker of `-w`/`-t`: `--rank` ranks them (default `momentum`), `--holdings` picks the top N, `--rebalance` is `weekly` or `monthly` (default), `--weighting` is `equal` (default) or `inverse_volatility`, `--absolute-lookback` sets the absolute momentum check (0 turns it off) and `--safe-asset` takes the slots of the picks that fail it (default cash). `--engine` is `vectorized` (default), `cerebro` or `both`. Prints each engine's metrics and rotation stats for the full run and both periods, what a rebalance at the last close would pick and the `--top` tickers by P&L; `--export` saves every engine's trades. |
 | `list-signals` | All signals with family, direction, scoring weight and rule. |
 | `update-universes` | Refresh the `sp500` and `nasdaq100` watchlists from Wikipedia's constituent tables (`--only sp500`). |
 | `serve` | Web UI and HTTP API; `--db` sets the SQLite file for the pinned runs and the journal (default `tradescan.db`). |
@@ -441,8 +441,9 @@ a bar of its ticker after the one it was placed on. It is the reference and is s
 data is cached.
 
 **Momentum rotation.** A rotation holds the strongest tickers of a watchlist with one shared equity,
-without signals or stops. At the close of the last day of every week or month of the shared calendar
-(`weekly` or `monthly`; the last week or month of the data may go on, so it never rebalances):
+without signals or stops, on the pandas engine, Cerebro or both, which produce the same trades. At the
+close of the last day of every week or month of the shared calendar (`weekly` or `monthly`; the last week
+or month of the data may go on, so it never rebalances):
 
 - the ranking rule ranks every ticker that still trades, by its last bar on a day without one of its own.
   The rankings are the priority rules that read bars only: `momentum` (default; 12-1 month momentum) and
@@ -473,8 +474,14 @@ split, the out-of-sample run every bar, rebalancing from the split on with fresh
 are already warm. The rotation also reports the average holdings, the shares of equity invested, in the
 safe asset and in cash, the yearly turnover (half the value traded, in % of the average equity), the
 commissions, and what a rebalance at the last close would pick. Cash earns nothing. A ticker whose bars
-end early keeps what it holds, marked to its last close, and the rebalances share out the rest. Only the
-pandas engine runs rotations: 20 ETFs over 10 years take about a second once the data is cached.
+end early keeps what it holds, marked to its last close, and the rebalances share out the rest.
+
+Cerebro runs every ticker, and the safe asset, as a data feed of one strategy that picks and sizes with the
+same code and places market orders for the share differences. Its broker never refuses a fill for lack of
+cash and tries an order only on a bar of its ticker after the one it was placed on, as in the portfolio
+backtest; an order still waiting at the next rebalance is cancelled. It is the reference and is slow: about
+a minute per 20 tickers of 10-year history. The pandas engine runs 20 ETFs over 10 years in about a second
+once the data is cached.
 
 ## Configuration
 
@@ -505,7 +512,8 @@ signals and rules; a single run can override any of them without touching the fi
   `"settings": {"scoring": {...}, "trend": {...}, "scan": {"fresh_bars": 5}}` and the other signals'
   parameters as `"score_signal_params": {"donchian_breakout": {"period": 55}}`); a rotation
   (`/api/rotation-backtest`) takes the universe, `"ranking"` and `"weighting"` rules with their
-  `"params"`, `"rebalance": "weekly"`, `"safe_asset": "TLT"` and `"settings": {"rotation": {"holdings": 3}}`;
+  `"params"`, `"rebalance": "weekly"`, `"safe_asset": "TLT"`, `"settings": {"rotation": {"holdings": 3}}` and
+  `"engines"`;
   `/api/config` lists the settings, the rules and the sweep limits, `/api/signals` the signals, each
   parameter with its range;
 - on the CLI, through the existing flags (`--atr-mult`, `--fresh`, `--equity`, `--target-r`, `--max-units`, `--oos`, ...).

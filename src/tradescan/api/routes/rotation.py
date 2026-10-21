@@ -1,4 +1,4 @@
-"""A momentum rotation over a watchlist with one shared equity."""
+"""A momentum rotation over a watchlist with one shared equity, on one or both engines."""
 
 from __future__ import annotations
 
@@ -25,6 +25,7 @@ def build_router(context: ApiContext) -> APIRouter:
             settings=body.settings,
             benchmark=body.benchmark,
             period=body.period,
+            engines=tuple(body.engines),
         )
         return rotation_out(context.use_cases.rotation.run(request))
 
