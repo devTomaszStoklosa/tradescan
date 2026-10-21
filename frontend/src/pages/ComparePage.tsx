@@ -8,12 +8,13 @@ import { MonteCarloTable } from "../components/MonteCarlo";
 import { OutOfSampleTable } from "../components/OutOfSample";
 import { ParameterDiffTable } from "../components/ParameterDiffTable";
 import { PortfolioStatsTable } from "../components/PortfolioStats";
+import { RotationStatsTable } from "../components/RotationStats";
 import { RunCard, RunLabel } from "../components/RunCard";
 import { Button, EmptyState, ErrorBox, Loading, PageHeader, Panel, Segmented } from "../components/ui";
 import { parameterRows, returnCurve } from "../lib/compare";
 import { downloadFile } from "../lib/csv";
 import { methodsOf, PREFERRED_METHOD } from "../lib/monteCarlo";
-import { asPortfolio, MAX_RUNS, runColorVar, type MergeResult, type PinnedRun } from "../lib/runs";
+import { asPortfolio, asRotation, asSetup, MAX_RUNS, runColorVar, type MergeResult, type PinnedRun } from "../lib/runs";
 import { usePinnedRuns } from "../state/pinnedRuns";
 
 type Period = "full" | "in_sample" | "out_of_sample";
@@ -26,6 +27,9 @@ const PERIODS: { value: Period; label: string }[] = [
 
 const periodMetrics = (run: PinnedRun, period: Period) =>
   period === "full" ? run.metrics : (run.split?.[period] ?? null);
+
+const periodLabel = (period: Period) =>
+  period === "full" ? "" : `, ${period === "in_sample" ? "in-sample" : "out-of-sample"}`;
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
@@ -63,7 +67,15 @@ export function ComparePage() {
       }),
     [visible, period],
   );
-  const methods = useMemo(() => methodsOf(visible.map((run) => run.monteCarlo)), [visible]);
+  const rotationColumns = useMemo(
+    () =>
+      visible.flatMap((item) => {
+        const run = asRotation(item);
+        return run ? [{ key: run.id, header: <RunLabel run={run} />, stats: run.stats[period] }] : [];
+      }),
+    [visible, period],
+  );
+  const methods = useMemo(() => methodsOf(visible.map((run) => asSetup(run)?.monteCarlo ?? null)), [visible]);
   const method = methods.some((item) => item.name === chosenMethod) ? chosenMethod : (methods[0]?.name ?? chosenMethod);
   const series = useMemo<EquitySeries[]>(
     () =>
@@ -98,7 +110,7 @@ export function ComparePage() {
     <>
       <PageHeader
         title="Compare"
-        subtitle={`Pinned backtest and portfolio runs side by side, up to ${MAX_RUNS}. They are kept on the tradescan server: export them as a backup.`}
+        subtitle={`Pinned backtest, portfolio and rotation runs side by side, up to ${MAX_RUNS}. They are kept on the tradescan server: export them as a backup.`}
         actions={
           <>
             <input
@@ -137,10 +149,14 @@ export function ComparePage() {
           Run a{" "}
           <Link to="/backtest" className="text-accent hover:underline">
             backtest
-          </Link>{" "}
-          or a{" "}
+          </Link>
+          , a{" "}
           <Link to="/portfolio" className="text-accent hover:underline">
             portfolio
+          </Link>{" "}
+          or a{" "}
+          <Link to="/rotation" className="text-accent hover:underline">
+            rotation
           </Link>{" "}
           and press <strong>Pin run</strong> to keep it here, then change a parameter and pin again.
         </EmptyState>
@@ -204,9 +220,19 @@ export function ComparePage() {
                   <h2 className="text-sm font-semibold">Portfolio stats</h2>
                   <PortfolioStatsTable
                     columns={statColumns}
-                    caption={`Portfolio stats of the pinned portfolio runs${period === "full" ? "" : `, ${period === "in_sample" ? "in-sample" : "out-of-sample"}`}`}
+                    caption={`Portfolio stats of the pinned portfolio runs${periodLabel(period)}`}
                   />
                   <p className="text-xs text-muted">Portfolio runs only, for the period chosen under Metrics.</p>
+                </section>
+              )}
+              {rotationColumns.length > 0 && (
+                <section className="space-y-2">
+                  <h2 className="text-sm font-semibold">Rotation stats</h2>
+                  <RotationStatsTable
+                    columns={rotationColumns}
+                    caption={`Rotation stats of the pinned rotation runs${periodLabel(period)}`}
+                  />
+                  <p className="text-xs text-muted">Rotation runs only, for the period chosen under Metrics.</p>
                 </section>
               )}
               <Panel>

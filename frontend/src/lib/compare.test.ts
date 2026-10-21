@@ -9,11 +9,13 @@ import {
   makeMetrics,
   makeMonteCarlo,
   makePortfolioPin,
+  makeRotationPin,
   makeRun,
   makeScanInputs,
   makeScorePin,
   priorityRules,
   signals,
+  weightRules,
 } from "../test/fixtures";
 import { bestIndexes, metricValue, parameterRows, returnCurve } from "./compare";
 import { decodeRuns, encodeRuns } from "./runsFile";
@@ -304,6 +306,84 @@ describe("parameterRows", () => {
         (key) =>
           ["kind", "universe", "tickers", "priority"].includes(key) ||
           /^(portfolio|priority|scan|score_params)\./.test(key),
+      ),
+    ).toEqual([]);
+  });
+
+  it("shows what a rotation tested, held and ranked by next to a backtest", () => {
+    const rows = parameterRows([makeRun(1), makeRotationPin(2)], config.sections, signals, config);
+    const byKey = (key: string) => rows.find((row) => row.key === key);
+
+    expect(rows.slice(0, 5).map((row) => row.key)).toEqual(["kind", "universe", "tickers", "ticker", "signal"]);
+    expect(byKey("kind")).toMatchObject({ values: ["Backtest", "Rotation"], differs: true });
+    expect(byKey("universe")).toMatchObject({ values: ["–", "etf"] });
+    expect(byKey("tickers")).toMatchObject({ values: ["–", "2"] });
+    expect(byKey("signal")).toMatchObject({ values: ["connors_rsi2_long", "–"] });
+    expect(byKey("rotation.holdings")).toMatchObject({ label: "Rotation · Holdings", unit: "", values: ["–", "3"] });
+    expect(byKey("rotation.absolute_lookback")).toMatchObject({
+      label: "Rotation · Absolute momentum",
+      unit: "bars",
+      values: ["–", "252"],
+    });
+    expect(byKey("rotation.rebalance")).toMatchObject({ label: "Rebalance", values: ["–", "monthly"] });
+    expect(byKey("rotation.safe_asset")).toMatchObject({ label: "Safe asset", values: ["–", "TLT"] });
+    expect(byKey("ranking")).toMatchObject({ label: "Ranking", values: ["–", "Momentum"] });
+    expect(byKey("ranking.momentum.skip")).toMatchObject({
+      label: "Momentum · Skip",
+      unit: "bars",
+      values: ["–", "21"],
+    });
+    expect(byKey("weighting")).toMatchObject({ label: "Weights", values: ["–", "Inverse volatility"] });
+    expect(byKey("weighting.inverse_volatility.lookback")).toMatchObject({
+      label: "Inverse volatility · Volatility lookback",
+      unit: "bars",
+      values: ["–", "63"],
+    });
+    expect(byKey("buy_hold_benchmark")).toMatchObject({ label: "Buy & hold benchmark", values: ["–", "SPY"] });
+    expect(byKey("entry")).toMatchObject({ values: ["Next open", "–"] });
+    expect(byKey("exits")?.values[1]).toBe("–");
+    expect(byKey("filters")?.values[1]).toBe("–");
+    expect(byKey("monte_carlo.simulations")?.values[1]).toBe("–");
+  });
+
+  it("tells rotation runs apart by their settings and rules, with cash for no safe asset", () => {
+    const base = makeRotationPin(1);
+    const changed = makeRotationPin(2, {
+      rotation: { ...base.rotation, holdings: 5, rebalance: "weekly", safe_asset: null },
+      weighting: appliedRule(weightRules[0]!),
+    });
+    const rows = parameterRows([base, changed], config.sections, signals, config);
+    expect(differing(rows).map((row) => [row.key, row.values])).toEqual([
+      ["rotation.holdings", ["3", "5"]],
+      ["rotation.rebalance", ["monthly", "weekly"]],
+      ["rotation.safe_asset", ["TLT", "cash"]],
+      ["weighting", ["Inverse volatility", "Equal"]],
+      ["weighting.inverse_volatility.lookback", ["63", "–"]],
+    ]);
+  });
+
+  it("adds no rows of a signal's setup when only rotation runs are compared", () => {
+    const keys = parameterRows([makeRotationPin(1), makeRotationPin(2)], config.sections, signals, config).map(
+      (row) => row.key,
+    );
+    expect(keys.slice(0, 5)).toEqual(["kind", "universe", "tickers", "engine", "data"]);
+    expect(
+      keys.filter(
+        (key) =>
+          ["ticker", "signal", "filters", "benchmark", "entry", "exits", "priority"].includes(key) ||
+          /^(monte_carlo|filter|entry|exit|params|portfolio|priority|scan|score_params)\./.test(key),
+      ),
+    ).toEqual([]);
+  });
+
+  it("adds no rotation rows when no rotation run is compared", () => {
+    const keys = parameterRows([makeRun(1), makePortfolioPin(2)], config.sections, signals, config).map(
+      (row) => row.key,
+    );
+    expect(
+      keys.filter(
+        (key) =>
+          ["ranking", "weighting", "buy_hold_benchmark"].includes(key) || /^(rotation|ranking|weighting)\./.test(key),
       ),
     ).toEqual([]);
   });

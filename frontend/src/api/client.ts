@@ -50,6 +50,7 @@ export type PortfolioTradeOut = Schemas["PortfolioTradeOut"];
 export type PriorityRuleOut = Schemas["PriorityRuleOut"];
 export type Rebalance = Schemas["Rebalance"];
 export type RegimeOut = Schemas["RegimeOut"];
+export type RotationConfigOut = Schemas["RotationConfigOut"];
 export type RotationIn = Schemas["RotationIn"];
 export type RotationOut = Schemas["RotationOut"];
 export type RotationPeriodOut = Schemas["RotationPeriodOut"];

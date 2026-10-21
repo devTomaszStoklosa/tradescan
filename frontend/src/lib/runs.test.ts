@@ -10,19 +10,26 @@ import {
   makeMonteCarlo,
   makePortfolioPin,
   makePortfolioRun,
+  makeRotationPin,
   makeRun,
   makeScanInputs,
   makeScorePin,
   portfolioForm,
   portfolioResult,
   priorityRules,
+  rotationForm,
+  rotationResult,
+  rotationRun,
+  weightRules,
 } from "../test/fixtures";
 import {
+  asBacktest,
   freeSlot,
   MAX_RUNS,
   mergeRuns,
   runKey,
   snapshotPortfolioRun,
+  snapshotRotationRun,
   snapshotRun,
   toPinnedRun,
   type PinnedRun,
@@ -36,7 +43,12 @@ import {
   runRecord,
   RUNS_FILE_VERSION,
   suggestingRun,
+  type RunsFile,
 } from "./runsFile";
+
+/** A backtest run as the runs file keeps it. */
+const storedBacktest = () =>
+  encodeRuns([makeRun(1)]).runs[0] as Extract<RunsFile["runs"][number], { kind: "backtest" }>;
 
 describe("snapshotRun", () => {
   it("keeps one engine's result and reopens with only that engine", () => {
@@ -216,6 +228,93 @@ describe("runKey of portfolio runs", () => {
   });
 });
 
+describe("snapshotRotationRun", () => {
+  it("keeps one engine's rotation result and reopens with only that engine", () => {
+    const result = { ...rotationResult, runs: [rotationRun, { ...rotationRun, engine: "cerebro" }] };
+    const snapshot = snapshotRotationRun(result, "cerebro", { ...rotationForm, engines: ["vectorized", "cerebro"] });
+    expect(snapshot).toMatchObject({
+      kind: "rotation",
+      universe: "etf",
+      tickers: ["GLD", "TLT"],
+      missing: ["VNQ"],
+      engine: "cerebro",
+      start: "2017-10-31",
+      end: "2026-10-16",
+      rotation: { holdings: 3, absolute_lookback: 252, rebalance: "monthly", safe_asset: "TLT" },
+      ranking: { name: "momentum", params: { lookback: 252, skip: 21 } },
+      weighting: { name: "inverse_volatility", params: { lookback: 63 } },
+      buyHoldBenchmark: "SPY",
+      metrics: { trades: 94 },
+    });
+    expect(snapshot?.form).toMatchObject({ engines: ["cerebro"], weighting: "inverse_volatility", safeAsset: "TLT" });
+    for (const field of ["trades", "holdings", "targets", "buy_hold", "signal", "entry", "monteCarlo"])
+      expect(snapshot).not.toHaveProperty(field);
+  });
+
+  it("keeps the stats and metrics of both periods with the split's dates", () => {
+    const snapshot = snapshotRotationRun(rotationResult, "vectorized", rotationForm);
+    expect(snapshot?.stats).toMatchObject({
+      full: { rebalances: 108 },
+      in_sample: { rebalances: 76 },
+      out_of_sample: { rebalances: 32 },
+    });
+    expect(snapshot?.split).toMatchObject({
+      out_of_sample_start: "2024-02-07",
+      in_sample: { sharpe: 0.43 },
+      out_of_sample: { sharpe: 1.09 },
+    });
+
+    const short = {
+      ...rotationResult,
+      split: null,
+      runs: [{ ...rotationRun, in_sample: null, out_of_sample: null }],
+    };
+    expect(snapshotRotationRun(short, "vectorized", rotationForm)).toMatchObject({
+      split: null,
+      stats: { in_sample: null, out_of_sample: null },
+    });
+  });
+
+  it("returns null for an engine that did not run", () => {
+    expect(snapshotRotationRun(rotationResult, "cerebro", rotationForm)).toBeNull();
+  });
+
+  it("names a pinned rotation after its universe and ranking", () => {
+    expect(makeRotationPin(1).name).toBe("etf momentum rotation");
+  });
+});
+
+describe("runKey of rotation runs", () => {
+  it("tells rotation runs apart by their settings, rules, benchmark and members", () => {
+    const run = makeRotationPin(1);
+    expect(runKey(makeRotationPin(2, {}, { name: "other" }))).toBe(runKey(run));
+    for (const rotation of [
+      { holdings: 5 },
+      { absolute_lookback: 0 },
+      { rebalance: "weekly" as const },
+      { safe_asset: null },
+    ])
+      expect(runKey(makeRotationPin(1, { rotation: { ...run.rotation, ...rotation } }))).not.toBe(runKey(run));
+    expect(runKey(makeRotationPin(1, { ranking: appliedRule(priorityRules[1]!, { skip: 0 }) }))).not.toBe(runKey(run));
+    expect(runKey(makeRotationPin(1, { ranking: appliedRule(priorityRules[0]!) }))).not.toBe(runKey(run));
+    expect(runKey(makeRotationPin(1, { weighting: appliedRule(weightRules[1]!, { lookback: 20 }) }))).not.toBe(
+      runKey(run),
+    );
+    expect(runKey(makeRotationPin(1, { weighting: appliedRule(weightRules[0]!) }))).not.toBe(runKey(run));
+    expect(runKey(makeRotationPin(1, { buyHoldBenchmark: "QQQ" }))).not.toBe(runKey(run));
+    expect(runKey(makeRotationPin(1, { config: { ...run.config, commission_pct: 0.2 } }))).not.toBe(runKey(run));
+    expect(runKey(makeRotationPin(1, { tickers: ["GLD", "TLT", "XLE"] }))).not.toBe(runKey(run));
+    expect(runKey(makeRotationPin(1, { tickers: ["TLT", "GLD"] }))).toBe(runKey(run));
+    expect(runKey(makeRotationPin(1, { ranking: { ...run.ranking, description: "other words" } }))).toBe(runKey(run));
+  });
+
+  it("never equals the key of a portfolio run", () => {
+    const rotation = makeRotationPin(1);
+    const portfolio = makePortfolioPin(1, { universe: rotation.universe, tickers: rotation.tickers });
+    expect(runKey(rotation)).not.toBe(runKey(portfolio));
+  });
+});
+
 describe("mergeRuns", () => {
   it("pins backtest and portfolio runs next to each other", () => {
     const result = mergeRuns([makeRun(1)], [makePortfolioPin(1), makePortfolioPin(4)]);
@@ -269,7 +368,7 @@ describe("runs file", () => {
   });
 
   it("upgrades version 1 runs, whose target and time exit were settings", () => {
-    const { entry: _entry, exits: _exits, ...current } = encodeRuns([makeRun(1)]).runs[0]!;
+    const { entry: _entry, exits: _exits, ...current } = storedBacktest();
     const { entry: _a, entryParams: _b, exits: _c, exitParams: _d, ...oldForm } = current.form;
     const v1 = {
       ...current,
@@ -280,8 +379,8 @@ describe("runs file", () => {
 
     expect(run!.config).not.toHaveProperty("target_r");
     expect(run!.config).not.toHaveProperty("max_hold_bars");
-    expect(run!.entry).toEqual(appliedRule(entryRules[0]!));
-    expect(run!.exits).toEqual([appliedRule(exitRules[0]!, { target_r: 3 }), appliedRule(exitRules[1]!)]);
+    expect(asBacktest(run!)?.entry).toEqual(appliedRule(entryRules[0]!));
+    expect(asBacktest(run!)?.exits).toEqual([appliedRule(exitRules[0]!, { target_r: 3 }), appliedRule(exitRules[1]!)]);
     expect(run!.form).toMatchObject({
       settings: {},
       entry: "next_open",
@@ -309,7 +408,7 @@ describe("runs file", () => {
   });
 
   it("upgrades version 3 runs, which had no entry filters", () => {
-    const { filters: _filters, benchmark: _benchmark, ...current } = encodeRuns([makeRun(1)]).runs[0]!;
+    const { filters: _filters, benchmark: _benchmark, ...current } = storedBacktest();
     const { filters: _a, filterParams: _b, benchmark: _c, ...form } = current.form;
     const [run] = decodeRuns({ version: 3, runs: [{ ...current, form }] });
     expect(run).toMatchObject({ filters: [], benchmark: null, form: { filters: [], filterParams: {}, benchmark: "" } });
@@ -317,9 +416,9 @@ describe("runs file", () => {
   });
 
   it("upgrades version 4 runs, which have no Monte Carlo", () => {
-    const { monteCarlo: _monteCarlo, ...current } = encodeRuns([makeRun(1)]).runs[0]!;
+    const { monteCarlo: _monteCarlo, ...current } = storedBacktest();
     const [run] = decodeRuns({ version: 4, runs: [current] });
-    expect(run!.monteCarlo).toBeNull();
+    expect(asBacktest(run!)?.monteCarlo).toBeNull();
     expect(runKey(run!)).toBe(runKey(makeRun(1, { monteCarlo: null })));
   });
 
@@ -373,6 +472,23 @@ describe("runs file", () => {
 
   it("round-trips portfolio runs next to backtest runs", () => {
     const runs = [makeRun(1), makePortfolioPin(2, {}, { name: "top 5 by momentum" }), makeScorePin(3)];
+    const decoded = parseRunsFile(JSON.stringify(encodeRuns(runs)));
+    expect(decoded).toEqual(
+      runs.map((run) => ({
+        ...run,
+        equity: run.equity.map((point) => ({ ...point, value: Math.round(point.value * 100) / 100 })),
+      })),
+    );
+    expect(decoded.map(runKey)).toEqual(runs.map(runKey));
+  });
+
+  it("round-trips rotation runs next to backtest and portfolio runs", () => {
+    const runs = [
+      makeRun(1),
+      makePortfolioPin(2),
+      makeRotationPin(3, {}, { name: "top 3 monthly" }),
+      makeRotationPin(4, { rotation: { ...rotationResult.rotation, safe_asset: null } }),
+    ];
     const decoded = parseRunsFile(JSON.stringify(encodeRuns(runs)));
     expect(decoded).toEqual(
       runs.map((run) => ({
@@ -450,7 +566,7 @@ describe("runs file", () => {
     ],
     [
       "an unknown kind",
-      JSON.stringify({ version: RUNS_FILE_VERSION, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], kind: "rotation" }] }),
+      JSON.stringify({ version: RUNS_FILE_VERSION, runs: [{ ...encodeRuns([makeRun(1)]).runs[0], kind: "sweep" }] }),
       'Run 1 has an invalid "kind"',
     ],
     [
@@ -523,6 +639,48 @@ describe("runs file", () => {
         runs: [
           { ...encodeRuns([makeRun(1)]).runs[0], form: { ...backtestForm, settings: { risk: { atr_mult: "3" } } } },
         ],
+      }),
+      'Run 1 has an invalid "form"',
+    ],
+    [
+      "a rotation run with an unknown rebalance",
+      JSON.stringify({
+        version: RUNS_FILE_VERSION,
+        runs: [
+          {
+            ...encodeRuns([makeRotationPin(1)]).runs[0],
+            rotation: { ...rotationResult.rotation, rebalance: "daily" },
+          },
+        ],
+      }),
+      'Run 1 has an invalid "rotation"',
+    ],
+    [
+      "a rotation run with bad stats",
+      JSON.stringify({
+        version: RUNS_FILE_VERSION,
+        runs: [
+          {
+            ...encodeRuns([makeRotationPin(1)]).runs[0],
+            stats: { ...makeRotationPin(1).stats, out_of_sample: { rebalances: 32 } },
+          },
+        ],
+      }),
+      'Run 1 has an invalid "stats"',
+    ],
+    [
+      "a rotation run without its weighting rule",
+      JSON.stringify({
+        version: RUNS_FILE_VERSION,
+        runs: [{ ...encodeRuns([makeRotationPin(1)]).runs[0], weighting: undefined }],
+      }),
+      'Run 1 has an invalid "weighting"',
+    ],
+    [
+      "a rotation run with a portfolio form",
+      JSON.stringify({
+        version: RUNS_FILE_VERSION,
+        runs: [{ ...encodeRuns([makeRotationPin(1)]).runs[0], form: portfolioForm }],
       }),
       'Run 1 has an invalid "form"',
     ],

@@ -14,6 +14,7 @@ import {
   makeMetrics,
   makeMonteCarlo,
   makePortfolioPin,
+  makeRotationPin,
   makeRun,
   makePortfolioRun,
   signals,
@@ -287,6 +288,55 @@ describe("ComparePage", () => {
     expect(
       within(table("Monte Carlo of the pinned runs' trades")).getByRole("row", { name: /top 5/ }),
     ).toHaveTextContent("No Monte Carlo: the portfolio backtest does not simulate its trades.");
+  });
+
+  it("compares a rotation run with a backtest run, with its stats in the chosen period", async () => {
+    pin([base, makeRotationPin(4, {}, { name: "top 3 etf" })]);
+    renderPage();
+
+    const card = await screen.findByRole("article", { name: "Run 4" });
+    expect(card).toHaveTextContent("etfmomentum rotation");
+    expect(card).toHaveTextContent("Ranking: Return from 252 bars ago to 21 bars ago · weights: Picks weighted by 1 /");
+    expect(card).toHaveTextContent("rotation of 2 tickers, top 3 monthly · vectorized · 2017-10-31 → 2026-10-16");
+    expect(within(card).getByRole("link", { name: "Open in Rotation" })).toHaveAttribute(
+      "href",
+      "/rotation?w=etf&rank=momentum&wt=inverse_volatility&safe=TLT&set.rotation.holdings=3",
+    );
+
+    const parameters = table("Parameters of the pinned runs");
+    expect(await within(parameters).findByText("Rotation · Holdings")).toBeInTheDocument();
+    expect(
+      within(within(parameters).getByRole("row", { name: /^Run/ }))
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual(["Backtest", "Rotation"]);
+    expect(within(parameters).getByRole("row", { name: /^Weights/ })).toHaveTextContent("Inverse volatility");
+    expect(within(parameters).getByRole("row", { name: /^Safe asset/ })).toHaveTextContent("TLT");
+
+    const rebalances = () =>
+      within(screen.getByRole("table", { name: /^Rotation stats of the pinned rotation runs/ })).getByRole("row", {
+        name: /^Rebalances/,
+      });
+    const stats = screen.getByRole("table", { name: "Rotation stats of the pinned rotation runs" });
+    expect(
+      within(stats)
+        .getAllByRole("columnheader")
+        .map((cell) => cell.textContent),
+    ).toEqual(["Rotation", "#4top 3 etf"]);
+    expect(rebalances()).toHaveTextContent("Rebalances108");
+    await userEvent.click(screen.getByRole("radio", { name: "Out-of-sample" }));
+    expect(
+      screen.getByRole("table", { name: "Rotation stats of the pinned rotation runs, out-of-sample" }),
+    ).toBeInTheDocument();
+    expect(rebalances()).toHaveTextContent("Rebalances32");
+    expect(screen.queryByRole("heading", { name: "Portfolio stats" })).not.toBeInTheDocument();
+
+    expect(
+      within(table("Out-of-sample check of the pinned runs")).getByRole("row", { name: /top 3 etf/ }),
+    ).toHaveTextContent("2024-02-07 (30%)");
+    expect(
+      within(table("Monte Carlo of the pinned runs' trades")).getByRole("row", { name: /top 3 etf/ }),
+    ).toHaveTextContent("No Monte Carlo: the rotation does not simulate its holdings.");
   });
 
   it("shows no portfolio stats without a shown portfolio run", async () => {

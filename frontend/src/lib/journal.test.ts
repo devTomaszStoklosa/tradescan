@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { JournalTradeOut } from "../api/client";
-import { makePortfolioPin, makeRun } from "../test/fixtures";
+import { makePortfolioPin, makeRotationPin, makeRun } from "../test/fixtures";
 import { newTradeForm, suggestedBy, today, tradeBody, tradeFormOf } from "./journal";
 import { RUNS_FILE_VERSION, suggestingRun } from "./runsFile";
 
@@ -26,6 +26,14 @@ describe("journal form", () => {
     expect(form.run).toEqual(suggestingRun(run));
     // A portfolio tested a universe, so the ticker is left to fill in.
     expect(newTradeForm(makePortfolioPin(2), NOW).ticker).toBe("");
+  });
+
+  it("starts a long trade from a pinned rotation run, which only buys, with a copy of the run", () => {
+    const run = makeRotationPin(3);
+    const form = newTradeForm(run, NOW);
+    expect(form).toMatchObject({ ticker: "", direction: "long" });
+    expect(form.run).toEqual(suggestingRun(run));
+    expect(suggestedBy(form.run!)).toEqual({ run });
   });
 
   it("waits for the ticker, the entry and the quantity before it makes a request", () => {
