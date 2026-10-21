@@ -591,28 +591,47 @@ def test_rotation_backtest(client):
     response = client.post("/api/rotation-backtest", json=body)
     assert response.status_code == 200, response.text
     data = response.json()
-    assert (data["universe"], data["engine"]) == ("demo", "vectorized")
+    assert data["universe"] == "demo"
+    assert [run["engine"] for run in data["runs"]] == ["vectorized"]
     assert data["rotation"] == {"holdings": 2, "absolute_lookback": 63, "rebalance": "weekly", "safe_asset": "SPY"}
     assert data["ranking"]["params"] == {"lookback": 126, "skip": 0}
     assert data["weighting"]["name"] == "inverse_volatility"
     assert data["config"]["commission_pct"] == 0.05
     assert data["buy_hold_benchmark"] == "SPY"
     assert data["buy_hold"][0]["value"] == pytest.approx(100_000)
-    assert data["start"] == data["equity"][0]["time"] == data["buy_hold"][0]["time"]
+    (run,) = data["runs"]
+    assert data["start"] == run["equity"][0]["time"] == data["buy_hold"][0]["time"]
     assert data["split"]
-    assert data["in_sample"]
-    assert data["out_of_sample"]
-    full = data["full"]
+    assert run["in_sample"]
+    assert run["out_of_sample"]
+    full = run["full"]
     assert full["metrics"]["expectancy_r"] is None
     assert full["stats"]["rebalances"] > 50
     assert full["stats"]["max_holdings"] <= 3
-    assert [row["ticker"] for row in data["tickers"]] == ["AAA", "BBB", "CCC", "SPY"]
-    assert data["trades"]
-    assert all(trade["r_multiple"] is None for trade in data["trades"])
+    assert [row["ticker"] for row in run["tickers"]] == ["AAA", "BBB", "CCC", "SPY"]
+    assert run["trades"]
+    assert all(trade["r_multiple"] is None for trade in run["trades"])
     targets = data["targets"]
     assert targets["date"] == data["end"]
     assert len(targets["picks"]) == 2
     assert sum(pick["weight_pct"] for pick in targets["picks"]) == pytest.approx(100.0)
+
+
+def test_rotation_backtest_on_both_engines(client):
+    pytest.importorskip("backtrader")
+    body = {"watchlist": "demo", "rebalance": "weekly", "settings": {"rotation": {"holdings": 2}}}
+    response = client.post("/api/rotation-backtest", json={**body, "engines": ["vectorized", "cerebro"]})
+    assert response.status_code == 200, response.text
+    fast, slow = response.json()["runs"]
+    assert (fast["engine"], slow["engine"]) == ("vectorized", "cerebro")
+    assert [point["time"] for point in fast["equity"]] == [point["time"] for point in slow["equity"]]
+    assert [point["value"] for point in fast["equity"]] == pytest.approx(
+        [point["value"] for point in slow["equity"]], rel=1e-9
+    )
+    assert [(trade["ticker"], trade["entry_date"], trade["size"]) for trade in fast["trades"]] == [
+        (trade["ticker"], trade["entry_date"], trade["size"]) for trade in slow["trades"]
+    ]
+    assert fast["full"]["stats"]["orders"] == slow["full"]["stats"]["orders"]
 
 
 def test_rotation_backtest_rejects_what_it_cannot_run(client):
@@ -620,6 +639,8 @@ def test_rotation_backtest_rejects_what_it_cannot_run(client):
         return client.post("/api/rotation-backtest", json={"watchlist": "demo", **extra}).status_code
 
     assert status() == 200
+    assert status(engines=["nope"]) == 400
+    assert status(engines=[]) == 422
     assert status(ranking={"name": "score"}) == 400
     assert status(weighting={"name": "nope"}) == 400
     assert status(weighting={"name": "inverse_volatility", "params": {"lookback": 1}}) == 400

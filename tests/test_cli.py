@@ -244,7 +244,7 @@ def test_rotation_backtest_holds_the_strongest_tickers_and_exports_the_trades(pr
     assert "buy & hold is SPY's" in output
     assert "would pick" in output
     assert "% in SPY, " in output
-    assert "2 of 4 tickers by P&L" in output
+    assert "2 of 4 tickers by P&L (vectorized)" in output
     assert provider.calls[-1][0] == ("AAA", "BBB", "CCC", "ZZZ", "SPY")
     trades = pd.read_csv(target)
     assert set(trades["engine"]) == {"vectorized"}
@@ -252,6 +252,22 @@ def test_rotation_backtest_holds_the_strongest_tickers_and_exports_the_trades(pr
     assert set(trades["exit_reason"]) <= {"rebalance", "open"}
     with pytest.raises(SystemExit):
         cli.main(["rotation-backtest", "-t", "AAA", "--rank", "score"])
+
+
+def test_rotation_backtest_on_both_engines_exports_every_engines_trades(provider, tmp_path):
+    pytest.importorskip("backtrader")
+    target = tmp_path / "trades.csv"
+    code = cli.main([
+        "rotation-backtest", "-t", "AAA,BBB,CCC", "--holdings", "2", "--engine", "both", "--export", str(target)
+    ])  # fmt: skip
+    assert code == 0
+    trades = pd.read_csv(target)
+    assert set(trades["engine"]) == {"vectorized", "cerebro"}
+    vectorized, cerebro = (
+        trades[trades["engine"] == engine].drop(columns="engine") for engine in ("vectorized", "cerebro")
+    )
+    assert len(vectorized) > 0
+    pd.testing.assert_frame_equal(vectorized.reset_index(drop=True), cerebro.reset_index(drop=True), rtol=1e-6)
 
 
 def test_backtest_and_sweep_still_take_a_ticker(provider):

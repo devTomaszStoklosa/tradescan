@@ -88,5 +88,5 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # The Cerebro engines subclass backtrader's untyped classes.
-module = ["tradescan.backtest.cerebro", "tradescan.backtest.cerebro_portfolio"]
+module = ["tradescan.backtest.cerebro", "tradescan.backtest.cerebro_portfolio", "tradescan.backtest.cerebro_rotation"]
 disallow_subclassing_any = false

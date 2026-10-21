@@ -18,12 +18,15 @@ keeps what it holds, marked to its last close, until the end, and the rebalances
 A trade is a holding: from the buy that opens a position to the sale that empties it, with every add, trim and
 commission in its P&L. Without a stop it has no R multiple. A run starts at the close of the first rebalance at
 which a ticker can be picked, so the warm-up of the lookbacks is not counted as time in cash.
+
+Both rotation engines prepare the assets with `prepare`, pick with `targets` and size the orders with
+`rebalance_orders`; only the order execution differs between them, as for the portfolio engines.
 """
 
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Protocol
@@ -39,7 +42,7 @@ from tradescan.backtest.vectorized import FillModel
 from tradescan.backtest.weighting import WeightRule, book_weights
 from tradescan.signals.base import Direction
 
-_EPSILON = 1e-9
+EPSILON = 1e-9  # share counts closer to 0 or to a whole lot than this count as there
 
 
 class Rebalance(StrEnum):
@@ -75,10 +78,12 @@ def ranking_rules(priorities: RuleRegistry[PriorityRule]) -> list[type[PriorityR
 DEFAULT_RANKING = MomentumPriority.name
 
 
-def rebalance_days(calendar: pd.DatetimeIndex, rebalance: Rebalance) -> np.ndarray:
-    """The position of the last day of every week or month of the calendar but the last one, which may go on."""
+def rebalance_days(calendar: pd.DatetimeIndex, rebalance: Rebalance, start: pd.Timestamp | None = None) -> np.ndarray:
+    """The position of the last day of every week or month of the calendar but the last one, which may go on; with
+    `start`, only those from that date on."""
     periods = calendar.to_period(rebalance.period)
-    return np.flatnonzero(np.asarray(periods[1:] != periods[:-1]))
+    days = np.flatnonzero(np.asarray(periods[1:] != periods[:-1]))
+    return days if start is None else days[calendar[days] >= start]
 
 
 @dataclass(frozen=True)
@@ -165,6 +170,11 @@ class RotationSetup:
     @property
     def names(self) -> tuple[str, ...]:
         return tuple(asset.ticker for asset in self.assets)
+
+    def ordered(self, trades: Iterable[PortfolioTrade]) -> tuple[PortfolioTrade, ...]:
+        """Holdings by entry date, then asset order."""
+        order = {name: position for position, name in enumerate(self.names)}
+        return tuple(sorted(trades, key=lambda item: (item.trade.entry_date, order[item.ticker])))
 
 
 def prepare(
@@ -271,11 +281,37 @@ def targets(setup: RotationSetup, rotation: RotationConfig, day: int) -> Targets
 
 
 def _lots(shares: float, lot_size: float) -> float:
-    return round(math.floor(shares / lot_size + _EPSILON) * lot_size, 10)
+    return round(math.floor(shares / lot_size + EPSILON) * lot_size, 10)
+
+
+def rebalance_orders(
+    setup: RotationSetup, chosen: Targets, day: int, held: np.ndarray, equity: float, lot_size: float
+) -> dict[int, float]:
+    """The shares each asset buys (positive) or sells (negative) at a rebalance at the close of calendar day `day`, by
+    asset position, from the shares `held` and the equity marked to market at that close.
+
+    What a ticker whose bars have ended holds cannot be sold, so the rest of the equity is shared out, and an asset
+    without a bar after `day` gets no order."""
+    assets = setup.assets
+    owned = np.flatnonzero(np.abs(held) > EPSILON).tolist()
+    ended = [position for position in owned if assets[position].last_bar(day) + 1 >= len(assets[position].bars)]
+    investable = equity - sum(held[position] * setup.closes[day, position] for position in ended)
+    orders: dict[int, float] = {}
+    for position in sorted(set(owned) | set(chosen.weights)):
+        asset, close = assets[position], setup.closes[day, position]
+        weight = chosen.weights.get(position, 0.0)
+        target = _lots(weight * investable / close, lot_size) if weight > 0 and close > 0 else 0.0
+        delta = round(target - held[position], 10)
+        if abs(delta) < EPSILON or asset.last_bar(day) + 1 >= len(asset.bars):
+            continue
+        orders[position] = delta
+    return orders
 
 
 @dataclass
-class _Holding:
+class Holding:
+    """One asset's shares from the buy that opens a position to the sale that empties it, with every fill's costs."""
+
     signal_date: pd.Timestamp  # the rebalance that opened it
     entry_date: pd.Timestamp
     shares: float = 0.0
@@ -285,6 +321,10 @@ class _Holding:
     sold: float = 0.0
     proceeds: float = 0.0
     fees: float = 0.0
+
+    @property
+    def empty(self) -> bool:
+        return abs(self.shares) < EPSILON
 
     def fill(self, shares: float, price: float, fee: float) -> None:
         if shares > 0:
@@ -316,6 +356,22 @@ class _Holding:
         )
 
 
+def start_day(calendar: pd.DatetimeIndex, first: int | None, start: pd.Timestamp | None) -> int:
+    """Where a run's series start: at its first rebalance with a pick. Without one, the run is flat from `start` on,
+    or over the whole calendar."""
+    if first is not None:
+        return first
+    if start is None:
+        return 0
+    return min(int(calendar.searchsorted(start)), len(calendar) - 1)
+
+
+def percent_of_equity(values: np.ndarray, equity: np.ndarray) -> np.ndarray:
+    """`values` in % of the equity at each close; NaN where the equity is not positive."""
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.where(equity > 0, values / equity * 100.0, np.nan)
+
+
 class VectorizedRotationEngine:
     name = "vectorized"
 
@@ -338,12 +394,10 @@ class VectorizedRotationEngine:
         cash_flows = np.zeros(days)
         shares = np.zeros(len(assets))
         cash = config.initial_equity
-        open_holdings: dict[int, _Holding] = {}
+        open_holdings: dict[int, Holding] = {}
         trades: list[PortfolioTrade] = []
 
-        schedule = rebalance_days(calendar, rotation.rebalance)
-        if start is not None:
-            schedule = schedule[calendar[schedule] >= start]
+        schedule = rebalance_days(calendar, rotation.rebalance, start)
         first: int | None = None
         rebalances = orders = unfilled = 0
         traded_value = commissions = 0.0
@@ -354,22 +408,11 @@ class VectorizedRotationEngine:
             first = day if first is None else first
             rebalances += 1
             deadline = schedule[number + 1] if number + 1 < len(schedule) else days - 1
-            owned = np.flatnonzero(shares).tolist()
-            ended = [position for position in owned if assets[position].last_bar(day) + 1 >= len(assets[position].bars)]
-            # What a ticker whose bars have ended holds cannot be sold, so the rest of the equity is shared out.
-            investable = cash + sum(
-                shares[position] * setup.closes[day, position] for position in owned if position not in ended
-            )
-            for position in sorted(set(owned) | set(chosen.weights)):
-                asset, close = assets[position], setup.closes[day, position]
-                weight = chosen.weights.get(position, 0.0)
-                target = _lots(weight * investable / close, config.lot_size) if weight > 0 and close > 0 else 0.0
-                delta = round(target - shares[position], 10)
-                if abs(delta) < _EPSILON:
-                    continue
+            owned = np.flatnonzero(shares)
+            equity = cash + float(np.dot(shares[owned], setup.closes[day, owned]))
+            for position, delta in rebalance_orders(setup, chosen, day, shares, equity, config.lot_size).items():
+                asset = assets[position]
                 bar = asset.last_bar(day) + 1
-                if bar >= len(asset.bars):
-                    continue
                 if asset.days[bar] > deadline:
                     unfilled += 1
                     continue
@@ -388,9 +431,9 @@ class VectorizedRotationEngine:
 
                 holding = open_holdings.get(position)
                 if holding is None:
-                    holding = open_holdings[position] = _Holding(calendar[day], bars.dates[bar])
+                    holding = open_holdings[position] = Holding(calendar[day], bars.dates[bar])
                 holding.fill(delta, price, fee)
-                if abs(holding.shares) < _EPSILON:
+                if holding.empty:
                     trades.append(PortfolioTrade(asset.ticker, holding.trade(bars.dates[bar])))
                     del open_holdings[position]
 
@@ -406,21 +449,19 @@ class VectorizedRotationEngine:
         held = np.cumsum(share_changes, axis=0)
         values = held * np.nan_to_num(setup.closes)
         equity_values = config.initial_equity + np.cumsum(cash_flows) + values.sum(axis=1)
-        begin = first if first is not None else _first_day(calendar, start)
+        begin = start_day(calendar, first, start)
         index = calendar[begin:]
         safe_values = values[:, setup.safe] if setup.safe is not None else np.zeros(days)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            exposure = np.where(equity_values > 0, np.abs(values).sum(axis=1) / equity_values * 100.0, np.nan)
-            safe_pct = np.where(equity_values > 0, safe_values / equity_values * 100.0, np.nan)
-        order = {name: position for position, name in enumerate(setup.names)}
+        exposure = percent_of_equity(np.abs(values).sum(axis=1), equity_values)
+        safe_pct = percent_of_equity(safe_values, equity_values)
         return RotationResult(
             engine=self.name,
             tickers=setup.names,
             equity=pd.Series(equity_values[begin:], index=index, name="equity"),
-            holdings=pd.Series((np.abs(held) > _EPSILON).sum(axis=1)[begin:], index=index, name="holdings"),
+            holdings=pd.Series((np.abs(held) > EPSILON).sum(axis=1)[begin:], index=index, name="holdings"),
             exposure_pct=pd.Series(exposure[begin:], index=index, name="exposure_pct"),
             safe_pct=pd.Series(safe_pct[begin:], index=index, name="safe_pct"),
-            trades=tuple(sorted(trades, key=lambda item: (item.trade.entry_date, order[item.ticker]))),
+            trades=setup.ordered(trades),
             rebalances=rebalances,
             orders=orders,
             unfilled=unfilled,
@@ -428,13 +469,6 @@ class VectorizedRotationEngine:
             commissions=commissions,
             targets=targets(setup, rotation, last),
         )
-
-
-def _first_day(calendar: pd.DatetimeIndex, start: pd.Timestamp | None) -> int:
-    """Without a rebalance with a pick, the run is flat from `start` on, or over the whole calendar."""
-    if start is None:
-        return 0
-    return min(int(calendar.searchsorted(start)), len(calendar) - 1)
 
 
 @dataclass(frozen=True)

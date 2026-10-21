@@ -26,19 +26,12 @@ except ImportError as error:  # pragma: no cover - depends on the optional extra
 
 from tradescan.backtest.allocation import Candidate, PortfolioConfig, allocate
 from tradescan.backtest.base import BacktestConfig
-from tradescan.backtest.cerebro import LEVERAGE, TickerOrders
+from tradescan.backtest.cerebro import LEVERAGE, MultiFeedBroker, TickerOrders
 from tradescan.backtest.portfolio import PortfolioResult, PortfolioSetup, PortfolioTrade, prepare
 from tradescan.backtest.priority import PriorityRule
 from tradescan.backtest.trade_rules import TradeRules
 from tradescan.data.schema import OHLCV_COLUMNS
 from tradescan.signals.base import Signal
-
-
-class _Broker(bt.brokers.BackBroker):
-    def _try_exec(self, order: bt.Order) -> None:
-        if order.data.datetime[0] <= order.created.dt:
-            return  # the order's ticker has no bar after the one the order was placed on yet
-        super()._try_exec(order)
 
 
 class _PortfolioStrategy(bt.Strategy):
@@ -127,7 +120,7 @@ class CerebroPortfolioEngine:
     ) -> PortfolioResult:
         setup = prepare(frames, signal, config, rules, priority)
         cerebro = bt.Cerebro(stdstats=False)
-        cerebro.setbroker(_Broker())
+        cerebro.setbroker(MultiFeedBroker())
         for ticker, df in frames.items():
             cerebro.adddata(
                 bt.feeds.PandasData(dataname=df.loc[:, list(OHLCV_COLUMNS)], openinterest=None), name=ticker

@@ -14,12 +14,13 @@ from tradescan.api.schemas.rotation import (
     RotationConfigOut,
     RotationOut,
     RotationPeriodOut,
+    RotationRunOut,
     RotationStatsOut,
     TargetsOut,
 )
 from tradescan.backtest.rotation import Targets
 from tradescan.backtest.rotation_metrics import RotationMetrics
-from tradescan.services.rotation import RotationReport
+from tradescan.services.rotation import RotationReport, RotationRun
 
 
 def rotation_period_out(period: RotationMetrics) -> RotationPeriodOut:
@@ -59,15 +60,28 @@ def targets_out(targets: Targets) -> TargetsOut:
     )
 
 
+def rotation_run_out(run: RotationRun) -> RotationRunOut:
+    result = run.result
+    return RotationRunOut(
+        engine=result.engine,
+        full=rotation_period_out(run.full),
+        in_sample=rotation_period_out(run.in_sample) if run.in_sample else None,
+        out_of_sample=rotation_period_out(run.out_of_sample) if run.out_of_sample else None,
+        equity=points(result.equity),
+        holdings=points(result.holdings.astype(float)),
+        trades=[PortfolioTradeOut(ticker=item.ticker, **trade_out(item.trade).model_dump()) for item in result.trades],
+        tickers=[contribution_out(row) for row in run.contributions],
+    )
+
+
 def rotation_out(report: RotationReport) -> RotationOut:
-    result, config, rotation = report.result, report.config, report.rotation
+    config, rotation = report.config, report.rotation
     close = report.benchmark_close.dropna()
     buy_hold = close / close.iloc[0] * config.initial_equity if len(close) else close
     return RotationOut(
         universe=report.universe.name,
-        engine=result.engine,
-        start=day(result.equity.index[0]),
-        end=day(result.equity.index[-1]),
+        start=day(report.dates[0]),
+        end=day(report.dates[-1]),
         config=BacktestConfigOut(**{item.name: getattr(config, item.name) for item in fields(config)}),
         rotation=RotationConfigOut(
             holdings=rotation.holdings,
@@ -80,13 +94,7 @@ def rotation_out(report: RotationReport) -> RotationOut:
         buy_hold_benchmark=report.benchmark,
         buy_hold=points(buy_hold),
         split=split_out(report.split) if report.split else None,
-        full=rotation_period_out(report.full),
-        in_sample=rotation_period_out(report.in_sample) if report.in_sample else None,
-        out_of_sample=rotation_period_out(report.out_of_sample) if report.out_of_sample else None,
-        equity=points(result.equity),
-        holdings=points(result.holdings.astype(float)),
-        targets=targets_out(result.targets),
-        trades=[PortfolioTradeOut(ticker=item.ticker, **trade_out(item.trade).model_dump()) for item in result.trades],
-        tickers=[contribution_out(row) for row in report.contributions],
+        targets=targets_out(report.targets),
+        runs=[rotation_run_out(run) for run in report.runs],
         missing=report.missing,
     )

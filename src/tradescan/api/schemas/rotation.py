@@ -13,6 +13,7 @@ from tradescan.backtest.rotation import Rebalance
 class RotationIn(UniverseIn):
     """`settings.rotation` sets the holdings and the absolute momentum lookback."""
 
+    engines: list[str] = Field(default_factory=lambda: ["vectorized"], min_length=1)
     ranking: RuleIn | None = Field(None, description="How the tickers are ranked; omit for the default ranking")
     weighting: RuleIn | None = Field(None, description="How the picks share the equity; omit for the default weighting")
     rebalance: Rebalance = Field(Rebalance.MONTHLY, description="Rebalance at the last close of every week or month")
@@ -75,18 +76,8 @@ class TargetsOut(BaseModel):
     cash_pct: float
 
 
-class RotationOut(BaseModel):
-    universe: str
+class RotationRunOut(BaseModel):
     engine: str
-    start: str = Field(description="The first rebalance with a pick: the lookbacks' warm-up is left out")
-    end: str
-    config: BacktestConfigOut
-    rotation: RotationConfigOut
-    ranking: AppliedRuleOut
-    weighting: AppliedRuleOut
-    buy_hold_benchmark: str = Field(description="The benchmark buy & hold compares")
-    buy_hold: list[Point] = Field(description="The benchmark scaled to the initial equity, on the run's dates")
-    split: SplitOut | None = Field(description="The split of the run's dates; null when it is too short")
     full: RotationPeriodOut
     in_sample: RotationPeriodOut | None = Field(
         description="The run on the bars before the split; null without a split"
@@ -96,11 +87,25 @@ class RotationOut(BaseModel):
     )
     equity: list[Point]
     holdings: list[Point] = Field(description="Tickers held at each close, the safe asset included")
-    targets: TargetsOut = Field(description="What a rebalance at the last close would hold")
     trades: list[PortfolioTradeOut] = Field(
         description="Holdings: from the buy that opens a position to the sale that empties it, by entry date"
     )
     tickers: list[TickerContributionOut] = Field(
         description="Every ticker with data in watchlist order, the safe asset last"
     )
+
+
+class RotationOut(BaseModel):
+    universe: str
+    start: str = Field(description="The first rebalance with a pick: the lookbacks' warm-up is left out")
+    end: str
+    config: BacktestConfigOut
+    rotation: RotationConfigOut
+    ranking: AppliedRuleOut
+    weighting: AppliedRuleOut
+    buy_hold_benchmark: str = Field(description="The benchmark buy & hold compares")
+    buy_hold: list[Point] = Field(description="The benchmark scaled to the initial equity, on the run's dates")
+    split: SplitOut | None = Field(description="The split of the run's dates; null when it is too short")
+    targets: TargetsOut = Field(description="What a rebalance at the last close would hold, the same on every engine")
+    runs: list[RotationRunOut] = Field(description="One per engine, in the request's order")
     missing: list[str] = Field(description="Tickers without data")

@@ -11,13 +11,14 @@ import {
 } from "./rotation";
 
 const URL =
-  "w=etf&p=5y&rank=relative_strength&wt=inverse_volatility&reb=weekly&safe=TLT&b=QQQ&set.rotation.holdings=3&set.backtest.commission_pct=0.05&wp.inverse_volatility.lookback=20";
+  "w=etf&eng=vectorized%2Ccerebro&p=5y&rank=relative_strength&wt=inverse_volatility&reb=weekly&safe=TLT&b=QQQ&set.rotation.holdings=3&set.backtest.commission_pct=0.05&wp.inverse_volatility.lookback=20";
 
 describe("rotation form", () => {
-  it("round-trips the universe, the rules, the rebalance, the safe asset and the settings through the URL", () => {
+  it("round-trips the universe, the engines, the rules, the rebalance, the safe asset and the settings through the URL", () => {
     const form = readRotationForm(new URLSearchParams(URL), config);
     expect(form).toEqual({
       universe: { watchlist: "etf", tickers: "" },
+      engines: ["vectorized", "cerebro"],
       period: "5y",
       ranking: "relative_strength",
       rankingParams: {},
@@ -37,6 +38,7 @@ describe("rotation form", () => {
       config,
     );
     expect(form).toMatchObject({
+      engines: ["vectorized"],
       ranking: "momentum",
       rankingParams: { skip: 0 },
       weighting: "equal",
@@ -47,10 +49,11 @@ describe("rotation form", () => {
     expect(writeRotationForm(form, config).toString()).toBe("t=XLE%2CXLK&rk.momentum.skip=0");
   });
 
-  it("builds the request with both rules, the rebalance and the safe asset", () => {
+  it("builds the request with the engines, both rules, the rebalance and the safe asset", () => {
     const form = readRotationForm(new URLSearchParams(URL), config);
     expect(rotationBody(form)).toEqual({
       watchlist: "etf",
+      engines: ["vectorized", "cerebro"],
       period: "5y",
       ranking: { name: "relative_strength", params: {} },
       weighting: { name: "inverse_volatility", params: { lookback: 20 } },
@@ -64,12 +67,14 @@ describe("rotation form", () => {
       benchmark: null,
     });
     expect(rotationBody({ ...form, universe: { watchlist: "", tickers: " " } })).toBeNull();
+    expect(rotationBody({ ...form, engines: [] })).toBeNull();
   });
 
-  it("counts, checks and resets everything but the universe", () => {
+  it("counts, checks and resets everything but the universe and the engines", () => {
     const form = readRotationForm(new URLSearchParams(URL), config);
     expect(rotationChanges(form, config)).toBe(9); // the history, both rules, a weighting parameter, the rebalance, safe asset, benchmark and 2 settings
     expect(hasRotationProblems(form, config)).toBe(false);
+    expect(hasRotationProblems({ ...form, engines: [] }, config)).toBe(true);
     expect(hasRotationProblems({ ...form, ranking: "score" }, config)).toBe(true); // reads the scanner, so no ranking
     expect(hasRotationProblems({ ...form, weightingParams: { lookback: 1 } }, config)).toBe(true);
     expect(hasRotationProblems({ ...form, settings: { rotation: { holdings: 0 } } }, config)).toBe(true);
@@ -77,6 +82,7 @@ describe("rotation form", () => {
     expect(hasRotationProblems({ ...form, safeAsset: "TLT IEF" }, config)).toBe(true);
     const reset = resetRotation(form, config);
     expect(reset.universe).toEqual(form.universe);
+    expect(reset.engines).toEqual(["vectorized", "cerebro"]);
     expect(rotationChanges(reset, config)).toBe(0);
   });
 });

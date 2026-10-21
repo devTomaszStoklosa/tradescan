@@ -8,7 +8,7 @@ from pathlib import Path
 
 from tradescan.backtest.base import BacktestEngine
 from tradescan.backtest.portfolio import PortfolioEngine, VectorizedPortfolioEngine
-from tradescan.backtest.rotation import RotationEngine
+from tradescan.backtest.rotation import RotationEngine, VectorizedRotationEngine
 from tradescan.backtest.trade_rules import RuleCatalog, default_catalog
 from tradescan.backtest.vectorized import VectorizedEngine
 from tradescan.config import Settings
@@ -22,7 +22,7 @@ from tradescan.services.edge import EdgeUseCase
 from tradescan.services.market import MarketUseCase
 from tradescan.services.market_data import MarketData
 from tradescan.services.portfolio import PortfolioEngineFactory, PortfolioUseCase
-from tradescan.services.rotation import RotationUseCase
+from tradescan.services.rotation import RotationEngineFactory, RotationUseCase
 from tradescan.services.scan import ScanUseCase
 from tradescan.services.sweep import SweepGridBuilder, SweepUseCase
 from tradescan.services.walk_forward import WalkForwardUseCase
@@ -48,6 +48,16 @@ def _load_cerebro_portfolio_engine() -> PortfolioEngine:
 
 def default_portfolio_engines() -> dict[str, PortfolioEngineFactory]:
     return {"vectorized": VectorizedPortfolioEngine, "cerebro": _load_cerebro_portfolio_engine}
+
+
+def _load_cerebro_rotation_engine() -> RotationEngine:
+    from tradescan.backtest.cerebro_rotation import CerebroRotationEngine
+
+    return CerebroRotationEngine()
+
+
+def default_rotation_engines() -> dict[str, RotationEngineFactory]:
+    return {"vectorized": VectorizedRotationEngine, "cerebro": _load_cerebro_rotation_engine}
 
 
 def default_provider(settings: Settings, use_cache: bool = True) -> DataProvider:
@@ -79,7 +89,7 @@ def build_use_cases(
     runner: TaskRunner | None = None,
     rules: RuleCatalog = default_catalog,
     portfolio_engines: Mapping[str, PortfolioEngineFactory] | None = None,
-    rotation_engine: RotationEngine | None = None,
+    rotation_engines: Mapping[str, RotationEngineFactory] | None = None,
 ) -> UseCases:
     """`runner` runs per-ticker work and sweeps; pass a `ProcessRunner` to use every core."""
     market_data = MarketData(provider, settings)
@@ -96,6 +106,6 @@ def build_use_cases(
         portfolio=PortfolioUseCase(
             market_data, settings, registry, portfolio_engines or default_portfolio_engines(), rules
         ),
-        rotation=RotationUseCase(market_data, settings, rotation_engine),
+        rotation=RotationUseCase(market_data, settings, rotation_engines or default_rotation_engines()),
         chart=ChartUseCase(market_data, registry),
     )

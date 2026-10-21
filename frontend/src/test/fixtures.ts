@@ -13,6 +13,7 @@ import type {
   PortfolioStatsOut,
   PriorityRuleOut,
   RotationOut,
+  RotationRunOut,
   RotationStatsOut,
   RuleOut,
   ScanInputsOut,
@@ -1008,28 +1009,8 @@ const rotationStats = (overrides: Partial<RotationStatsOut> = {}): RotationStats
   ...overrides,
 });
 
-/** The top 3 ETFs by 12-1 momentum, monthly, inverse-volatility weights, TLT for falling picks; VNQ had no data. */
-export const rotationResult: RotationOut = {
-  universe: "etf",
+export const rotationRun: RotationRunOut = {
   engine: "vectorized",
-  start: "2017-10-31",
-  end: "2026-10-16",
-  config: backtestResult.config,
-  rotation: { holdings: 3, absolute_lookback: 252, rebalance: "monthly", safe_asset: "TLT" },
-  ranking: appliedRule(priorityRules[1]!),
-  weighting: appliedRule(weightRules[1]!),
-  buy_hold_benchmark: "SPY",
-  buy_hold: [
-    { time: "2017-10-31", value: 100000 },
-    { time: "2026-10-16", value: 340000 },
-  ],
-  split: {
-    oos_pct: 30,
-    in_sample_start: "2017-10-31",
-    in_sample_end: "2024-02-06",
-    out_of_sample_start: "2024-02-07",
-    out_of_sample_end: "2026-10-16",
-  },
   full: {
     metrics: makeMetrics({ total_return_pct: 163.6, trades: 94, expectancy_r: null, sqn: null, buy_hold_pct: 240.7 }),
     stats: rotationStats(),
@@ -1050,15 +1031,6 @@ export const rotationResult: RotationOut = {
     { time: "2017-10-31", value: 0 },
     { time: "2026-10-16", value: 3 },
   ],
-  targets: {
-    date: "2026-10-16",
-    picks: [
-      { ticker: "XLE", score: 0.53, momentum_pct: 62.6, weight_pct: 35.9, held: true },
-      { ticker: "EEM", score: 0.27, momentum_pct: -4.2, weight_pct: 34.2, held: false },
-    ],
-    safe_pct: 34.2,
-    cash_pct: 29.9,
-  },
   trades: [
     {
       ticker: "GLD",
@@ -1093,5 +1065,38 @@ export const rotationResult: RotationOut = {
     { ticker: "GLD", trades: 5, pnl: 56052, contribution_pct: 56.05, win_rate_pct: 80, expectancy_r: null },
     { ticker: "TLT", trades: 6, pnl: 3722, contribution_pct: 3.72, win_rate_pct: 66.7, expectancy_r: null },
   ],
+};
+
+/** The top 3 ETFs by 12-1 momentum, monthly, inverse-volatility weights, TLT for falling picks; VNQ had no data. */
+export const rotationResult: RotationOut = {
+  universe: "etf",
+  start: "2017-10-31",
+  end: "2026-10-16",
+  config: backtestResult.config,
+  rotation: { holdings: 3, absolute_lookback: 252, rebalance: "monthly", safe_asset: "TLT" },
+  ranking: appliedRule(priorityRules[1]!),
+  weighting: appliedRule(weightRules[1]!),
+  buy_hold_benchmark: "SPY",
+  buy_hold: [
+    { time: "2017-10-31", value: 100000 },
+    { time: "2026-10-16", value: 340000 },
+  ],
+  split: {
+    oos_pct: 30,
+    in_sample_start: "2017-10-31",
+    in_sample_end: "2024-02-06",
+    out_of_sample_start: "2024-02-07",
+    out_of_sample_end: "2026-10-16",
+  },
+  targets: {
+    date: "2026-10-16",
+    picks: [
+      { ticker: "XLE", score: 0.53, momentum_pct: 62.6, weight_pct: 35.9, held: true },
+      { ticker: "EEM", score: 0.27, momentum_pct: -4.2, weight_pct: 34.2, held: false },
+    ],
+    safe_pct: 34.2,
+    cash_pct: 29.9,
+  },
+  runs: [rotationRun],
   missing: ["VNQ"],
 };

@@ -362,18 +362,15 @@ def portfolio_metrics_frame(report: PortfolioReport) -> pd.DataFrame:
 
 
 def rotation_metrics_frame(report: RotationReport) -> pd.DataFrame:
-    """The metrics and rotation stats of the full run and of each period, one column each."""
+    """Every engine's metrics and rotation stats of the full run and of each period, one column each."""
     columns = {}
-    for label, period in (
-        ("full", report.full),
-        ("in-sample", report.in_sample),
-        ("out-of-sample", report.out_of_sample),
-    ):
-        if period is None:
-            continue
-        values = {item.name: getattr(period.metrics, item.name) for item in fields(period.metrics)}
-        values.update({item.name: getattr(period.stats, item.name) for item in fields(period.stats)})
-        columns[label] = values
+    for run in report.runs:
+        for label, period in (("full", run.full), ("in-sample", run.in_sample), ("out-of-sample", run.out_of_sample)):
+            if period is None:
+                continue
+            values = {item.name: getattr(period.metrics, item.name) for item in fields(period.metrics)}
+            values.update({item.name: getattr(period.stats, item.name) for item in fields(period.stats)})
+            columns[f"{run.result.engine} {label}"] = values
     return pd.DataFrame(columns)
 
 

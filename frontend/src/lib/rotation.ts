@@ -2,7 +2,8 @@
  * Momentum rotation: hold the strongest tickers of a watchlist, rebalanced weekly or monthly. The form, its URL and
  * the request.
  *
- * The URL holds the universe (`w=<watchlist>` or `t=<tickers>`), the history (`p=`), the ranking rule (`rank=<rule>`,
+ * The URL holds the universe (`w=<watchlist>` or `t=<tickers>`), the engines (`eng=<engine>,<engine>`, left out for
+ * the vectorized engine alone), the history (`p=`), the ranking rule (`rank=<rule>`,
  * left out for the default) with its parameters (`rk.<rule>.<name>`), the weighting rule (`wt=<rule>`, left out for
  * the default) with its parameters (`wp.<rule>.<name>`), the rebalance (`reb=weekly`, left out for monthly), the safe
  * asset (`safe=<ticker>`, left out for cash), the buy & hold benchmark (`b=<ticker>`) and the settings of the
@@ -29,6 +30,8 @@ export const RANKING_PREFIX = "rk";
 export const WEIGHTING_PREFIX = "wp";
 /** The server's rebalance when a request names none. */
 export const DEFAULT_REBALANCE: Rebalance = "monthly";
+/** The server's engines when a request names none. */
+export const DEFAULT_ENGINES = ["vectorized"];
 
 export type RotationDefaults = Pick<
   ConfigOut,
@@ -37,6 +40,8 @@ export type RotationDefaults = Pick<
 
 export interface RotationForm {
   universe: Universe;
+  /** Engines that run the rotation; Cerebro checks the vectorized engine. */
+  engines: string[];
   /** History to load; empty for the server's default. */
   period: string;
   ranking: string;
@@ -57,12 +62,20 @@ const ticker = (value: string | null): string => (value ?? "").trim().toUpperCas
 
 const rebalanceOf = (value: string | null): Rebalance => (value === "weekly" ? "weekly" : DEFAULT_REBALANCE);
 
+const engineList = (value: string | null): string[] =>
+  (value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
 /** Rules the URL leaves out are the server's defaults; settings of other sections are left out. */
 export function readRotationForm(params: URLSearchParams, defaults: RotationDefaults): RotationForm {
   const ranking = params.get("rank") || defaults.default_ranking;
   const weighting = params.get("wt") || defaults.default_weighting;
+  const engines = engineList(params.get("eng"));
   return {
     universe: readUniverse(params),
+    engines: engines.length ? engines : [...DEFAULT_ENGINES],
     period: params.get("p") ?? "",
     ranking,
     rankingParams: readOverrides(params, RANKING_PREFIX)[ranking] ?? {},
@@ -79,6 +92,7 @@ export function readRotationForm(params: URLSearchParams, defaults: RotationDefa
 export function writeRotationForm(form: RotationForm, defaults?: RotationDefaults): URLSearchParams {
   const params = new URLSearchParams();
   writeUniverse(params, form.universe);
+  if (form.engines.join(",") !== DEFAULT_ENGINES.join(",")) params.set("eng", form.engines.join(","));
   if (form.period) params.set("p", form.period);
   if (form.ranking !== defaults?.default_ranking) params.set("rank", form.ranking);
   if (form.weighting !== defaults?.default_weighting) params.set("wt", form.weighting);
@@ -91,12 +105,13 @@ export function writeRotationForm(form: RotationForm, defaults?: RotationDefault
   return params;
 }
 
-/** The request without the account, which the page adds from browser storage; null until a universe is chosen. */
+/** The request without the account, which the page adds from browser storage; null until a universe and an engine are chosen. */
 export function rotationBody(form: RotationForm): RotationIn | null {
   const universe = universeBody(form.universe);
-  if (!universe) return null;
+  if (!universe || !form.engines.length) return null;
   return {
     ...universe,
+    engines: form.engines,
     period: form.period || null,
     ranking: { name: form.ranking, params: form.rankingParams as RuleIn["params"] },
     weighting: { name: form.weighting, params: form.weightingParams as RuleIn["params"] },
@@ -107,7 +122,7 @@ export function rotationBody(form: RotationForm): RotationIn | null {
   };
 }
 
-/** How many choices, parameters and settings differ from the defaults; the universe does not count. */
+/** How many choices, parameters and settings differ from the defaults; the universe and the engines do not count. */
 export const rotationChanges = (form: RotationForm, defaults: RotationDefaults): number =>
   Number(form.period !== "") +
   Number(form.ranking !== defaults.default_ranking) +
@@ -119,7 +134,8 @@ export const rotationChanges = (form: RotationForm, defaults: RotationDefaults):
   Number(ticker(form.benchmark) !== "") +
   countChanges(form.settings);
 
-/** True while the universe is missing, a rule is unknown, a value is invalid or the history is not one the form offers. */
+/** True while the universe or an engine is missing, a rule is unknown, a value is invalid or the history is not one the
+ * form offers. */
 export function hasRotationProblems(form: RotationForm, config: ConfigOut): boolean {
   const ranking = findRule(config.ranking_rules, form.ranking);
   const weighting = findRule(config.weight_rules, form.weighting);
@@ -136,9 +152,10 @@ export function hasRotationProblems(form: RotationForm, config: ConfigOut): bool
   );
 }
 
-/** The form with everything but the universe back at its defaults. */
+/** The form with everything but the universe and the engines back at its defaults. */
 export const resetRotation = (form: RotationForm, defaults: RotationDefaults): RotationForm => ({
   universe: form.universe,
+  engines: form.engines,
   period: "",
   ranking: defaults.default_ranking,
   rankingParams: {},

@@ -53,6 +53,7 @@ export type RegimeOut = Schemas["RegimeOut"];
 export type RotationIn = Schemas["RotationIn"];
 export type RotationOut = Schemas["RotationOut"];
 export type RotationPeriodOut = Schemas["RotationPeriodOut"];
+export type RotationRunOut = Schemas["RotationRunOut"];
 export type RotationStatsOut = Schemas["RotationStatsOut"];
 export type RuleIn = Schemas["RuleIn"];
 export type RuleOut = Schemas["RuleOut"];

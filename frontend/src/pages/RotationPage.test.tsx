@@ -5,17 +5,17 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
 import { AccountProvider } from "../state/account";
-import { config, rotationResult, watchlists } from "../test/fixtures";
+import { config, rotationResult, rotationRun, watchlists } from "../test/fixtures";
 import { RotationPage } from "./RotationPage";
 import { requestBody, requestUrl } from "../test/fetch";
 
 vi.mock("../components/charts/EquityChart", () => ({ EquityChart: () => null }));
 
-function renderPage(path: string) {
+function renderPage(path: string, result: unknown = rotationResult) {
   const responses: Record<string, unknown> = {
     "/config": config,
     "/watchlists": watchlists,
-    "/rotation-backtest": rotationResult,
+    "/rotation-backtest": result,
   };
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = requestUrl(input);
@@ -72,6 +72,7 @@ describe("RotationPage", () => {
     await waitFor(() =>
       expect(bodies().at(-1)).toMatchObject({
         watchlist: "us_large",
+        engines: ["vectorized"],
         ranking: { name: "momentum", params: {} },
         weighting: { name: "inverse_volatility", params: { lookback: 20 } },
         rebalance: "weekly",
@@ -114,7 +115,41 @@ describe("RotationPage", () => {
 
     const tickers = within(screen.getByRole("table", { name: "Each ticker's contribution" })).getAllByRole("row");
     expect(tickers[1]).toHaveTextContent(/^GLD5\+56,052\+56\.05%80%$/);
-    expect(screen.getByText("2 holdings")).toBeInTheDocument();
+    expect(screen.getByText("2 holdings (vectorized)")).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "Trades" })).toHaveTextContent("rebalance");
+    expect(screen.queryByRole("radiogroup", { name: "Engine" })).toBeNull(); // one engine, nothing to switch
+  });
+
+  it("runs both engines and switches between their runs", async () => {
+    const cerebro = {
+      ...rotationRun,
+      engine: "cerebro",
+      tickers: [rotationRun.tickers[1]!],
+      trades: [rotationRun.trades[0]!],
+    };
+    const router = renderPage("/rotation?w=etf", { ...rotationResult, runs: [rotationRun, cerebro] });
+    await screen.findByRole("button", { name: "Run rotation" });
+    await userEvent.click(screen.getByRole("button", { name: "cerebro" }));
+    expect(screen.queryByText(/Cerebro checks the vectorized engine/)).toBeNull(); // a small universe
+    await userEvent.click(screen.getByRole("button", { name: "Run rotation" }));
+    await waitFor(() => expect(router.state.location.search).toBe("?w=etf&eng=vectorized%2Ccerebro"));
+    await waitFor(() => expect(bodies().at(-1)).toMatchObject({ engines: ["vectorized", "cerebro"] }));
+
+    expect(await screen.findByText("✓ Both engines produced identical results.")).toBeInTheDocument();
+    expect(screen.getByText("2 holdings (vectorized)")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: "cerebro" }));
+    expect(screen.getByText("1 holdings (cerebro)")).toBeInTheDocument();
+    const tickers = within(screen.getByRole("table", { name: "Each ticker's contribution" })).getAllByRole("row");
+    expect(tickers[1]).toHaveTextContent(/^TLT/);
+  });
+
+  it("warns that Cerebro is slow on a large universe and needs an engine", async () => {
+    const tickers = Array.from({ length: 21 }, (_, index) => `T${index}`).join(",");
+    renderPage(`/rotation?t=${tickers}&eng=cerebro`);
+    await screen.findByRole("button", { name: "Run rotation" });
+    expect(screen.getByText(/Cerebro checks the vectorized engine and is slow/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "cerebro" }));
+    expect(screen.queryByText(/Cerebro checks the vectorized engine and is slow/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Run rotation" })).toBeDisabled();
   });
 });
