@@ -14,6 +14,7 @@ import { enginesAgree, MetricsTable, TradesTable } from "../components/BacktestR
 import { EquityChart, type EquityEvent, type EquitySeries } from "../components/charts/EquityChart";
 import { DataTable, type Column } from "../components/DataTable";
 import { SectionFields } from "../components/ParamFields";
+import { PinRotationRunButton } from "../components/PinRunButton";
 import { RotationStatsTable } from "../components/RotationStats";
 import { GroupHeading, RuleChoiceFields } from "../components/TradeRuleFields";
 import { UniversePicker } from "../components/UniverseFilters";
@@ -369,7 +370,7 @@ function ContributionTable({ run }: { run: RotationRunOut }) {
   );
 }
 
-function RotationView({ result }: { result: RotationOut }) {
+function RotationView({ result, form }: { result: RotationOut; form: RotationForm }) {
   // A new result shows its first engine.
   const [engine, setEngine] = useResettableState(result.runs[0]?.engine ?? "", result);
   const run = result.runs.find((item) => item.engine === engine) ?? result.runs[0];
@@ -415,6 +416,9 @@ function RotationView({ result }: { result: RotationOut }) {
           <span className="font-medium">
             top {rotation.holdings}, rebalanced {rotation.rebalance}
           </span>
+          <div className="ml-auto">
+            <PinRotationRunButton result={result} engine={run.engine} form={form} />
+          </div>
         </div>
         <p className="text-muted">
           {result.start} → {result.end} (from the first rebalance with a pick) · {run.tickers.length} tickers, one
@@ -546,7 +550,7 @@ export function RotationPage() {
         />
       )}
       {run.isError && <ErrorBox error={run.error} onRetry={() => void run.refetch()} />}
-      {run.data && <RotationView result={run.data} />}
+      {run.data && <RotationView result={run.data} form={form} />}
     </>
   );
 }

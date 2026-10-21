@@ -3,7 +3,7 @@
  * than one field (the stop's side of the entry, an exit with both its date and its price) and says what is wrong.
  */
 import type { Direction, JournalTradeIn, JournalTradeOut, SuggestingRun } from "../api/client";
-import type { PinnedRun } from "./runs";
+import { asSetup, type PinnedRun } from "./runs";
 import { decodeSuggestingRun, suggestingRun } from "./runsFile";
 
 export interface TradeForm {
@@ -34,7 +34,8 @@ export const today = (now = new Date()): string =>
 export function newTradeForm(run?: PinnedRun, now = new Date()): TradeForm {
   return {
     ticker: run?.kind === "backtest" ? run.ticker : "",
-    direction: run?.direction ?? "long",
+    // A rotation only buys.
+    direction: (run && asSetup(run)?.direction) ?? "long",
     opened: today(now),
     entryPrice: null,
     quantity: null,

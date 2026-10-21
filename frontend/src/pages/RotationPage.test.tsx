@@ -5,13 +5,18 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
 import { AccountProvider } from "../state/account";
+import { PinnedRunsProvider } from "../state/pinnedRuns";
 import { config, rotationResult, rotationRun, watchlists } from "../test/fixtures";
+import { MemoryRunStore } from "../test/runStore";
 import { RotationPage } from "./RotationPage";
 import { requestBody, requestUrl } from "../test/fetch";
 
 vi.mock("../components/charts/EquityChart", () => ({ EquityChart: () => null }));
 
+let store = new MemoryRunStore();
+
 function renderPage(path: string, result: unknown = rotationResult) {
+  store = new MemoryRunStore();
   const responses: Record<string, unknown> = {
     "/config": config,
     "/watchlists": watchlists,
@@ -28,9 +33,11 @@ function renderPage(path: string, result: unknown = rotationResult) {
   const router = createMemoryRouter([{ path: "/rotation", element: <RotationPage /> }], { initialEntries: [path] });
   render(
     <AccountProvider>
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
+      <PinnedRunsProvider store={store}>
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </PinnedRunsProvider>
     </AccountProvider>,
   );
   return router;
@@ -151,5 +158,55 @@ describe("RotationPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "cerebro" }));
     expect(screen.queryByText(/Cerebro checks the vectorized engine and is slow/)).toBeNull();
     expect(screen.getByRole("button", { name: "Run rotation" })).toBeDisabled();
+  });
+});
+
+const storedRuns = () => store.runs();
+
+const RESULT_URL = "/rotation?w=etf&wt=inverse_volatility&safe=TLT&set.rotation.holdings=3";
+
+describe("RotationPage pinning", () => {
+  it("pins the shown run with its universe, rotation settings, rules and stats, and unpins it", async () => {
+    renderPage(RESULT_URL);
+    const pin = await screen.findByRole("button", { name: "Pin run" });
+    await waitFor(() => expect(pin).toBeEnabled());
+    await userEvent.click(pin);
+    await waitFor(() => expect(storedRuns()).toHaveLength(1));
+    expect(storedRuns()[0]).toMatchObject({
+      kind: "rotation",
+      name: "etf momentum rotation",
+      universe: "etf",
+      tickers: ["GLD", "TLT"],
+      missing: ["VNQ"],
+      engine: "vectorized",
+      rotation: { holdings: 3, absolute_lookback: 252, rebalance: "monthly", safe_asset: "TLT" },
+      ranking: { name: "momentum", params: { lookback: 252, skip: 21 } },
+      weighting: { name: "inverse_volatility", params: { lookback: 63 } },
+      buyHoldBenchmark: "SPY",
+      stats: { full: { rebalances: 108 }, in_sample: { rebalances: 76 }, out_of_sample: { rebalances: 32 } },
+      split: { out_of_sample_start: "2024-02-07", in_sample: { sharpe: 0.43 }, out_of_sample: { sharpe: 1.09 } },
+      form: {
+        universe: { watchlist: "etf", tickers: "" },
+        engines: ["vectorized"],
+        weighting: "inverse_volatility",
+        safeAsset: "TLT",
+        settings: { rotation: { holdings: 3 } },
+      },
+    });
+    for (const field of ["trades", "holdings", "targets", "signal", "monteCarlo"])
+      expect(store.records[0]?.snapshot).not.toHaveProperty(field);
+    expect(screen.getByRole("link", { name: "Compare 1 pinned →" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Unpin run" }));
+    await waitFor(() => expect(storedRuns()).toHaveLength(0));
+  });
+
+  it("pins the engine that is shown", async () => {
+    const cerebro = { ...rotationRun, engine: "cerebro" };
+    renderPage(`${RESULT_URL}&eng=vectorized,cerebro`, { ...rotationResult, runs: [rotationRun, cerebro] });
+    await userEvent.click(await screen.findByRole("radio", { name: "cerebro" }));
+    await userEvent.click(screen.getByRole("button", { name: "Pin cerebro run" }));
+    await waitFor(() => expect(storedRuns()).toHaveLength(1));
+    expect(storedRuns()[0]).toMatchObject({ engine: "cerebro", form: { engines: ["cerebro"] } });
   });
 });

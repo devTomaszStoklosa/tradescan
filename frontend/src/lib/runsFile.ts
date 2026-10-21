@@ -12,7 +12,14 @@
 import type { AppliedRuleOut, MetricsOut, PinnedRunIn, PinnedRunOut, SuggestingRun } from "../api/client";
 import { formatTemplate, type Overrides } from "./overrides";
 import { moveLegacyExitSettings } from "./rules";
-import { MAX_RUNS, type PinnedBacktestRun, type PinnedPortfolioRun, type PinnedRun, type RunKind } from "./runs";
+import {
+  MAX_RUNS,
+  type PinnedBacktestRun,
+  type PinnedPortfolioRun,
+  type PinnedRotationRun,
+  type PinnedRun,
+  type RunKind,
+} from "./runs";
 
 export const RUNS_FILE_VERSION = 9;
 
@@ -22,7 +29,8 @@ interface StoredEquity {
 }
 
 type Stored<R> = Omit<R, "equity"> & { equity: StoredEquity };
-type StoredRun = Stored<PinnedBacktestRun> | Stored<PinnedPortfolioRun>;
+type StoredSetupRun = Stored<PinnedBacktestRun> | Stored<PinnedPortfolioRun>;
+type StoredRun = StoredSetupRun | Stored<PinnedRotationRun>;
 
 export interface RunsFile {
   version: number;
@@ -167,10 +175,43 @@ const portfolioStats: Check = (value) =>
   ["average_positions", "average_exposure_pct", "max_exposure_pct"].every((key) => optionalNumber(value[key])) &&
   ["max_positions", "orders", "skipped_no_slot", "skipped_no_room"].every((key) => finite(value[key]));
 
-const optionalStats = oneOf((value) => value === null, portfolioStats);
+/** Stats of the full run and of both periods, which are null without a split. */
+const periodStats =
+  (stats: Check): Check =>
+  (value) => {
+    const optional = oneOf((item) => item === null, stats);
+    return isRecord(value) && stats(value.full) && optional(value.in_sample) && optional(value.out_of_sample);
+  };
 
-const periodStats: Check = (value) =>
-  isRecord(value) && portfolioStats(value.full) && optionalStats(value.in_sample) && optionalStats(value.out_of_sample);
+const rebalance: Check = (value) => value === "weekly" || value === "monthly";
+
+const rotationSettings: Check = (value) =>
+  isRecord(value) &&
+  finite(value.holdings) &&
+  finite(value.absolute_lookback) &&
+  rebalance(value.rebalance) &&
+  oneOf((item) => item === null, text)(value.safe_asset);
+
+const rotationStats: Check = (value) =>
+  isRecord(value) &&
+  ["average_holdings", "average_exposure_pct", "average_safe_pct", "average_cash_pct", "turnover_pct"].every((key) =>
+    optionalNumber(value[key]),
+  ) &&
+  ["rebalances", "orders", "unfilled_orders", "max_holdings", "commissions"].every((key) => finite(value[key]));
+
+const rotationForm: Check = (value) =>
+  isRecord(value) &&
+  universe(value.universe) &&
+  arrayOf(text)(value.engines) &&
+  text(value.period) &&
+  text(value.ranking) &&
+  recordOf(paramValue)(value.rankingParams) &&
+  text(value.weighting) &&
+  recordOf(paramValue)(value.weightingParams) &&
+  rebalance(value.rebalance) &&
+  text(value.safeAsset) &&
+  text(value.benchmark) &&
+  recordOf(recordOf(paramValue))(value.settings);
 
 const is =
   (expected: string): Check =>
@@ -186,28 +227,35 @@ const SHARED_FIELDS: Record<SharedField, Check> = {
   name: text,
   pinnedAt: text,
   hidden: flag,
-  signal: text,
-  direction: (value) => value === "long" || value === "short",
-  description: text,
   engine: text,
   start: text,
   end: text,
-  params: recordOf(oneOf(finite, arrayOf(finite))),
   config: recordOf(finite),
+  metrics,
+  split: oneOf((value) => value === null, split),
+  equity,
+};
+
+/** Fields of the signal's setup that backtest and portfolio runs share. */
+type SetupField = Exclude<keyof StoredSetupRun, SharedField | "kind" | "form">;
+
+const SETUP_FIELDS: Record<SetupField, Check> = {
+  signal: text,
+  direction: (value) => value === "long" || value === "short",
+  description: text,
+  params: recordOf(oneOf(finite, arrayOf(finite))),
   entry: appliedRule,
   exits: arrayOf(appliedRule),
   filters: arrayOf(appliedRule),
   benchmark: oneOf((value) => value === null, text),
-  metrics,
-  split: oneOf((value) => value === null, split),
   monteCarlo: oneOf((value) => value === null, monteCarlo),
-  equity,
 };
 
 /** Fields only one kind of run has; a new kind of run adds its entry here. */
 const KIND_FIELDS: { [K in RunKind]: Record<Exclude<keyof Extract<StoredRun, { kind: K }>, SharedField>, Check> } = {
-  backtest: { kind: is("backtest"), ticker: text, form: backtestForm },
+  backtest: { ...SETUP_FIELDS, kind: is("backtest"), ticker: text, form: backtestForm },
   portfolio: {
+    ...SETUP_FIELDS,
     kind: is("portfolio"),
     universe: text,
     tickers: arrayOf(text),
@@ -215,8 +263,20 @@ const KIND_FIELDS: { [K in RunKind]: Record<Exclude<keyof Extract<StoredRun, { k
     portfolio: portfolioSettings,
     priority: appliedRule,
     scan: oneOf((value) => value === null, scanInputs),
-    stats: periodStats,
+    stats: periodStats(portfolioStats),
     form: portfolioForm,
+  },
+  rotation: {
+    kind: is("rotation"),
+    universe: text,
+    tickers: arrayOf(text),
+    missing: arrayOf(text),
+    rotation: rotationSettings,
+    ranking: appliedRule,
+    weighting: appliedRule,
+    buyHoldBenchmark: text,
+    stats: periodStats(rotationStats),
+    form: rotationForm,
   },
 };
 

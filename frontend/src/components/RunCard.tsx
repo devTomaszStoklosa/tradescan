@@ -1,10 +1,12 @@
 import { Link } from "react-router";
 
+import type { Direction } from "../api/client";
 import { MIN_TRADES } from "../lib/compare";
 import { fmtPct } from "../lib/format";
 import { writeBacktestForm } from "../lib/params";
 import { writePortfolioForm } from "../lib/portfolio";
-import { runColorVar, runSubject, type PinnedRun, type RunKind } from "../lib/runs";
+import { writeRotationForm } from "../lib/rotation";
+import { runColorVar, runStrategy, runSubject, type PinnedRun, type RunKind } from "../lib/runs";
 import { useResettableState } from "../lib/useResettableState";
 import { Button, DirectionBadge, Input } from "./ui";
 
@@ -12,6 +14,10 @@ import { Button, DirectionBadge, Input } from "./ui";
 interface CardSpec<R extends PinnedRun> {
   /** What the run covered, shown before its engine; null when the subject says it all. */
   scope: (run: R) => string | null;
+  /** The side the run traded; null when it only buys. */
+  direction: (run: R) => Direction | null;
+  /** How the run picked its trades. */
+  description: (run: R) => string;
   /** The page that runs the same setup again. */
   open: (run: R) => { label: string; to: string };
 }
@@ -19,11 +25,21 @@ interface CardSpec<R extends PinnedRun> {
 const CARDS: { [K in RunKind]: CardSpec<Extract<PinnedRun, { kind: K }>> } = {
   backtest: {
     scope: () => null,
+    direction: (run) => run.direction,
+    description: (run) => run.description,
     open: (run) => ({ label: "Open in Backtest", to: `/backtest?${writeBacktestForm(run.form).toString()}` }),
   },
   portfolio: {
     scope: (run) => `portfolio of ${run.tickers.length} tickers`,
+    direction: (run) => run.direction,
+    description: (run) => run.description,
     open: (run) => ({ label: "Open in Portfolio", to: `/portfolio?${writePortfolioForm(run.form).toString()}` }),
+  },
+  rotation: {
+    scope: (run) => `rotation of ${run.tickers.length} tickers, top ${run.rotation.holdings} ${run.rotation.rebalance}`,
+    direction: () => null,
+    description: (run) => `Ranking: ${run.ranking.description} · weights: ${run.weighting.description}`,
+    open: (run) => ({ label: "Open in Rotation", to: `/rotation?${writeRotationForm(run.form).toString()}` }),
   },
 };
 
@@ -68,6 +84,7 @@ export function RunCard({
   const fewTrades = run.metrics.trades < MIN_TRADES;
   const card = cardOf(run);
   const scope = card.scope(run);
+  const direction = card.direction(run);
   const open = openRun(run);
 
   return (
@@ -92,10 +109,10 @@ export function RunCard({
       </div>
       <div className="flex flex-wrap items-center gap-1.5 text-sm">
         <span className="font-mono font-semibold">{runSubject(run)}</span>
-        <span className="break-all">{run.signal}</span>
-        <DirectionBadge direction={run.direction} />
+        <span className="break-all">{runStrategy(run)}</span>
+        {direction && <DirectionBadge direction={direction} />}
       </div>
-      <p className="text-xs text-muted">{run.description}</p>
+      <p className="text-xs text-muted">{card.description(run)}</p>
       <p className="num text-xs text-muted">
         {scope && `${scope} · `}
         {run.engine} · {run.start} → {run.end} · return {fmtPct(run.metrics.total_return_pct, 1, true)}

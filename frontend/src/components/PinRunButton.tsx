@@ -1,10 +1,18 @@
 import { useMemo } from "react";
 import { Link } from "react-router";
 
-import type { BacktestOut, PortfolioOut } from "../api/client";
+import type { BacktestOut, PortfolioOut, RotationOut } from "../api/client";
 import type { BacktestForm } from "../lib/params";
 import type { PortfolioForm } from "../lib/portfolio";
-import { MAX_RUNS, runKey, snapshotPortfolioRun, snapshotRun, type RunSnapshot } from "../lib/runs";
+import type { RotationForm } from "../lib/rotation";
+import {
+  MAX_RUNS,
+  runKey,
+  snapshotPortfolioRun,
+  snapshotRotationRun,
+  snapshotRun,
+  type RunSnapshot,
+} from "../lib/runs";
 import { usePinnedRuns } from "../state/pinnedRuns";
 import { Button } from "./ui";
 
@@ -59,5 +67,19 @@ export function PinPortfolioRunButton({
   form: PortfolioForm;
 }) {
   const snapshot = useMemo(() => snapshotPortfolioRun(result, engine, form), [result, engine, form]);
+  return <PinSnapshotButton snapshot={snapshot} what={runName(result.runs.length, engine)} />;
+}
+
+/** Pins the shown engine's rotation run. */
+export function PinRotationRunButton({
+  result,
+  engine,
+  form,
+}: {
+  result: RotationOut;
+  engine: string;
+  form: RotationForm;
+}) {
+  const snapshot = useMemo(() => snapshotRotationRun(result, engine, form), [result, engine, form]);
   return <PinSnapshotButton snapshot={snapshot} what={runName(result.runs.length, engine)} />;
 }

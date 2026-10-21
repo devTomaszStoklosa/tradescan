@@ -3,7 +3,7 @@ import type { EngineRunOut, MonteCarloMethodOut, MonteCarloOut } from "../api/cl
 import { MIN_TRADES } from "../lib/compare";
 import { DASH, fmtNumber, fmtPct } from "../lib/format";
 import { actualRuin, LUCK_LABELS, percentileFor, type Luck, type MonteCarloValue } from "../lib/monteCarlo";
-import type { PinnedRun, RunKind } from "../lib/runs";
+import { asSetup, type PinnedRun, type RunKind } from "../lib/runs";
 import { RunLabel } from "./RunCard";
 import { Notice } from "./ui";
 
@@ -181,6 +181,7 @@ function MethodValues({ monteCarlo, method }: { monteCarlo: MonteCarloOut; metho
 const NO_MONTE_CARLO: Record<RunKind, string> = {
   backtest: "No Monte Carlo: pinned before Monte Carlo results or with fewer than two closed trades.",
   portfolio: "No Monte Carlo: the portfolio backtest does not simulate its trades.",
+  rotation: "No Monte Carlo: the rotation does not simulate its holdings.",
 };
 
 /** One row per pinned run: one method's unlucky and median values and the chance of ruin. */
@@ -229,17 +230,18 @@ export function MonteCarloTable({ runs, method }: { runs: PinnedRun[]; method: s
           </thead>
           <tbody>
             {runs.map((run) => {
-              const result = run.monteCarlo?.methods.find((item) => item.name === method);
+              const monteCarlo = asSetup(run)?.monteCarlo;
+              const result = monteCarlo?.methods.find((item) => item.name === method);
               return (
                 <tr key={run.id} className="border-b border-line last:border-0">
                   <th scope="row" className="sticky left-0 bg-panel px-3 py-1.5 text-left font-normal">
                     <RunLabel run={run} />
                   </th>
-                  {run.monteCarlo && result ? (
-                    <MethodValues monteCarlo={run.monteCarlo} method={result} />
+                  {monteCarlo && result ? (
+                    <MethodValues monteCarlo={monteCarlo} method={result} />
                   ) : (
                     <td colSpan={columns} className="px-3 py-1.5 text-muted">
-                      {run.monteCarlo ? "No simulations with this method." : NO_MONTE_CARLO[run.kind]}
+                      {monteCarlo ? "No simulations with this method." : NO_MONTE_CARLO[run.kind]}
                     </td>
                   )}
                 </tr>

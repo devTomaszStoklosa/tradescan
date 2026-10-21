@@ -27,14 +27,18 @@ import type {
 import { formatTemplate } from "../lib/overrides";
 import type { BacktestForm } from "../lib/params";
 import type { PortfolioForm } from "../lib/portfolio";
+import type { RotationForm } from "../lib/rotation";
 import {
   snapshotPortfolioRun,
+  snapshotRotationRun,
   toPinnedRun,
   type BacktestSnapshot,
   type PinnedBacktestRun,
   type PinnedPortfolioRun,
+  type PinnedRotationRun,
   type PinnedRun,
   type PortfolioSnapshot,
+  type RotationSnapshot,
 } from "../lib/runs";
 
 export function spec(
@@ -1100,3 +1104,33 @@ export const rotationResult: RotationOut = {
   runs: [rotationRun],
   missing: ["VNQ"],
 };
+
+/** The Rotation page's form that ran `rotationResult`. */
+export const rotationForm: RotationForm = {
+  universe: { watchlist: "etf", tickers: "" },
+  engines: ["vectorized"],
+  period: "",
+  ranking: "momentum",
+  rankingParams: {},
+  weighting: "inverse_volatility",
+  weightingParams: {},
+  rebalance: "monthly",
+  safeAsset: "TLT",
+  benchmark: "",
+  settings: { rotation: { holdings: 3 } },
+};
+
+/** A pinned run of `rotationResult`, changed by `overrides`, with a fixed slot. */
+export function makeRotationPin(
+  slot: number,
+  overrides: Partial<RotationSnapshot> = {},
+  extra: Partial<PinFields> = {},
+): PinnedRotationRun {
+  const snapshot = snapshotRotationRun(rotationResult, "vectorized", rotationForm)!;
+  return {
+    ...toPinnedRun({ ...snapshot, ...overrides }, new Date("2026-10-14T09:00:00Z")),
+    id: `rotation-${slot}`,
+    slot,
+    ...extra,
+  };
+}

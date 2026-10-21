@@ -1,7 +1,7 @@
 /**
  * Pinned runs: frozen snapshots of one engine's result, kept in the browser for comparison.
- * A run is a backtest of one ticker or a portfolio of a universe with one shared equity.
- * A pin keeps what was seen; it is never re-run, so new bars do not change it.
+ * A run is a backtest of one ticker, a portfolio of a universe with one shared equity, or a momentum rotation of a
+ * universe. A pin keeps what was seen; it is never re-run, so new bars do not change it.
  */
 import type {
   AppliedRuleOut,
@@ -13,12 +13,16 @@ import type {
   Point,
   PortfolioOut,
   PortfolioStatsOut,
+  RotationConfigOut,
+  RotationOut,
+  RotationStatsOut,
   ScanInputsOut,
   SplitOut,
 } from "../api/client";
 import { MONTE_CARLO_SETTINGS } from "./monteCarlo";
 import type { BacktestForm } from "./params";
 import type { PortfolioForm } from "./portfolio";
+import type { RotationForm } from "./rotation";
 
 /** One chart and one table stay legible up to this many runs, and the run palette has as many colours. */
 export const MAX_RUNS = 8;
@@ -32,52 +36,59 @@ export interface RunSplit extends SplitOut {
   out_of_sample: MetricsOut;
 }
 
-/** The setup and the result every kind of run has. */
+/** The engine, the data range and the result every kind of run has. */
 interface RunBase {
-  signal: string;
-  direction: Direction;
-  description: string;
   engine: string;
   start: string;
   end: string;
-  /** The signal's parameters the run used, as the server reported them. */
-  params: Record<string, number | number[]>;
   /** The stop, costs, account and out-of-sample share the run used. */
   config: RunConfig;
+  metrics: MetricsOut;
+  /** Null for runs pinned before out-of-sample results, or with too short a history to split. */
+  split: RunSplit | null;
+  equity: Point[];
+}
+
+/** A run of a signal's setup: the signal with its parameters, the entry and exit rules and the entry filters. */
+interface SetupRunBase extends RunBase {
+  signal: string;
+  direction: Direction;
+  description: string;
+  /** The signal's parameters the run used, as the server reported them. */
+  params: Record<string, number | number[]>;
   /** The entry rule, the exit rules and the entry filters the run used, with their parameters. */
   entry: AppliedRuleOut;
   exits: AppliedRuleOut[];
   filters: AppliedRuleOut[];
   /** The benchmark the filters compared; null when no filter read one. */
   benchmark: string | null;
-  metrics: MetricsOut;
-  /** Null for runs pinned before out-of-sample results, or with too short a history to split. */
-  split: RunSplit | null;
   /**
    * The Monte Carlo of the run's trades; null for portfolio runs, for runs pinned before Monte Carlo results,
    * or with fewer than two closed trades.
    */
   monteCarlo: MonteCarloOut | null;
-  equity: Point[];
 }
 
 /** One setup on one ticker. */
-export interface BacktestSnapshot extends RunBase {
+export interface BacktestSnapshot extends SetupRunBase {
   kind: "backtest";
   ticker: string;
   /** Reopens the run on the Backtest page. */
   form: BacktestForm;
 }
 
-/** Open positions, exposure and skipped signals of a portfolio run; a period is null when the history has no split. */
-export interface PortfolioRunStats {
-  full: PortfolioStatsOut;
-  in_sample: PortfolioStatsOut | null;
-  out_of_sample: PortfolioStatsOut | null;
+/** A run's stats by period; a period is null when the history has no split. */
+export interface PeriodStats<T> {
+  full: T;
+  in_sample: T | null;
+  out_of_sample: T | null;
 }
 
+/** Open positions, exposure and skipped signals of a portfolio run. */
+export type PortfolioRunStats = PeriodStats<PortfolioStatsOut>;
+
 /** One setup on every ticker of a universe with one shared equity. */
-export interface PortfolioSnapshot extends RunBase {
+export interface PortfolioSnapshot extends SetupRunBase {
   kind: "portfolio";
   /** The watchlist's name, or "custom" for typed tickers. */
   universe: string;
@@ -99,8 +110,32 @@ export interface PortfolioSnapshot extends RunBase {
   form: PortfolioForm;
 }
 
+/** The strongest tickers of a universe by momentum, rebalanced weekly or monthly, with one shared equity. */
+export interface RotationSnapshot extends RunBase {
+  kind: "rotation";
+  /** The watchlist's name, or "custom" for typed tickers. */
+  universe: string;
+  /** Every ticker of the universe that had data, in the universe's order, the safe asset last. */
+  tickers: string[];
+  /** Tickers of the universe without data. */
+  missing: string[];
+  /** The holdings, the absolute momentum lookback, the rebalance and the safe asset the run used. */
+  rotation: RotationConfigOut;
+  /** The rule that ranked the tickers and the rule that weighted the picks, with their parameters. */
+  ranking: AppliedRuleOut;
+  weighting: AppliedRuleOut;
+  /** The ticker whose buy & hold the metrics compare. */
+  buyHoldBenchmark: string;
+  stats: PeriodStats<RotationStatsOut>;
+  /** Reopens the run on the Rotation page. */
+  form: RotationForm;
+}
+
+/** Runs of a signal's setup: a backtest or a portfolio. */
+export type SetupSnapshot = BacktestSnapshot | PortfolioSnapshot;
+
 /** Everything that defines a run and its result. */
-export type RunSnapshot = BacktestSnapshot | PortfolioSnapshot;
+export type RunSnapshot = SetupSnapshot | RotationSnapshot;
 
 export type RunKind = RunSnapshot["kind"];
 
@@ -115,7 +150,8 @@ interface PinMeta {
 
 export type PinnedBacktestRun = BacktestSnapshot & PinMeta;
 export type PinnedPortfolioRun = PortfolioSnapshot & PinMeta;
-export type PinnedRun = PinnedBacktestRun | PinnedPortfolioRun;
+export type PinnedRotationRun = RotationSnapshot & PinMeta;
+export type PinnedRun = PinnedBacktestRun | PinnedPortfolioRun | PinnedRotationRun;
 
 export interface MergeResult {
   runs: PinnedRun[];
@@ -206,6 +242,46 @@ export function snapshotPortfolioRun(
   };
 }
 
+/**
+ * One engine's run from a rotation result; null when that engine did not run. Trades, holdings, contributions and the
+ * last close's picks are not kept.
+ */
+export function snapshotRotationRun(result: RotationOut, engine: string, form: RotationForm): RotationSnapshot | null {
+  const run = result.runs.find((item) => item.engine === engine);
+  if (!run) return null;
+  const periods =
+    result.split && run.in_sample && run.out_of_sample
+      ? { split: result.split, in_sample: run.in_sample, out_of_sample: run.out_of_sample }
+      : null;
+  return {
+    kind: "rotation",
+    universe: result.universe,
+    tickers: run.tickers.map((item) => item.ticker),
+    missing: result.missing,
+    rotation: result.rotation,
+    ranking: result.ranking,
+    weighting: result.weighting,
+    buyHoldBenchmark: result.buy_hold_benchmark,
+    stats: {
+      full: run.full.stats,
+      in_sample: periods?.in_sample.stats ?? null,
+      out_of_sample: periods?.out_of_sample.stats ?? null,
+    },
+    engine,
+    start: result.start,
+    end: result.end,
+    config: result.config,
+    metrics: run.full.metrics,
+    split: periods && {
+      ...periods.split,
+      in_sample: periods.in_sample.metrics,
+      out_of_sample: periods.out_of_sample.metrics,
+    },
+    equity: run.equity,
+    form: { ...form, engines: [engine] },
+  };
+}
+
 const sortedEntries = <T>(record: Record<string, T>): [string, T][] =>
   Object.entries(record).sort(([left], [right]) => left.localeCompare(right));
 
@@ -217,11 +293,27 @@ const scanKey = (scan: ScanInputsOut | null) =>
     sortedEntries(scan.signal_params).map(([signal, params]) => [signal, sortedEntries(params)]),
   ];
 
+/** The signal's setup that tells two backtest or portfolio runs apart. */
+const setupKey = (run: SetupSnapshot): unknown[] => {
+  const { monteCarlo } = run;
+  return [
+    run.signal,
+    sortedEntries(run.params),
+    ruleKey(run.entry),
+    run.exits.map(ruleKey),
+    run.filters.map(ruleKey),
+    run.benchmark,
+    monteCarlo && MONTE_CARLO_SETTINGS.map((name) => monteCarlo[name]),
+  ];
+};
+
 /** What only one kind of run has; a new kind of run adds its entry here. */
 interface KindSpec<S extends RunSnapshot> {
   /** What the run tested: a ticker or a universe. */
   subject: (run: S) => string;
-  /** The inputs beyond the shared setup that tell two runs apart. */
+  /** What the run traded: a signal, or a rotation by its ranking. */
+  strategy: (run: S) => string;
+  /** The inputs beyond the engine, the data range and the config that tell two runs apart. */
   keyParts: (run: S) => unknown[];
 }
 
@@ -230,10 +322,12 @@ type SnapshotOf<K extends RunKind> = Extract<RunSnapshot, { kind: K }>;
 const KINDS: { [K in RunKind]: KindSpec<SnapshotOf<K>> } = {
   backtest: {
     subject: (run) => run.ticker,
-    keyParts: (run) => [run.ticker],
+    strategy: (run) => run.signal,
+    keyParts: (run) => [run.ticker, ...setupKey(run)],
   },
   portfolio: {
     subject: (run) => run.universe,
+    strategy: (run) => run.signal,
     // The members are part of the key: a watchlist's file can change between two runs.
     keyParts: (run) => [
       run.universe,
@@ -241,32 +335,40 @@ const KINDS: { [K in RunKind]: KindSpec<SnapshotOf<K>> } = {
       sortedEntries(run.portfolio),
       ruleKey(run.priority),
       scanKey(run.scan),
+      ...setupKey(run),
+    ],
+  },
+  rotation: {
+    subject: (run) => run.universe,
+    strategy: (run) => `${run.ranking.name} rotation`,
+    keyParts: (run) => [
+      run.universe,
+      [...run.tickers].sort(),
+      sortedEntries(run.rotation),
+      ruleKey(run.ranking),
+      ruleKey(run.weighting),
+      run.buyHoldBenchmark,
     ],
   },
 };
 
 const kindOf = <S extends RunSnapshot>(run: S) => KINDS[run.kind] as unknown as KindSpec<S>;
 
-/** The ticker of a backtest run, the universe of a portfolio run. */
+/** The ticker of a backtest run, the universe of a portfolio or a rotation run. */
 export const runSubject = (run: RunSnapshot): string => kindOf(run).subject(run);
+
+/** The signal of a backtest or a portfolio run, the ranking of a rotation run. */
+export const runStrategy = (run: RunSnapshot): string => kindOf(run).strategy(run);
 
 /** Equal for runs with the same inputs and data range, so the same run is never pinned twice. */
 export function runKey(run: RunSnapshot): string {
-  const { monteCarlo } = run;
   return JSON.stringify([
     run.kind,
     ...kindOf(run).keyParts(run),
-    run.signal,
     run.engine,
     run.start,
     run.end,
-    sortedEntries(run.params),
     sortedEntries(run.config),
-    ruleKey(run.entry),
-    run.exits.map(ruleKey),
-    run.filters.map(ruleKey),
-    run.benchmark,
-    monteCarlo && MONTE_CARLO_SETTINGS.map((name) => monteCarlo[name]),
   ]);
 }
 
@@ -296,7 +398,7 @@ export function toPinnedRun<S extends RunSnapshot>(snapshot: S, now = new Date()
     ...snapshot,
     id: newId(),
     slot: 0,
-    name: `${runSubject(snapshot)} ${snapshot.signal}`,
+    name: `${runSubject(snapshot)} ${runStrategy(snapshot)}`,
     pinnedAt: now.toISOString(),
     hidden: false,
   };
@@ -341,3 +443,11 @@ export const asBacktest = (run: PinnedRun): PinnedBacktestRun | undefined =>
 /** The run when it is a portfolio. */
 export const asPortfolio = (run: PinnedRun): PinnedPortfolioRun | undefined =>
   run.kind === "portfolio" ? run : undefined;
+
+/** The run when it is a momentum rotation. */
+export const asRotation = (run: PinnedRun): PinnedRotationRun | undefined =>
+  run.kind === "rotation" ? run : undefined;
+
+/** The run when it is a signal's setup: a backtest or a portfolio. */
+export const asSetup = (run: PinnedRun): PinnedBacktestRun | PinnedPortfolioRun | undefined =>
+  run.kind === "rotation" ? undefined : run;
