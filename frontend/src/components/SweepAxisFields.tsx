@@ -1,11 +1,11 @@
 /**
- * The swept parameters of a setup: one or two parameters, each with its From, To and Step. Shared by Sweep and
- * Walk-forward, which both run every combination of their values.
+ * The swept parameters of a setup: one or two parameters, each with its From, To and Step. Shared by Sweep,
+ * Walk-forward and Rotation sweep, which all run every combination of their values.
  */
 import { useMemo } from "react";
 
 import type { ConfigOut } from "../api/client";
-import { axisValues, defaultAxis, type AxisForm, type SweepParam } from "../lib/sweep";
+import { axisValues, combinations, defaultAxis, type AxisForm, type AxisParam, type AxisRange } from "../lib/sweep";
 import { formatValue } from "./SweepHeatmap";
 import { Button, Field, NumberInput, Select } from "./ui";
 
@@ -19,13 +19,13 @@ function ParamSelect({
   label,
 }: {
   value: string;
-  params: SweepParam[];
+  params: AxisParam[];
   used: string[];
   onChange: (key: string) => void;
   label: string;
 }) {
   const groups = useMemo(() => {
-    const byGroup = new Map<string, SweepParam[]>();
+    const byGroup = new Map<string, AxisParam[]>();
     for (const param of params) byGroup.set(param.group, [...(byGroup.get(param.group) ?? []), param]);
     return [...byGroup.entries()];
   }, [params]);
@@ -57,7 +57,7 @@ function AxisFields({
 }: {
   position: number;
   axis: AxisForm;
-  params: SweepParam[];
+  params: AxisParam[];
   used: string[];
   limits: ConfigOut["sweep"];
   onChange: (axis: AxisForm) => void;
@@ -120,6 +120,20 @@ function AxisFields({
   );
 }
 
+/** How many combinations the axes give, e.g. "9 × 9 = 81 combinations (at most 200)", or what to fix first. */
+export function CombinationCount({ ranges, limits }: { ranges: AxisRange[]; limits: ConfigOut["sweep"] }) {
+  const count = combinations(ranges);
+  return (
+    <p className={`num text-sm ${count !== null && count > limits.max_combinations ? "text-down" : "text-muted"}`}>
+      {count === null
+        ? ranges.length
+          ? "Fix the ranges above."
+          : "Pick a parameter to sweep."
+        : `${ranges.length > 1 ? `${ranges.map((range) => range.values?.length).join(" × ")} = ` : ""}${plural(count, "combination")} (at most ${limits.max_combinations})`}
+    </p>
+  );
+}
+
 /** The axes of a sweep with a button to add one; adding needs a chosen signal (`canAdd`). */
 export function SweptParameters({
   axes,
@@ -129,7 +143,7 @@ export function SweptParameters({
   onChange,
 }: {
   axes: AxisForm[];
-  params: SweepParam[];
+  params: AxisParam[];
   limits: ConfigOut["sweep"];
   canAdd: boolean;
   onChange: (axes: AxisForm[]) => void;

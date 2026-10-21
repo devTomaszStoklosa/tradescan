@@ -18,7 +18,8 @@ from tradescan.api.schemas.rotation import (
     RotationStatsOut,
     TargetsOut,
 )
-from tradescan.backtest.rotation import Targets
+from tradescan.backtest.base import BacktestConfig
+from tradescan.backtest.rotation import RotationConfig, Targets
 from tradescan.backtest.rotation_metrics import RotationMetrics
 from tradescan.services.rotation import RotationReport, RotationRun
 
@@ -74,21 +75,29 @@ def rotation_run_out(run: RotationRun) -> RotationRunOut:
     )
 
 
+def config_out(config: BacktestConfig) -> BacktestConfigOut:
+    return BacktestConfigOut(**{item.name: getattr(config, item.name) for item in fields(config)})
+
+
+def rotation_config_out(rotation: RotationConfig) -> RotationConfigOut:
+    return RotationConfigOut(
+        holdings=rotation.holdings,
+        absolute_lookback=rotation.absolute_lookback,
+        rebalance=rotation.rebalance,
+        safe_asset=rotation.safe_asset,
+    )
+
+
 def rotation_out(report: RotationReport) -> RotationOut:
-    config, rotation = report.config, report.rotation
+    config = report.config
     close = report.benchmark_close.dropna()
     buy_hold = close / close.iloc[0] * config.initial_equity if len(close) else close
     return RotationOut(
         universe=report.universe.name,
         start=day(report.dates[0]),
         end=day(report.dates[-1]),
-        config=BacktestConfigOut(**{item.name: getattr(config, item.name) for item in fields(config)}),
-        rotation=RotationConfigOut(
-            holdings=rotation.holdings,
-            absolute_lookback=rotation.absolute_lookback,
-            rebalance=rotation.rebalance,
-            safe_asset=rotation.safe_asset,
-        ),
+        config=config_out(config),
+        rotation=rotation_config_out(report.rotation),
         ranking=applied_rule_out(report.ranking),
         weighting=applied_rule_out(report.weighting),
         buy_hold_benchmark=report.benchmark,

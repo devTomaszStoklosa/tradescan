@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import asdict, fields
+from typing import Any
 
 import pandas as pd
 
@@ -13,6 +14,7 @@ from tradescan.backtest.oos import PeriodMetrics
 from tradescan.backtest.portfolio import PortfolioTrade
 from tradescan.backtest.portfolio_metrics import TickerContribution
 from tradescan.backtest.rotation import Targets
+from tradescan.backtest.rotation_sweep import RotationPeriodMetrics
 from tradescan.backtest.tickers import Period
 from tradescan.data.schema import bar_dates
 from tradescan.scanner import ScanHit
@@ -21,6 +23,7 @@ from tradescan.services.backtest import EngineRun
 from tradescan.services.edge import EdgeRow
 from tradescan.services.portfolio import PortfolioReport
 from tradescan.services.rotation import RotationReport
+from tradescan.services.rotation_sweep import RotationSweepReport
 from tradescan.services.sweep import SweepReport
 from tradescan.services.walk_forward import WalkForwardReport, WindowPick
 from tradescan.services.watchlist_backtest import METRIC_NAMES, WatchlistBacktestReport
@@ -139,12 +142,31 @@ def sweep_to_frame(report: SweepReport, metric: str, out_of_sample: bool) -> pd.
 
     A value from fewer than FEW_TRADES trades is marked with *, a combination that could not run shows "error".
     """
-    first = report.parameters[0].axis
-    second = report.parameters[1].axis if len(report.parameters) > 1 else None
+    names = [item.axis.name for item in report.parameters]
+    return _grid_frame(names, [(cell.values, cell.periods) for cell in report.cells], metric, out_of_sample)
+
+
+def rotation_sweep_to_frame(report: RotationSweepReport, metric: str, out_of_sample: bool) -> pd.DataFrame:
+    """The same grid for a rotation sweep."""
+    names = [item.axis.name for item in report.parameters]
+    cells = [(cell.values, _rotation_metrics(cell.periods)) for cell in report.cells]
+    return _grid_frame(names, cells, metric, out_of_sample)
+
+
+def _rotation_metrics(periods: RotationPeriodMetrics | None) -> PeriodMetrics | None:
+    return PeriodMetrics(periods.in_sample.metrics, periods.out_of_sample.metrics) if periods else None
+
+
+def _grid_frame(
+    names: Sequence[str],
+    cells: Sequence[tuple[tuple[float, ...], PeriodMetrics | None]],
+    metric: str,
+    out_of_sample: bool,
+) -> pd.DataFrame:
     rows: dict[str, dict[str, str]] = {}
-    for cell in report.cells:
-        row = f"{second.name}={cell.values[1]:g}" if second else metric
-        rows.setdefault(row, {})[f"{first.name}={cell.values[0]:g}"] = _sweep_cell(cell.periods, metric, out_of_sample)
+    for values, periods in cells:
+        row = f"{names[1]}={values[1]:g}" if len(names) > 1 else metric
+        rows.setdefault(row, {})[f"{names[0]}={values[0]:g}"] = _sweep_cell(periods, metric, out_of_sample)
     return pd.DataFrame.from_dict(rows, orient="index")
 
 
@@ -159,15 +181,48 @@ def _sweep_cell(periods: PeriodMetrics | None, metric: str, out_of_sample: bool)
 
 def sweep_cells_frame(report: SweepReport) -> pd.DataFrame:
     """Every combination with both periods' metrics, one row each (for export)."""
-    records = []
+    keys = [item.axis.key for item in report.parameters]
+    return _cells_frame(
+        keys,
+        [
+            (
+                cell.values,
+                cell.error,
+                {**_prefixed("is", cell.periods.in_sample), **_prefixed("oos", cell.periods.out_of_sample)}
+                if cell.periods
+                else {},
+            )
+            for cell in report.cells
+        ],
+    )
+
+
+def rotation_sweep_cells_frame(report: RotationSweepReport) -> pd.DataFrame:
+    """Every combination of a rotation sweep with both periods' metrics and rotation stats, one row each."""
+    keys = [item.axis.key for item in report.parameters]
+    rows = []
     for cell in report.cells:
-        record: dict[str, object] = {
-            item.axis.key: value for item, value in zip(report.parameters, cell.values, strict=True)
-        }
-        record["error"] = cell.error or ""
+        values: dict[str, object] = {}
         if cell.periods is not None:
-            for prefix, metrics in (("is", cell.periods.in_sample), ("oos", cell.periods.out_of_sample)):
-                record.update({f"{prefix}_{item.name}": getattr(metrics, item.name) for item in fields(metrics)})
+            for prefix, period in (("is", cell.periods.in_sample), ("oos", cell.periods.out_of_sample)):
+                values.update({**_prefixed(prefix, period.metrics), **_prefixed(prefix, period.stats)})
+        rows.append((cell.values, cell.error, values))
+    return _cells_frame(keys, rows)
+
+
+def _prefixed(prefix: str, values: Any) -> dict[str, object]:
+    """A dataclass's fields as `prefix_name` columns."""
+    return {f"{prefix}_{item.name}": getattr(values, item.name) for item in fields(values)}
+
+
+def _cells_frame(
+    keys: Sequence[str], rows: Sequence[tuple[tuple[float, ...], str | None, dict[str, object]]]
+) -> pd.DataFrame:
+    records = []
+    for values, error, columns in rows:
+        record: dict[str, object] = dict(zip(keys, values, strict=True))
+        record["error"] = error or ""
+        record.update(columns)
         records.append(record)
     return pd.DataFrame(records)
 

@@ -25,6 +25,7 @@ from tradescan.api.routes import (
     meta,
     portfolio,
     rotation,
+    rotation_sweep,
     runs,
     scan,
     signals,
@@ -47,7 +48,7 @@ from tradescan.storage.trades import TradeJournal
 
 ROUTERS = (
     meta, signals, watchlists, scan, market, edge, backtest, sweep, walk_forward, watchlist_backtest,
-    portfolio, rotation, chart, runs, journal,
+    portfolio, rotation, rotation_sweep, chart, runs, journal,
 )  # fmt: skip
 
 # Host header values for this machine; IPv6 literals keep their brackets, as Starlette compares them that way.

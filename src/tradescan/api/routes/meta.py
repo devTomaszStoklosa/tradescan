@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from fastapi import APIRouter
 
 from tradescan import __version__
@@ -14,6 +16,7 @@ from tradescan.backtest.priority import DEFAULT_PRIORITY
 from tradescan.backtest.rotation import DEFAULT_RANKING, Rebalance
 from tradescan.backtest.weighting import DEFAULT_WEIGHTING
 from tradescan.config import adjustable_sections
+from tradescan.services.rotation_sweep import ROTATION_SWEEP_SECTIONS
 from tradescan.services.sweep import NOT_SWEEPABLE, SWEEP_SECTIONS
 from tradescan.services.walk_forward import NOT_WALKABLE
 from tradescan.signals.base import Family
@@ -50,15 +53,8 @@ def build_router(context: ApiContext) -> APIRouter:
             weight_rules=[rule_out(rule) for rule in context.use_cases.rotation.weightings.classes()],
             default_weighting=DEFAULT_WEIGHTING,
             rebalances=list(Rebalance),
-            sweep=SweepLimitsOut(
-                max_axes=sweep.MAX_AXES,
-                min_values=sweep.MIN_VALUES,
-                max_values=sweep.MAX_VALUES,
-                max_combinations=sweep.MAX_COMBINATIONS,
-                sections=list(SWEEP_SECTIONS),
-                fixed=sorted(f"{section}.{name}" for section, name in NOT_SWEEPABLE),
-                min_period_bars=MIN_PERIOD_BARS,
-            ),
+            sweep=_sweep_limits(SWEEP_SECTIONS),
+            rotation_sweep=_sweep_limits(ROTATION_SWEEP_SECTIONS),
             walk_forward=WalkForwardLimitsOut(
                 max_runs=walk_forward.MAX_RUNS,
                 schemes=list(walk_forward.WindowScheme),
@@ -70,3 +66,16 @@ def build_router(context: ApiContext) -> APIRouter:
         )
 
     return router
+
+
+def _sweep_limits(sections: Sequence[str]) -> SweepLimitsOut:
+    """The limits of a sweep that can change the settings in `sections`."""
+    return SweepLimitsOut(
+        max_axes=sweep.MAX_AXES,
+        min_values=sweep.MIN_VALUES,
+        max_values=sweep.MAX_VALUES,
+        max_combinations=sweep.MAX_COMBINATIONS,
+        sections=list(sections),
+        fixed=sorted(f"{section}.{name}" for section, name in NOT_SWEEPABLE if section in sections),
+        min_period_bars=MIN_PERIOD_BARS,
+    )

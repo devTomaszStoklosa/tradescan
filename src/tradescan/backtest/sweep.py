@@ -11,6 +11,7 @@ import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Protocol
 
 import pandas as pd
 
@@ -47,7 +48,17 @@ class SweepAxis:
         return ".".join(part for part in (self.target.value, self.owner, self.name) if part)
 
 
-def check_axes(axes: Sequence[SweepAxis]) -> None:
+class Axis(Protocol):
+    """What the limits and the grid read of an axis: a backtest's or a rotation's."""
+
+    @property
+    def key(self) -> str: ...
+
+    @property
+    def values(self) -> tuple[float, ...]: ...
+
+
+def check_axes(axes: Sequence[Axis]) -> None:
     if not 1 <= len(axes) <= MAX_AXES:
         raise ValueError(f"A sweep needs 1 or {MAX_AXES} parameters, got {len(axes)}")
     keys = [axis.key for axis in axes]
@@ -65,7 +76,7 @@ def check_axes(axes: Sequence[SweepAxis]) -> None:
         raise ValueError(f"{combinations} combinations is too many; a sweep runs at most {MAX_COMBINATIONS}")
 
 
-def grid(axes: Sequence[SweepAxis]) -> list[tuple[float, ...]]:
+def grid(axes: Sequence[Axis]) -> list[tuple[float, ...]]:
     """Every combination of the axes' values; the first axis changes slowest."""
     check_axes(axes)
     return list(itertools.product(*(axis.values for axis in axes)))

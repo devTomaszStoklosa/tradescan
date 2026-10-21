@@ -10,6 +10,7 @@ from tradescan.cli.commands import (
     market,
     portfolio_backtest,
     rotation_backtest,
+    rotation_sweep,
     scan,
     serve,
     sweep,
@@ -29,6 +30,7 @@ COMMANDS: tuple[Command, ...] = (
     watchlist_backtest.COMMAND,
     portfolio_backtest.COMMAND,
     rotation_backtest.COMMAND,
+    rotation_sweep.COMMAND,
     update_universes.COMMAND,
     serve.COMMAND,
 )

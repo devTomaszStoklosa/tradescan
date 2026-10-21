@@ -13,28 +13,23 @@ import { useConfig, useRotationBacktest, useWatchlists } from "../api/hooks";
 import { enginesAgree, MetricsTable, TradesTable } from "../components/BacktestResults";
 import { EquityChart, type EquityEvent, type EquitySeries } from "../components/charts/EquityChart";
 import { DataTable, type Column } from "../components/DataTable";
-import { SectionFields } from "../components/ParamFields";
 import { PinRotationRunButton } from "../components/PinRunButton";
+import { RotationSetupFields } from "../components/RotationSetupFields";
 import { RotationStatsTable } from "../components/RotationStats";
-import { GroupHeading, RuleChoiceFields } from "../components/TradeRuleFields";
-import { UniversePicker } from "../components/UniverseFilters";
 import {
   Button,
   EmptyState,
   ErrorBox,
-  Field,
   FieldGroup,
-  Input,
   Loading,
   Notice,
   PageHeader,
   Panel,
   Segmented,
-  Select,
   StatTile,
   ToggleChip,
 } from "../components/ui";
-import { LARGE_UNIVERSE, PERIODS, ROTATION_SECTION, universeSize, withDefaultUniverse } from "../lib/choices";
+import { LARGE_UNIVERSE, universeSize, withDefaultUniverse } from "../lib/choices";
 import { downloadCsv, tradeRow } from "../lib/csv";
 import { DASH, fmtNumber, fmtPct, fmtSigned, fmtSize, tone } from "../lib/format";
 import {
@@ -49,10 +44,6 @@ import {
 import { useResettableState } from "../lib/useResettableState";
 import { useAccount, withAccount } from "../state/account";
 
-const REBALANCES = [
-  { value: "weekly" as const, label: "Weekly" },
-  { value: "monthly" as const, label: "Monthly" },
-];
 const ENGINE_COLORS = ["--accent", "--warn"];
 /** Above this many tickers, the Cerebro reference takes minutes. */
 const SLOW_CEREBRO_TICKERS = 20;
@@ -80,9 +71,6 @@ function RotationFormPanel({
     );
   const changes = rotationChanges(draft, config);
   const invalid = hasRotationProblems(draft, config);
-  const watchlistBenchmark = watchlists.find((item) => item.name === draft.universe.watchlist)?.benchmark;
-  const rotation = config.sections.find((section) => section.name === ROTATION_SECTION);
-  const costs = config.sections.find((section) => section.name === "backtest");
   const slowCerebro =
     draft.engines.includes("cerebro") && universeSize(draft.universe, watchlists) > SLOW_CEREBRO_TICKERS;
 
@@ -94,85 +82,7 @@ function RotationFormPanel({
   return (
     <Panel>
       <form onSubmit={submit} noValidate className="space-y-4">
-        <UniversePicker
-          value={draft.universe}
-          onChange={(universe) => set("universe", universe)}
-          watchlists={watchlists}
-        />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <FieldGroup label="Rebalance" hint="At the last close of every week or month">
-            <Segmented
-              label="Rebalance"
-              value={draft.rebalance}
-              options={REBALANCES}
-              onChange={(rebalance) => set("rebalance", rebalance)}
-            />
-          </FieldGroup>
-          <Field label="Safe asset" hint="Takes the slots of picks with negative absolute momentum; empty for cash">
-            <Input
-              value={draft.safeAsset}
-              placeholder="cash, e.g. TLT"
-              onChange={(event) => set("safeAsset", event.target.value.toUpperCase())}
-            />
-          </Field>
-          <Field label="Buy & hold benchmark">
-            <Input
-              value={draft.benchmark}
-              placeholder={watchlistBenchmark ?? config.benchmark}
-              onChange={(event) => set("benchmark", event.target.value.toUpperCase())}
-            />
-          </Field>
-          <Field label="History">
-            <Select value={draft.period} onChange={(event) => set("period", event.target.value)}>
-              <option value="">default ({config.backtest_period})</option>
-              {PERIODS.map((period) => (
-                <option key={period} value={period}>
-                  {period}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </div>
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold">Picks</h2>
-          <div className="grid gap-x-6 gap-y-4 md:grid-cols-2 lg:grid-cols-3">
-            <RuleChoiceFields
-              heading="Ranking (strongest first)"
-              rules={config.ranking_rules}
-              value={draft.ranking}
-              params={draft.rankingParams}
-              onChange={(ranking, rankingParams) => setDraft({ ...draft, ranking, rankingParams })}
-            />
-            {rotation && (
-              <div className="space-y-2">
-                <GroupHeading>Holdings and absolute momentum</GroupHeading>
-                <SectionFields
-                  section={rotation}
-                  overrides={draft.settings}
-                  onChange={(settings) => set("settings", settings)}
-                  className="grid grid-cols-2 gap-3"
-                />
-              </div>
-            )}
-            <RuleChoiceFields
-              heading="Weights"
-              rules={config.weight_rules}
-              value={draft.weighting}
-              params={draft.weightingParams}
-              onChange={(weighting, weightingParams) => setDraft({ ...draft, weighting, weightingParams })}
-            />
-          </div>
-          {costs && (
-            <div className="space-y-2">
-              <GroupHeading>Costs, metrics and out-of-sample split</GroupHeading>
-              <SectionFields
-                section={costs}
-                overrides={draft.settings}
-                onChange={(settings) => set("settings", settings)}
-              />
-            </div>
-          )}
-        </section>
+        <RotationSetupFields draft={draft} onChange={setDraft} config={config} watchlists={watchlists} />
         <div className="flex flex-wrap items-end justify-between gap-3">
           <FieldGroup label="Engines">
             <div className="flex gap-1.5 py-1">

@@ -15,6 +15,8 @@ import type {
   RotationOut,
   RotationRunOut,
   RotationStatsOut,
+  RotationSweepCellOut,
+  RotationSweepOut,
   RuleOut,
   ScanInputsOut,
   ScanOut,
@@ -302,6 +304,15 @@ export const config: ConfigOut = {
     max_values: 50,
     max_combinations: 200,
     sections: ["account", "risk", "backtest", "pyramid"],
+    fixed: ["backtest.oos_pct"],
+    min_period_bars: 60,
+  },
+  rotation_sweep: {
+    max_axes: 2,
+    min_values: 2,
+    max_values: 50,
+    max_combinations: 200,
+    sections: ["rotation", "backtest"],
     fixed: ["backtest.oos_pct"],
     min_period_bars: 60,
   },
@@ -1134,3 +1145,70 @@ export function makeRotationPin(
     ...extra,
   };
 }
+
+const rotationSweepCell = (
+  values: number[],
+  sharpe: [number, number],
+  trades: [number, number] = [64, 29],
+): RotationSweepCellOut => ({
+  values,
+  in_sample: makeMetrics({ sharpe: sharpe[0], trades: trades[0], expectancy_r: null, sqn: null }),
+  out_of_sample: makeMetrics({ sharpe: sharpe[1], trades: trades[1], expectancy_r: null, sqn: null }),
+  in_sample_stats: rotationStats({ rebalances: 76 }),
+  out_of_sample_stats: rotationStats({ rebalances: 32, turnover_pct: 380 }),
+  error: null,
+});
+
+/** `rotationResult`'s rotation over 2/3/4 holdings by a momentum lookback of 126/252; one combination failed. */
+export const rotationSweepResult: RotationSweepOut = {
+  universe: rotationResult.universe,
+  engine: "vectorized",
+  start: rotationResult.start,
+  end: rotationResult.end,
+  config: rotationResult.config,
+  rotation: rotationResult.rotation,
+  ranking: rotationResult.ranking,
+  weighting: rotationResult.weighting,
+  buy_hold_benchmark: "SPY",
+  split: rotationResult.split!,
+  axes: [
+    {
+      target: "settings",
+      owner: "rotation",
+      name: "holdings",
+      key: "settings.rotation.holdings",
+      label: "Holdings",
+      unit: "",
+      kind: "int",
+      current: 3,
+      values: [2, 3, 4],
+    },
+    {
+      target: "ranking",
+      owner: null,
+      name: "lookback",
+      key: "ranking.lookback",
+      label: "Lookback",
+      unit: "bars",
+      kind: "int",
+      current: 252,
+      values: [126, 252],
+    },
+  ],
+  cells: [
+    rotationSweepCell([2, 126], [0.3, 0.2]),
+    rotationSweepCell([2, 252], [0.5, 0.6]),
+    rotationSweepCell([3, 126], [0.4, -0.1]),
+    rotationSweepCell([3, 252], [0.43, 1.09]),
+    rotationSweepCell([4, 126], [0.9, 0.4], [64, 12]),
+    {
+      values: [4, 252],
+      in_sample: null,
+      out_of_sample: null,
+      in_sample_stats: null,
+      out_of_sample_stats: null,
+      error: "No in-sample rebalance had a ticker to pick: a lookback is longer than the in-sample history",
+    },
+  ],
+  missing: ["VNQ"],
+};

@@ -12,6 +12,7 @@ const LINKS = [
   { to: "/watchlist", label: "Watchlist", end: false },
   { to: "/portfolio", label: "Portfolio", end: false },
   { to: "/rotation", label: "Rotation", end: false },
+  { to: "/rotation-sweep", label: "Rotation sweep", end: false },
   { to: "/edge", label: "Edge", end: false },
   { to: "/compare", label: "Compare", end: false },
   { to: "/journal", label: "Journal", end: false },

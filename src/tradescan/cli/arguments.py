@@ -6,8 +6,12 @@ import argparse
 from dataclasses import fields
 
 from tradescan.backtest.metrics import Metrics
+from tradescan.backtest.priority import priority_rules
+from tradescan.backtest.rotation import DEFAULT_RANKING, Rebalance, ranking_rules
 from tradescan.backtest.trade_rules import default_catalog
+from tradescan.backtest.weighting import DEFAULT_WEIGHTING, weight_rules
 from tradescan.services.composition import default_engines
+from tradescan.services.rotation_sweep import ROTATION_SWEEP_SECTIONS
 from tradescan.services.sweep import SWEEP_SECTIONS
 from tradescan.signals import Family
 
@@ -22,6 +26,14 @@ AXIS_HELP = (
     "(owner: the exit rule), filter (owner: the entry filter) or settings "
     f"(owner: {', '.join(SWEEP_SECTIONS[:-1])} or {SWEEP_SECTIONS[-1]}), "
     "e.g. signal.oversold=5:20:5, exit.target.target_r=1,1.5,2 or filter.trend.period=100:200:50; "
+    "give it twice for a grid"
+)
+
+
+ROTATION_AXIS_HELP = (
+    "parameter and values: target[.owner].name=FROM:TO:STEP or =V1,V2,... with target ranking, weighting or "
+    f"settings (owner: {' or '.join(ROTATION_SWEEP_SECTIONS)}), "
+    "e.g. ranking.lookback=126:252:42, weighting.lookback=20,63 or settings.rotation.holdings=1:5:1; "
     "give it twice for a grid"
 )
 
@@ -90,3 +102,33 @@ def add_backtest_setup_args(
     parser.add_argument("--commission-pct", type=float)
     parser.add_argument("--slippage-pct", type=float)
     parser.add_argument("--oos", type=float, help="out-of-sample share of the history in %% (10-50, default 30)")
+
+
+def add_rotation_setup_args(parser: argparse.ArgumentParser) -> None:
+    """Everything a rotation setup takes apart from the universe and the history."""
+    parser.add_argument(
+        "--rank",
+        choices=[rule.name for rule in ranking_rules(priority_rules)],
+        help=f"how the tickers are ranked (default {DEFAULT_RANKING})",
+    )
+    parser.add_argument("--holdings", type=int, help="tickers picked at each rebalance (default 5)")
+    parser.add_argument("--rebalance", choices=[item.value for item in Rebalance], default=Rebalance.MONTHLY.value)
+    parser.add_argument(
+        "--weighting",
+        choices=weight_rules.names(),
+        help=f"how the picks share the equity (default {DEFAULT_WEIGHTING})",
+    )
+    parser.add_argument(
+        "--absolute-lookback",
+        type=int,
+        help="a pick at or below 0 over this many bars goes to the safe asset (0: off, default 252)",
+    )
+    parser.add_argument(
+        "--safe-asset", help="ticker for the slots of picks that fail the check, e.g. TLT (default: cash)"
+    )
+    parser.add_argument("--benchmark", help="buy & hold benchmark (default: the watchlist's, else scan.benchmark)")
+    parser.add_argument("--equity", type=float, help="account size")
+    parser.add_argument("--lot-size", type=float, help="size step, e.g. 0.0001 for crypto")
+    parser.add_argument("--commission-pct", type=float)
+    parser.add_argument("--slippage-pct", type=float)
+    parser.add_argument("--oos", type=float, help="out-of-sample share of the run in %% (10-50, default 30)")

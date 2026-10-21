@@ -7,6 +7,7 @@ import {
   type EdgeIn,
   type PortfolioIn,
   type RotationIn,
+  type RotationSweepIn,
   type ScanIn,
   type SweepIn,
   type WalkForwardIn,
@@ -45,4 +46,5 @@ export const useWatchlistBacktest = (body: WatchlistBacktestIn | null) =>
 export const usePortfolioBacktest = (body: PortfolioIn | null) =>
   useRun("portfolio-backtest", api.portfolioBacktest, body);
 export const useRotationBacktest = (body: RotationIn | null) => useRun("rotation-backtest", api.rotationBacktest, body);
+export const useRotationSweep = (body: RotationSweepIn | null) => useRun("rotation-sweep", api.rotationSweep, body);
 export const useChart = (body: ChartIn | null) => useRun("chart", api.chart, body);
