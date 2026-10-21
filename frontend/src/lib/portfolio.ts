@@ -22,6 +22,7 @@ import {
 } from "./overrides";
 import {
   readBacktestRules,
+  commaList,
   readUniverse,
   rulesBody,
   universeBody,
@@ -49,12 +50,6 @@ export interface PortfolioForm extends BacktestRules {
   /** Parameters of the signals a priority that scores like the scanner counts besides the traded one, by signal. */
   scoreSignalParams: Overrides;
 }
-
-const engineList = (value: string | null): string[] =>
-  (value ?? "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
 
 /** True when the priority rule scores like the scanner, so it reads the scanner's settings and signals. */
 const readsScan = (priority: string, config: Pick<ConfigOut, "priority_rules">): boolean =>
@@ -126,7 +121,7 @@ export const choosePriority = (
 
 /** Rules the URL leaves out are the server's defaults. */
 export function readPortfolioForm(params: URLSearchParams, defaults: PortfolioDefaults): PortfolioForm {
-  const engines = engineList(params.get("eng"));
+  const engines = commaList(params.get("eng"));
   const priority = params.get("prio") || defaults.default_priority;
   const rules = readBacktestRules(params, defaults);
   return {

@@ -14,6 +14,7 @@ import { useConfig, usePortfolioBacktest, useSignals, useWatchlists } from "../a
 import { AdvancedSettings } from "../components/AdvancedSettings";
 import { enginesAgree, MetricsTable, TradesTable } from "../components/BacktestResults";
 import { BacktestSetupFields } from "../components/BacktestSetupFields";
+import { EnginePicker, SlowCerebroNotice } from "../components/EnginePicker";
 import { EquityChart, type EquityEvent, type EquitySeries } from "../components/charts/EquityChart";
 import { DataTable, type Column } from "../components/DataTable";
 import { PERIOD_NOTE } from "../components/OutOfSample";
@@ -27,16 +28,21 @@ import {
   DirectionBadge,
   EmptyState,
   ErrorBox,
-  FieldGroup,
   Loading,
   Notice,
   PageHeader,
   Panel,
   Segmented,
   StatTile,
-  ToggleChip,
 } from "../components/ui";
-import { LARGE_UNIVERSE, PORTFOLIO_SECTION, universeSize, withDefaultUniverse } from "../lib/choices";
+import {
+  ENGINE_COLORS,
+  isSlowCerebro,
+  LARGE_UNIVERSE,
+  PORTFOLIO_SECTION,
+  universeSize,
+  withDefaultUniverse,
+} from "../lib/choices";
 import { downloadCsv, tradeRow } from "../lib/csv";
 import { DASH, fmtNumber, fmtPct, fmtSigned, tone } from "../lib/format";
 import { pickSections } from "../lib/overrides";
@@ -62,10 +68,6 @@ import { hasSetupProblems, setupChanges } from "../lib/setup";
 import { useResettableState } from "../lib/useResettableState";
 import { useAccount, withAccount } from "../state/account";
 
-const ENGINE_COLORS = ["--accent", "--warn"];
-/** Above this many tickers, the Cerebro reference takes minutes. */
-const SLOW_CEREBRO_TICKERS = 20;
-
 function PortfolioFormPanel({
   initial,
   config,
@@ -83,13 +85,6 @@ function PortfolioFormPanel({
 }) {
   const source = useMemo(() => withDefaultUniverse(initial, watchlists), [initial, watchlists]);
   const [draft, setDraft] = useResettableState(source);
-  const toggleEngine = (engine: string) =>
-    setDraft({
-      ...draft,
-      engines: draft.engines.includes(engine)
-        ? draft.engines.filter((item) => item !== engine)
-        : [...draft.engines, engine],
-    });
   // Score signal parameters left from another traded signal are neither counted nor sent.
   const counted = withCountedScoreSignals(draft, signals);
   const changes = setupChanges(counted, config) + priorityChanges(counted, config);
@@ -100,8 +95,7 @@ function PortfolioFormPanel({
     hasScoreSignalProblems(counted, signals);
   const watchlistBenchmark = watchlists.find((item) => item.name === draft.universe.watchlist)?.benchmark;
   const portfolio = config.sections.find((section) => section.name === PORTFOLIO_SECTION);
-  const slowCerebro =
-    draft.engines.includes("cerebro") && universeSize(draft.universe, watchlists) > SLOW_CEREBRO_TICKERS;
+  const slowCerebro = isSlowCerebro(draft.engines, draft.universe, watchlists);
   // A priority that scores like the scanner reads the scanner's settings and the parameters and weights of the traded
   // direction's signals; the traded signal's parameters are the setup's.
   const scoreSections = pickSections(config.sections, prioritySections(draft.priority, config));
@@ -166,20 +160,11 @@ function PortfolioFormPanel({
           )}
         </section>
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <FieldGroup label="Engines">
-            <div className="flex gap-1.5 py-1">
-              {config.engines.map((engine) => (
-                <ToggleChip
-                  key={engine}
-                  active={draft.engines.includes(engine)}
-                  onClick={() => toggleEngine(engine)}
-                  color="var(--accent)"
-                >
-                  {engine}
-                </ToggleChip>
-              ))}
-            </div>
-          </FieldGroup>
+          <EnginePicker
+            available={config.engines}
+            value={draft.engines}
+            onChange={(engines) => setDraft({ ...draft, engines })}
+          />
           <div className="flex items-center gap-2">
             {changes > 0 && (
               <Button variant="ghost" onClick={() => setDraft(resetPortfolio(draft, config))}>
@@ -191,11 +176,7 @@ function PortfolioFormPanel({
             </Button>
           </div>
         </div>
-        {slowCerebro && (
-          <Notice>
-            Cerebro checks the vectorized engine and is slow: expect about a minute per 20 tickers of 10-year history.
-          </Notice>
-        )}
+        {slowCerebro && <SlowCerebroNotice />}
       </form>
     </Panel>
   );

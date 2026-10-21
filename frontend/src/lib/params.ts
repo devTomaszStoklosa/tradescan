@@ -71,7 +71,7 @@ type SignalParamsIn = NonNullable<ScanIn["signal_params"]>;
 
 const FAMILIES: readonly Family[] = ["trend", "momentum", "breakout", "mean_reversion", "volume", "pattern"];
 
-const list = (value: string | null): string[] =>
+export const commaList = (value: string | null): string[] =>
   (value ?? "")
     .split(",")
     .map((item) => item.trim())
@@ -86,10 +86,10 @@ const number = (value: string | null): number | null => {
 const direction = (value: string | null): DirectionChoice => (value === "long" || value === "short" ? value : "both");
 
 const families = (value: string | null): Family[] =>
-  list(value).filter((item): item is Family => (FAMILIES as readonly string[]).includes(item));
+  commaList(value).filter((item): item is Family => (FAMILIES as readonly string[]).includes(item));
 
 export const tickerList = (text: string): string[] =>
-  list(text.replace(/[\s;]+/g, ",")).map((ticker) => ticker.toUpperCase());
+  commaList(text.replace(/[\s;]+/g, ",")).map((ticker) => ticker.toUpperCase());
 
 export function readUniverse(params: URLSearchParams): Universe {
   return { watchlist: params.get("w") ?? "", tickers: params.get("t") ?? "" };
@@ -170,7 +170,7 @@ export function writeEdgeForm(form: EdgeForm): URLSearchParams {
   writeUniverse(params, form.universe);
   if (form.direction !== "both") params.set("dir", form.direction);
   if (form.families.length) params.set("fam", form.families.join(","));
-  setIf(params, "h", list(form.horizons).join(","));
+  setIf(params, "h", commaList(form.horizons).join(","));
   setIf(params, "n", form.minEvents);
   setIf(params, "p", form.period);
   writeOverrides(params, SIGNALS_PREFIX, form.signalParams);
@@ -178,7 +178,7 @@ export function writeEdgeForm(form: EdgeForm): URLSearchParams {
 }
 
 export function parseHorizons(text: string): number[] {
-  return list(text)
+  return commaList(text)
     .map(Number)
     .filter((value) => Number.isInteger(value) && value > 0);
 }
@@ -202,7 +202,7 @@ export function edgeBody(form: EdgeForm): EdgeIn | null {
 
 /** Rules the URL leaves out are the server's defaults. */
 export function readBacktestForm(params: URLSearchParams, defaults: RuleDefaults): BacktestForm {
-  const engines = list(params.get("eng"));
+  const engines = commaList(params.get("eng"));
   return { ...readBacktestSetup(params, defaults), engines: engines.length ? engines : ["vectorized"] };
 }
 
@@ -214,8 +214,8 @@ export function readBacktestRules(params: URLSearchParams, defaults: RuleDefault
   const signal = params.get("signal") ?? "";
   const entry = params.get("entry") || defaults.default_entry;
   const exitList = params.get("exit");
-  const exits = exitList === null ? [...defaults.default_exits] : list(exitList).filter((name) => name !== "none");
-  const filters = list(params.get("filter"));
+  const exits = exitList === null ? [...defaults.default_exits] : commaList(exitList).filter((name) => name !== "none");
+  const filters = commaList(params.get("filter"));
   const { settings, exitParams } = moveLegacyExitSettings(
     readOverrides(params, SETTINGS_PREFIX),
     readOverrides(params, EXIT_PREFIX),
