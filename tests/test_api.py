@@ -650,6 +650,78 @@ def test_rotation_backtest_rejects_what_it_cannot_run(client):
     assert status(watchlist="nope") == 404
 
 
+def test_rotation_sweep(client):
+    setup = {
+        "watchlist": "demo",
+        "ranking": {"name": "momentum", "params": {"lookback": 126, "skip": 0}},
+        "rebalance": "weekly",
+        "settings": {"rotation": {"holdings": 2, "absolute_lookback": 63}},
+    }
+    axes = [
+        {"target": "settings", "owner": "rotation", "name": "holdings", "values": [1, 2]},
+        {"target": "ranking", "name": "lookback", "values": [63, 126, 189]},
+    ]
+    response = client.post("/api/rotation-sweep", json={**setup, "axes": axes})
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert (data["universe"], data["engine"], data["buy_hold_benchmark"], data["missing"]) == (
+        "demo", "vectorized", "SPY", []
+    )  # fmt: skip
+    assert data["rotation"] == {"holdings": 2, "absolute_lookback": 63, "rebalance": "weekly", "safe_asset": None}
+    assert data["ranking"]["params"] == {"lookback": 126, "skip": 0}
+    holdings, lookback = data["axes"]
+    assert (holdings["key"], holdings["label"], holdings["kind"], holdings["current"]) == (
+        "settings.rotation.holdings", "Holdings", "int", 2
+    )  # fmt: skip
+    assert (lookback["key"], lookback["owner"], lookback["unit"], lookback["current"]) == (
+        "ranking.lookback", None, "bars", 126
+    )  # fmt: skip
+    assert [cell["values"] for cell in data["cells"]] == [[1, 63], [1, 126], [1, 189], [2, 63], [2, 126], [2, 189]]
+    assert all(cell["error"] is None and cell["in_sample_stats"]["rebalances"] > 0 for cell in data["cells"])
+
+    # The setup's cell is the rotation's in-sample and out-of-sample run.
+    rotation = client.post("/api/rotation-backtest", json=setup).json()
+    (run,) = rotation["runs"]
+    assert data["split"] == rotation["split"]
+    assert (data["start"], data["end"]) == (rotation["start"], rotation["end"])
+    cell = data["cells"][4]
+    assert cell["in_sample"] == run["in_sample"]["metrics"]
+    assert cell["out_of_sample"] == run["out_of_sample"]["metrics"]
+    assert cell["out_of_sample_stats"] == run["out_of_sample"]["stats"]
+
+    weights = [{"target": "weighting", "name": "lookback", "values": [20, 40]}]
+    inverse = {**setup, "weighting": {"name": "inverse_volatility"}, "axes": weights}
+    weighted = client.post("/api/rotation-sweep", json=inverse).json()
+    assert weighted["axes"][0]["label"] == "Volatility lookback"
+    assert weighted["cells"][0]["out_of_sample"] != weighted["cells"][1]["out_of_sample"]
+
+
+def test_rotation_sweep_limits_and_errors(client):
+    limits = client.get("/api/config").json()["rotation_sweep"]
+    assert limits == {
+        "max_axes": 2, "min_values": 2, "max_values": 50, "max_combinations": 200,
+        "sections": ["rotation", "backtest"], "fixed": ["backtest.oos_pct"], "min_period_bars": 60,
+    }  # fmt: skip
+
+    def status(*axes, **extra):
+        body = {"watchlist": "demo", "axes": list(axes), **extra}
+        return client.post("/api/rotation-sweep", json=body).status_code
+
+    skip = {"target": "ranking", "name": "skip", "values": [0, 21]}
+    assert status(skip) == 200
+    assert status({**skip, "values": [0, 300]}) == 400  # outside the declared range
+    assert status({**skip, "values": [0]}) == 422
+    assert status({"target": "ranking", "name": "periods", "values": [63, 126]}) == 400
+    assert status({"target": "weighting", "name": "lookback", "values": [20, 40]}) == 400  # equal weights have none
+    assert status({"target": "settings", "owner": "backtest", "name": "oos_pct", "values": [20, 30]}) == 400
+    assert status({"target": "settings", "owner": "account", "name": "equity", "values": [1e4, 2e4]}) == 400
+    assert status({"target": "signal", "name": "fast", "values": [5, 6]}) == 422
+    assert status(skip, engines=["cerebro"]) == 422  # engines belong to rotations
+    assert status(skip, ranking={"name": "score"}) == 400
+    assert status(skip, watchlist="nope") == 404
+    assert status() == 422
+
+
 def test_portfolio_backtest_with_the_score_priority(client):
     def run(settings):
         body = {"watchlist": "demo", "signal": "connors_rsi2_long", "priority": {"name": "score"}, "settings": settings}

@@ -63,6 +63,79 @@ class RotationRun:
 
 
 @dataclass(frozen=True)
+class ResolvedRotation:
+    """A rotation request with its settings applied and its rules built."""
+
+    settings: Settings
+    config: BacktestConfig
+    rotation: RotationConfig
+    ranking: PriorityRule
+    weighting: WeightRule
+    benchmark: str  # compared by buy & hold
+
+
+@dataclass(frozen=True)
+class RotationData:
+    """The bars a rotation reads, loaded once."""
+
+    frames: dict[str, pd.DataFrame]  # the watchlist's tickers with data, in its order
+    safe_frame: pd.DataFrame | None  # the safe asset's when it is not in the watchlist
+    benchmark_close: pd.Series  # on the benchmark's own dates
+    missing: list[str]  # tickers of the watchlist without data
+
+
+def resolve_rotation(
+    request: RotationRequest,
+    settings: Settings,
+    priorities: RuleRegistry[PriorityRule],
+    weightings: RuleRegistry[WeightRule],
+) -> ResolvedRotation:
+    """Shared by the rotation and its sweep, which resolves every combination of its swept values."""
+    applied = settings.with_overrides(request.settings)
+    choice = request.ranking or RuleChoice(DEFAULT_RANKING)
+    names = [rule.name for rule in ranking_rules(priorities)]
+    if choice.name not in names:
+        raise ValueError(f"Unknown ranking rule '{choice.name}'. Use: {', '.join(names)}")
+    weighting = request.weighting or RuleChoice(DEFAULT_WEIGHTING)
+    safe = request.safe_asset.strip().upper() if request.safe_asset and request.safe_asset.strip() else None
+    return ResolvedRotation(
+        settings=applied,
+        config=build_backtest_config(applied),
+        rotation=build_rotation_config(applied, request.rebalance, safe),
+        ranking=priorities.create(choice.name, choice.params),
+        weighting=weightings.create(weighting.name, weighting.params),
+        benchmark=benchmark_ticker(request.benchmark, request.universe, applied),
+    )
+
+
+def load_rotation(market_data: MarketData, request: RotationRequest, resolved: ResolvedRotation) -> RotationData:
+    """The watchlist's, the benchmark's and the safe asset's bars; refuses a run without the data it needs."""
+    tickers = list(request.universe.tickers)
+    benchmark, safe = resolved.benchmark, resolved.rotation.safe_asset
+    extra = [benchmark, safe] if safe else [benchmark]
+    loaded = market_data.load([*tickers, *extra], request.period or resolved.settings.backtest.period, request.interval)
+    frames = {ticker: loaded.frames[ticker] for ticker in tickers if ticker in loaded.frames}
+    if not frames:
+        raise ValueError(f"No data for any ticker of {request.universe.name}")
+    if benchmark not in loaded.frames:
+        raise ValueError(f"No data for the benchmark {benchmark}, which buy & hold compares")
+    if safe and safe not in loaded.frames:
+        raise ValueError(f"No data for the safe asset {safe}")
+    return RotationData(
+        frames=frames,
+        safe_frame=loaded.frames[safe] if safe and safe not in frames else None,
+        benchmark_close=loaded.frames[benchmark]["close"],
+        missing=[ticker for ticker in loaded.missing if ticker in tickers],
+    )
+
+
+NO_REBALANCE = (
+    "No rebalance had a ticker to pick: the history is shorter than the ranking, weighting or absolute "
+    "momentum lookback"
+)
+
+
+@dataclass(frozen=True)
 class RotationReport:
     universe: Watchlist
     settings: Settings
@@ -102,13 +175,6 @@ class RotationUseCase:
     def weightings(self) -> RuleRegistry[WeightRule]:
         return self._weightings
 
-    def _ranking(self, choice: RuleChoice | None) -> PriorityRule:
-        choice = choice or RuleChoice(DEFAULT_RANKING)
-        names = [rule.name for rule in self.rankings]
-        if choice.name not in names:
-            raise ValueError(f"Unknown ranking rule '{choice.name}'. Use: {', '.join(names)}")
-        return self._priorities.create(choice.name, choice.params)
-
     def run(self, request: RotationRequest) -> RotationReport:
         engines = request.engines
         unknown = [name for name in engines if name not in self._engines]
@@ -116,50 +182,28 @@ class RotationUseCase:
             raise ValueError(
                 f"Unknown engine(s): {', '.join(unknown) or 'none given'}. Use: {', '.join(self._engines)}"
             )
-        settings = self._settings.with_overrides(request.settings)
-        ranking = self._ranking(request.ranking)
-        weighting_choice = request.weighting or RuleChoice(DEFAULT_WEIGHTING)
-        weighting = self._weightings.create(weighting_choice.name, weighting_choice.params)
-        safe = request.safe_asset.strip().upper() if request.safe_asset and request.safe_asset.strip() else None
-        rotation = build_rotation_config(settings, request.rebalance, safe)
-        config = build_backtest_config(settings)
-        universe = request.universe
-        benchmark = benchmark_ticker(request.benchmark, universe, settings)
-
-        tickers = list(universe.tickers)
-        extra = [benchmark, safe] if safe else [benchmark]
-        loaded = self._market_data.load(
-            [*tickers, *extra], request.period or settings.backtest.period, request.interval
-        )
-        frames = {ticker: loaded.frames[ticker] for ticker in tickers if ticker in loaded.frames}
-        if not frames:
-            raise ValueError(f"No data for any ticker of {universe.name}")
-        if benchmark not in loaded.frames:
-            raise ValueError(f"No data for the benchmark {benchmark}, which buy & hold compares")
-        if safe and safe not in loaded.frames:
-            raise ValueError(f"No data for the safe asset {safe}")
-        safe_frame = loaded.frames[safe] if safe and safe not in frames else None
+        resolved = resolve_rotation(request, self._settings, self._priorities, self._weightings)
+        data = load_rotation(self._market_data, request, resolved)
+        frames, safe_frame = data.frames, data.safe_frame
+        config, rotation, ranking, weighting = resolved.config, resolved.rotation, resolved.ranking, resolved.weighting
 
         built = [self._engines[name]() for name in engines]
         results = [engine.run(frames, config, rotation, ranking, weighting, safe_frame) for engine in built]
         first = results[0]
         if not first.rebalances:
-            raise ValueError(
-                "No rebalance had a ticker to pick: the history is shorter than the ranking, weighting or absolute "
-                "momentum lookback"
-            )
+            raise ValueError(NO_REBALANCE)
         # Every engine picks with the same `targets`, so every run starts at the same rebalance.
         dates = bar_dates(first.equity)
         split = split_history(dates, config.oos_pct)
-        close = loaded.frames[benchmark]["close"]
+        close = data.benchmark_close
         return RotationReport(
-            universe=universe,
-            settings=settings,
+            universe=request.universe,
+            settings=resolved.settings,
             config=config,
             rotation=rotation,
             ranking=ranking,
             weighting=weighting,
-            benchmark=benchmark,
+            benchmark=resolved.benchmark,
             benchmark_close=close.astype(float).reindex(first.equity.index, method="ffill"),
             dates=dates,
             split=split,
@@ -168,7 +212,7 @@ class RotationUseCase:
                 _rotation_run(engine, result, frames, config, rotation, ranking, weighting, safe_frame, close, split)
                 for engine, result in zip(built, results, strict=True)
             ],
-            missing=[ticker for ticker in loaded.missing if ticker in tickers],
+            missing=data.missing,
         )
 
 

@@ -23,6 +23,7 @@ from tradescan.services.market import MarketUseCase
 from tradescan.services.market_data import MarketData
 from tradescan.services.portfolio import PortfolioEngineFactory, PortfolioUseCase
 from tradescan.services.rotation import RotationEngineFactory, RotationUseCase
+from tradescan.services.rotation_sweep import RotationSweepUseCase
 from tradescan.services.scan import ScanUseCase
 from tradescan.services.sweep import SweepGridBuilder, SweepUseCase
 from tradescan.services.walk_forward import WalkForwardUseCase
@@ -78,6 +79,7 @@ class UseCases:
     watchlist_backtest: WatchlistBacktestUseCase
     portfolio: PortfolioUseCase
     rotation: RotationUseCase
+    rotation_sweep: RotationSweepUseCase
     chart: ChartUseCase
 
 
@@ -107,5 +109,6 @@ def build_use_cases(
             market_data, settings, registry, portfolio_engines or default_portfolio_engines(), rules
         ),
         rotation=RotationUseCase(market_data, settings, rotation_engines or default_rotation_engines()),
+        rotation_sweep=RotationSweepUseCase(market_data, settings, task_runner),
         chart=ChartUseCase(market_data, registry),
     )

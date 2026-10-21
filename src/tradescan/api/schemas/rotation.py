@@ -10,10 +10,10 @@ from tradescan.api.schemas.portfolio import PortfolioTradeOut, TickerContributio
 from tradescan.backtest.rotation import Rebalance
 
 
-class RotationIn(UniverseIn):
-    """`settings.rotation` sets the holdings and the absolute momentum lookback."""
+class RotationSetupIn(UniverseIn):
+    """One rotation's setup, shared by a rotation and its sweep. `settings.rotation` sets the holdings and the absolute
+    momentum lookback."""
 
-    engines: list[str] = Field(default_factory=lambda: ["vectorized"], min_length=1)
     ranking: RuleIn | None = Field(None, description="How the tickers are ranked; omit for the default ranking")
     weighting: RuleIn | None = Field(None, description="How the picks share the equity; omit for the default weighting")
     rebalance: Rebalance = Field(Rebalance.MONTHLY, description="Rebalance at the last close of every week or month")
@@ -29,6 +29,10 @@ class RotationIn(UniverseIn):
         None, description="Benchmark for buy & hold; omit for the watchlist's, else the configured benchmark"
     )
     period: str | None = None
+
+
+class RotationIn(RotationSetupIn):
+    engines: list[str] = Field(default_factory=lambda: ["vectorized"], min_length=1)
 
 
 class RotationConfigOut(BaseModel):

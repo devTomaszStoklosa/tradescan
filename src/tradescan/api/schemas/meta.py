@@ -81,4 +81,7 @@ class ConfigOut(BaseModel):
     default_weighting: str
     rebalances: list[Rebalance] = Field(description="How often a rotation rebalances")
     sweep: SweepLimitsOut
+    rotation_sweep: SweepLimitsOut = Field(
+        description="The rotation sweep's limits: the sweep's, with the settings a rotation reads"
+    )
     walk_forward: WalkForwardLimitsOut
