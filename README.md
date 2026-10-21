@@ -18,7 +18,8 @@ Trading signal scanner for daily bars: **vectorized pandas signals on yfinance d
 - one setup as a portfolio with one shared equity: a cap on open positions and on exposure, a priority when
   more signals fire than fit, and portfolio metrics, with Cerebro as a reference that produces the same trades
 - a momentum rotation: the strongest tickers of a watchlist, rebalanced weekly or monthly, with the slots of
-  falling picks in a safe asset or cash, and Cerebro as a reference that produces the same trades
+  falling picks in a safe asset or cash, Cerebro as a reference that produces the same trades, and sweeps of
+  its parameters shown as in-sample and out-of-sample heatmaps
 - a trade journal: real trades with notes and the pinned backtest that suggested each, its R next to the
   backtest's
 - a React web UI on top of a small FastAPI server (`tradescan serve`), which keeps pinned runs and the journal
@@ -83,6 +84,10 @@ the built UI. The screens:
   & hold, the share held defensively and the turnover, equity and holdings over time, what a rebalance at the
   last close would pick, metrics and rotation stats in-sample and out-of-sample, each ticker's contribution
   and every holding. **Pin run** keeps the shown engine's run for Compare.
+- **Rotation sweep**: the same rotation as Rotation over a range of one or two of its parameters (the ranking's
+  and the weighting's, the holdings, the absolute momentum lookback or the costs), as two heatmaps of a metric
+  you pick: in-sample and out-of-sample. Click a cell for its metrics and rotation stats, the average of its
+  neighbours, and a link that opens it on the Rotation page.
 - **Edge**: signal statistics across a watchlist at several horizons, coloured by edge.
 - **Compare**: backtest, portfolio and rotation runs pinned with **Pin run** on the Backtest, Portfolio and
   Rotation pages, side by side: the parameters that differ (for a portfolio also its universe, max positions,
@@ -163,6 +168,7 @@ tradescan walk-forward SPY connors_rsi2_long --axis signal.oversold=5:25:2.5 --a
 tradescan watchlist-backtest connors_rsi2_long -w etf --filters market --metric expectancy_r
 tradescan portfolio-backtest donchian_breakout -w sp500 --filters trend --max-positions 10 --priority momentum
 tradescan rotation-backtest -w etf --holdings 3 --weighting inverse_volatility --safe-asset TLT
+tradescan rotation-sweep -w etf --safe-asset TLT --axis settings.rotation.holdings=2:6:1 --axis ranking.lookback=126:252:42
 tradescan scan -w crypto --lot-size 0.0001
 tradescan update-universes
 ```
@@ -178,6 +184,7 @@ tradescan update-universes
 | `watchlist-backtest` | The `backtest` setup (without the ticker) on every ticker of `-w`/`-t` with the vectorized engine: the best `--top` tickers by `--metric` with their in-sample and out-of-sample values, the spread of `--metric` across tickers and all trades pooled; `--export` saves every ticker with every period's metrics. |
 | `portfolio-backtest` | The `backtest` setup (without the ticker and without pyramiding) on every ticker of `-w`/`-t` with one shared equity: `--max-positions` and `--max-exposure` (% of equity) cap it, `--priority` ranks the signals when more fire than fit (`score` reads `[scoring]`, `[trend]` and `[scan] fresh_bars` from the settings file), `--engine` picks the engine (or `both`). Prints every engine's metrics and portfolio stats for the full history and both periods and the `--top` tickers by P&L; `--export` saves every engine's trades. |
 | `rotation-backtest` | A momentum rotation over every ticker of `-w`/`-t`: `--rank` ranks them (default `momentum`), `--holdings` picks the top N, `--rebalance` is `weekly` or `monthly` (default), `--weighting` is `equal` (default) or `inverse_volatility`, `--absolute-lookback` sets the absolute momentum check (0 turns it off) and `--safe-asset` takes the slots of the picks that fail it (default cash). `--engine` is `vectorized` (default), `cerebro` or `both`. Prints each engine's metrics and rotation stats for the full run and both periods, what a rebalance at the last close would pick and the `--top` tickers by P&L; `--export` saves every engine's trades. |
+| `rotation-sweep` | The `rotation-backtest` setup (without `--engine`) over one or two `--axis` parameters: `ranking.<name>`, `weighting.<name>`, `settings.rotation.<name>` or `settings.backtest.<name>` with values as in `sweep`, as in-sample and out-of-sample grids of `--metric`; `--export` saves every combination with both periods' metrics and rotation stats. |
 | `list-signals` | All signals with family, direction, scoring weight and rule. |
 | `update-universes` | Refresh the `sp500` and `nasdaq100` watchlists from Wikipedia's constituent tables (`--only sp500`). |
 | `serve` | Web UI and HTTP API; `--db` sets the SQLite file for the pinned runs and the journal (default `tradescan.db`). |
@@ -485,6 +492,17 @@ backtest; an order still waiting at the next rebalance is cancelled. It is the r
 a minute per 20 tickers of 10-year history. The pandas engine runs 20 ETFs over 10 years in about a second
 once the data is cached.
 
+**Rotation sweeps.** A rotation sweep runs one rotation for every combination of one or two parameters' values,
+with the same limits as a sweep, each on both periods, with the pandas engine on all CPU cores. Any
+single-number parameter of the ranking rule (`momentum`'s lookback and skip; `relative_strength`'s lookbacks are
+lists), of the weighting rule (`inverse_volatility`'s lookback) or of the `rotation` and `backtest` settings can be
+swept, except the out-of-sample share. Every combination is split at the date that splits the setup's own run,
+so every out-of-sample result covers the same dates and the setup's cell is the run the Rotation page shows. A
+combination that breaks a rule between parameters (a skip that is not below the lookback), or whose lookbacks
+leave a period without a rebalance that can pick a ticker, is shown as failed. Every combination runs the
+rotation twice over the whole watchlist: 9 combinations of 20 ETFs over 10 years take about 3 seconds, and 100
+tickers take about a second per combination, twice that when rebalancing weekly.
+
 ## Configuration
 
 `config/settings.toml` holds account size, risk per trade, ATR stop multiple, targets, freshness,
@@ -515,8 +533,10 @@ signals and rules; a single run can override any of them without touching the fi
   parameters as `"score_signal_params": {"donchian_breakout": {"period": 55}}`); a rotation
   (`/api/rotation-backtest`) takes the universe, `"ranking"` and `"weighting"` rules with their
   `"params"`, `"rebalance": "weekly"`, `"safe_asset": "TLT"`, `"settings": {"rotation": {"holdings": 3}}` and
-  `"engines"`;
-  `/api/config` lists the settings, the rules and the sweep limits, `/api/signals` the signals, each
+  `"engines"`, and a rotation sweep (`/api/rotation-sweep`) the same rotation without the engines and
+  `"axes": [{"target": "ranking", "name": "lookback", "values": [126, 189, 252]}]` (targets `ranking`,
+  `weighting` and `settings` with the section as `"owner"`);
+  `/api/config` lists the settings, the rules and both sweeps' limits, `/api/signals` the signals, each
   parameter with its range;
 - on the CLI, through the existing flags (`--atr-mult`, `--fresh`, `--equity`, `--target-r`, `--max-units`, `--oos`, ...).
 
@@ -580,7 +600,7 @@ The code follows SOLID; each extension point is a new class, not an edit to exis
   in `storage/database.py` (never edit an existing one: files written by older versions are upgraded from it).
 
 The use cases in `services/`, one module each (scan, market, edge, backtest, sweep, walk-forward, watchlist
-backtest, portfolio, rotation, chart), hold the workflow; `cli/` and `api/` only translate input and output.
+backtest, portfolio, rotation, rotation sweep, chart), hold the workflow; `cli/` and `api/` only translate input and output.
 `build_use_cases` (in `services/composition.py`) and `create_app` wire concrete classes.
 
 ## Limitations
