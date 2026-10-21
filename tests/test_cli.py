@@ -270,6 +270,52 @@ def test_rotation_backtest_on_both_engines_exports_every_engines_trades(provider
     pd.testing.assert_frame_equal(vectorized.reset_index(drop=True), cerebro.reset_index(drop=True), rtol=1e-6)
 
 
+def test_rotation_sweep_prints_both_grids_and_exports_every_combination(provider, tmp_path, capsys):
+    target = tmp_path / "cells.csv"
+    code = cli.main([
+        "rotation-sweep", "-t", "AAA,BBB,CCC,ZZZ", "--holdings", "2", "--rebalance", "weekly",
+        "--axis", "settings.rotation.holdings=1:3:1", "--axis", "ranking.lookback=126,252",
+        "--metric", "total_return_pct", "--export", str(target),
+    ])  # fmt: skip
+    assert code == 0
+    output = " ".join(capsys.readouterr().out.split())
+    assert "No data for: ZZZ" in output
+    assert (
+        "6 combinations of holdings (Holdings) x lookback (Lookback) on the top 2 of custom, rebalanced weekly"
+        in output
+    )
+    assert "In-sample," in output
+    assert "Out-of-sample (last 30%)" in output
+    assert "holdings=3" in output
+    assert "lookback=126" in output
+    cells = pd.read_csv(target)
+    assert list(cells["settings.rotation.holdings"]) == [1, 1, 2, 2, 3, 3]
+    assert list(cells["ranking.lookback"]) == [126, 252] * 3
+    assert {"error", "is_sharpe", "oos_total_return_pct", "is_turnover_pct", "oos_rebalances"} <= set(cells.columns)
+    assert provider.calls[-1][0] == ("AAA", "BBB", "CCC", "ZZZ", "SPY")
+
+
+@pytest.mark.parametrize(
+    "axis",
+    [
+        "holdings=1:3:1",
+        "signal.oversold=5,10",
+        "settings.rotation.holdings",
+        "settings.backtest.oos_pct=20,30",
+        "settings.account.equity=1000,2000",
+        "weighting.lookback=20,63",
+    ],
+)
+def test_rotation_sweep_axis_errors(provider, axis):
+    assert cli.main(["rotation-sweep", "-t", "AAA,BBB", "--axis", axis]) == 2
+
+
+def test_rotation_axes_take_the_rotation_targets():
+    axis = inputs.rotation_axis("settings.rotation.absolute_lookback=0:126:63")
+    assert (axis.key, axis.values) == ("settings.rotation.absolute_lookback", (0, 63, 126))
+    assert inputs.rotation_axis("weighting.lookback=20,63").owner == ""
+
+
 def test_backtest_and_sweep_still_take_a_ticker(provider):
     assert cli.build_parser().parse_args(["backtest", "AAA", "connors_rsi2_long"]).ticker == "AAA"
     assert (

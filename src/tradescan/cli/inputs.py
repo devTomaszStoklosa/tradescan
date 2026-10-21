@@ -6,10 +6,13 @@ import argparse
 import math
 from pathlib import Path
 
+from tradescan.backtest.rotation import Rebalance
+from tradescan.backtest.rotation_sweep import RotationSweepAxis, RotationSweepTarget
 from tradescan.backtest.sweep import MAX_VALUES, SweepAxis, SweepTarget
 from tradescan.backtest.trade_rules import RuleChoice, default_catalog
 from tradescan.services.backtest import BacktestRequest
 from tradescan.services.market_data import SignalFilter
+from tradescan.services.rotation import RotationRequest
 from tradescan.signals import Direction, Family
 from tradescan.watchlist import Watchlist, from_tickers, load_watchlist
 
@@ -91,20 +94,32 @@ def backtest_request(args: argparse.Namespace, ticker: str, engines: tuple[str, 
 
 def axis(text: str) -> SweepAxis:
     """`target[.owner].name=FROM:TO:STEP` or `target[.owner].name=V1,V2,...`, e.g. `signal.oversold=5:20:5`."""
-    usage = f"--axis {text}: use target[.owner].name=FROM:TO:STEP or =V1,V2,..., e.g. signal.oversold=5:20:5"
+    targets = [target.value for target in SweepTarget]
+    target, owner, name, numbers = _axis_parts(text, targets, "signal.oversold=5:20:5")
+    return SweepAxis(SweepTarget(target), name, numbers, owner=owner)
+
+
+def rotation_axis(text: str) -> RotationSweepAxis:
+    """A rotation sweep's axis in the same form, e.g. `ranking.lookback=126:252:42`."""
+    targets = [target.value for target in RotationSweepTarget]
+    target, owner, name, numbers = _axis_parts(text, targets, "ranking.lookback=126:252:42")
+    return RotationSweepAxis(RotationSweepTarget(target), name, numbers, owner=owner)
+
+
+def _axis_parts(text: str, targets: list[str], example: str) -> tuple[str, str, str, tuple[float, ...]]:
+    """The target, the owner (empty without one), the name and the values of `--axis text`."""
+    usage = f"--axis {text}: use target[.owner].name=FROM:TO:STEP or =V1,V2,..., e.g. {example}"
     key, separator, values = text.partition("=")
     parts = key.strip().split(".")
     if not separator or len(parts) not in (2, 3) or not all(parts):
         raise ValueError(usage)
-    if parts[0] not in {target.value for target in SweepTarget}:
-        raise ValueError(
-            f"--axis {text}: the target must be one of {', '.join(target.value for target in SweepTarget)}"
-        )
+    if parts[0] not in targets:
+        raise ValueError(f"--axis {text}: the target must be one of {', '.join(targets)}")
     try:
         numbers = axis_values(values)
     except ValueError as error:
         raise ValueError(f"{usage} ({error})") from None
-    return SweepAxis(SweepTarget(parts[0]), parts[-1], numbers, owner=parts[1] if len(parts) == 3 else "")
+    return parts[0], parts[1] if len(parts) == 3 else "", parts[-1], numbers
 
 
 def axis_values(text: str) -> tuple[float, ...]:
@@ -117,6 +132,32 @@ def axis_values(text: str) -> tuple[float, ...]:
     if count > MAX_VALUES:
         raise ValueError(f"that is {count} values, at most {MAX_VALUES}")
     return tuple(round(start + index * step, 10) for index in range(count))
+
+
+def rotation_request(args: argparse.Namespace, universe: Watchlist, engines: tuple[str, ...]) -> RotationRequest:
+    """The setup flags shared by `rotation-backtest` and `rotation-sweep`."""
+    return RotationRequest(
+        universe=universe,
+        ranking=RuleChoice(args.rank) if args.rank else None,
+        weighting=RuleChoice(args.weighting) if args.weighting else None,
+        rebalance=Rebalance(args.rebalance),
+        safe_asset=args.safe_asset,
+        settings=overrides(
+            {
+                "account": {"equity": args.equity, "lot_size": args.lot_size},
+                "backtest": {
+                    "commission_pct": args.commission_pct,
+                    "slippage_pct": args.slippage_pct,
+                    "oos_pct": args.oos,
+                },
+                "rotation": {"holdings": args.holdings, "absolute_lookback": args.absolute_lookback},
+            }
+        ),
+        benchmark=args.benchmark,
+        period=args.period,
+        interval=args.interval,
+        engines=engines,
+    )
 
 
 def split(value: str | None) -> list[str]:

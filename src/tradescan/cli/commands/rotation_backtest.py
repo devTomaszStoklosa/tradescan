@@ -6,48 +6,18 @@ import argparse
 
 import pandas as pd
 
-from tradescan.backtest.priority import priority_rules
-from tradescan.backtest.rotation import DEFAULT_RANKING, Rebalance, ranking_rules
-from tradescan.backtest.trade_rules import RuleChoice
-from tradescan.backtest.weighting import DEFAULT_WEIGHTING, weight_rules
 from tradescan.cli import arguments, inputs, output, wiring
 from tradescan.cli.command import Command
 from tradescan.config import Settings
 from tradescan.report.console import ConsoleReport
 from tradescan.report.tables import contributions_frame, portfolio_trades_frame, rotation_metrics_frame, targets_frame
 from tradescan.services.composition import default_rotation_engines
-from tradescan.services.rotation import RotationRequest
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     arguments.add_universe_args(parser)
     arguments.add_data_args(parser)
-    parser.add_argument(
-        "--rank",
-        choices=[rule.name for rule in ranking_rules(priority_rules)],
-        help=f"how the tickers are ranked (default {DEFAULT_RANKING})",
-    )
-    parser.add_argument("--holdings", type=int, help="tickers picked at each rebalance (default 5)")
-    parser.add_argument("--rebalance", choices=[item.value for item in Rebalance], default=Rebalance.MONTHLY.value)
-    parser.add_argument(
-        "--weighting",
-        choices=weight_rules.names(),
-        help=f"how the picks share the equity (default {DEFAULT_WEIGHTING})",
-    )
-    parser.add_argument(
-        "--absolute-lookback",
-        type=int,
-        help="a pick at or below 0 over this many bars goes to the safe asset (0: off, default 252)",
-    )
-    parser.add_argument(
-        "--safe-asset", help="ticker for the slots of picks that fail the check, e.g. TLT (default: cash)"
-    )
-    parser.add_argument("--benchmark", help="buy & hold benchmark (default: the watchlist's, else scan.benchmark)")
-    parser.add_argument("--equity", type=float, help="account size")
-    parser.add_argument("--lot-size", type=float, help="size step, e.g. 0.0001 for crypto")
-    parser.add_argument("--commission-pct", type=float)
-    parser.add_argument("--slippage-pct", type=float)
-    parser.add_argument("--oos", type=float, help="out-of-sample share of the run in %% (10-50, default 30)")
+    arguments.add_rotation_setup_args(parser)
     parser.add_argument("--engine", choices=arguments.ENGINE_CHOICES, default="vectorized")
     parser.add_argument("--top", type=int, default=15, help="tickers to show, largest P&L first (0: all)")
     parser.add_argument("--export", help="save every engine's trades to .csv or .json")
@@ -56,25 +26,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 def run(args: argparse.Namespace, settings: Settings, report: ConsoleReport) -> int:
     universe = inputs.universe(args)
     output.loading(report, len(universe.tickers), args.period or settings.backtest.period)
-    overrides = inputs.overrides(
-        {
-            "account": {"equity": args.equity, "lot_size": args.lot_size},
-            "backtest": {"commission_pct": args.commission_pct, "slippage_pct": args.slippage_pct, "oos_pct": args.oos},
-            "rotation": {"holdings": args.holdings, "absolute_lookback": args.absolute_lookback},
-        }
-    )
-    request = RotationRequest(
-        universe=universe,
-        ranking=RuleChoice(args.rank) if args.rank else None,
-        weighting=RuleChoice(args.weighting) if args.weighting else None,
-        rebalance=Rebalance(args.rebalance),
-        safe_asset=args.safe_asset,
-        settings=overrides,
-        benchmark=args.benchmark,
-        period=args.period,
-        interval=args.interval,
-        engines=tuple(default_rotation_engines()) if args.engine == "both" else (args.engine,),
-    )
+    engines = tuple(default_rotation_engines()) if args.engine == "both" else (args.engine,)
+    request = inputs.rotation_request(args, universe, engines)
     result = wiring.use_cases(settings, args).rotation.run(request)
     output.missing(report, result.missing)
     rotation, config, first = result.rotation, result.config, result.runs[0]
