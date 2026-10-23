@@ -96,8 +96,7 @@ def test_backtest_pyramiding_options(provider, tmp_path, capsys):
     trades = pd.read_csv(target)
     assert trades["units"].max() > 1
     assert trades["units"].max() <= 3
-    assert cli.main(["portfolio-backtest", "donchian_breakout", "-t", "AAA,BBB", "--max-units", "2"]) == 2
-    assert "does not pyramid" in capsys.readouterr().out
+    assert cli.main(["portfolio-backtest", "donchian_breakout", "-t", "AAA,BBB", "--max-units", "2"]) == 0
 
 
 def test_backtest_filter_options(provider, capsys):

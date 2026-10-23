@@ -29,6 +29,7 @@ class PortfolioStats:
     orders: int  # entry orders placed
     skipped_no_slot: int  # signals skipped because every slot was taken
     skipped_no_room: int  # signals skipped because less than one lot fitted under the exposure cap
+    skipped_no_room_adds: int  # closes at which a position's next unit was not ordered for want of exposure room
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,7 @@ def portfolio_metrics(
         orders=result.orders,
         skipped_no_slot=result.no_slot,
         skipped_no_room=result.no_room,
+        skipped_no_room_adds=result.no_room_adds,
     )
     return PortfolioMetrics(metrics, stats)
 

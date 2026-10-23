@@ -106,10 +106,6 @@ class PortfolioUseCase:
         benchmark = benchmark_ticker(request.setup.benchmark, universe, self._settings)
         setup = replace(request.setup, benchmark=benchmark)
         base = resolve_backtest(setup, self._settings, self._registry, self._rules)
-        if base.config.max_units > 1:
-            raise ValueError(
-                f"The portfolio backtest does not pyramid: set pyramid.max_units to 1 (it is {base.config.max_units})"
-            )
         choice = request.priority or RuleChoice(DEFAULT_PRIORITY)
         priority = self._priorities.create(choice.name, choice.params)
         self._registry.check_params(request.score_signal_params)
