@@ -575,8 +575,8 @@ def test_portfolio_backtest(client):
         "/api/portfolio-backtest",
         json={"signal": "connors_rsi2_long", "watchlist": "demo", "settings": {"pyramid": {"max_units": 2}}},
     )
-    assert pyramided.status_code == 400
-    assert "does not pyramid" in pyramided.json()["detail"]
+    assert pyramided.status_code == 200
+    assert pyramided.json()["config"]["max_units"] == 2
 
 
 def test_rotation_backtest(client):

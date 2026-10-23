@@ -887,6 +887,7 @@ const portfolioStats = (overrides: Partial<PortfolioStatsOut> = {}): PortfolioSt
   orders: 120,
   skipped_no_slot: 30,
   skipped_no_room: 4,
+  skipped_no_room_adds: 0,
   ...overrides,
 });
 

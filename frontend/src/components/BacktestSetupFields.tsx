@@ -1,8 +1,8 @@
 /**
  * The fields of a backtest setup: ticker, signal and its parameters, entry filters, trade rules, pyramiding and costs. Shared by
  * Backtest, Sweep, Walk-forward, Watchlist and Portfolio; a setup without a `ticker` (one run on a whole watchlist) gets no ticker
- * field, the portfolio backtest, which does not pyramid, no pyramiding fields, and the walk-forward, whose windows split the
- * history, no out-of-sample share.
+ * field, the walk-forward, whose windows split the history, no out-of-sample share, and the engines that do not pyramid no
+ * pyramiding fields.
  */
 import { useMemo } from "react";
 

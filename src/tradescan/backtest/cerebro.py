@@ -11,6 +11,7 @@ hold several units of up to `max_position_pct` of equity each.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import pandas as pd
@@ -82,6 +83,7 @@ class TickerOrders:
         self._exit_orders: list[Any] = []  # backtrader orders
         self._exit_reasons: dict[int, str] = {}
         self._add_order: Any = None  # a backtrader order
+        self._add_value = 0.0  # the live add order's size times its price
         # The levels and reasons of the live exit orders, the add level and the size.
         self._levels: tuple[object, ...] | None = None
         self._closing = False
@@ -103,11 +105,17 @@ class TickerOrders:
     def _index(self) -> int:
         return len(self._data) - 1
 
-    def update(self, index: int) -> None:
+    @property
+    def add_value(self) -> float:
+        """The value of the live stop order for the next unit; 0 without one."""
+        return self._add_value if self._add_order is not None else 0.0
+
+    def update(self, index: int, add_fits: Callable[[float], bool] | None = None) -> None:
         """At the close of bar `index`: move the exit orders of an open position, or cancel an expired entry order
-        (a signal on the bar it expires may place a new one)."""
+        (a signal on the bar it expires may place a new one). `add_fits` is asked whether the order for the next
+        unit, given its value, may wait for the next bar; without it, it always may."""
         if self.position:
-            self._manage_exits(index)
+            self._manage_exits(index, add_fits)
             return
         if self._entry_order is not None:
             assert self._plan is not None
@@ -124,7 +132,7 @@ class TickerOrders:
         self._plan = plan
         self._signal = (index, pd.Timestamp(self._data.datetime.datetime(0)))
 
-    def _manage_exits(self, index: int) -> None:
+    def _manage_exits(self, index: int, add_fits: Callable[[float], bool] | None) -> None:
         if self._closing:
             return
         assert self._tracker is not None
@@ -135,6 +143,10 @@ class TickerOrders:
             self._closing = True
             return
         add = self._units.add_level() if self._units is not None else None
+        if add is not None and add_fits is not None:
+            assert self._plan is not None
+            if not add_fits(self._plan.size * add):
+                add = None
         levels = (orders.stop, orders.stop_reason, orders.target, orders.target_reason, add, abs(self.position.size))
         if levels != self._levels:
             self._cancel_exits()
@@ -160,6 +172,7 @@ class TickerOrders:
             assert self._plan is not None
             adder = self._strategy.buy if long else self._strategy.sell
             self._add_order = adder(data=self._data, size=self._plan.size, exectype=bt.Order.Stop, price=add, oco=stop)
+            self._add_value = self._plan.size * add
 
     def _cancel_exits(self) -> None:
         """Cancels the exit orders and the add order; cancelling one of a linked group cancels them all, and a second

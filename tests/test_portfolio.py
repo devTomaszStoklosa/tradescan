@@ -1,5 +1,5 @@
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, ClassVar
 
 import numpy as np
@@ -647,3 +647,45 @@ def test_contributions_add_up_to_the_portfolio_result():
     idle = rows[-1]
     assert (idle.trades, idle.pnl) == (0, 0.0)
     assert math.isnan(idle.win_rate_pct)
+
+
+# --- Pyramiding --------------------------------------------------------------------------------------
+
+PYRAMID = replace(NO_COSTS, max_units=3, add_every_atr=1.0)
+STOP_ONLY = TradeRules(exits=())
+RISING = {
+    22: (100.0, 102.5, 99.5, 102.0),  # touches the first add at 102
+    23: (102.0, 104.5, 101.5, 104.0),  # touches the second add at 104
+    24: (104.0, 106.0, 103.5, 105.0),  # the position is full
+    25: (104.0, 104.5, 99.0, 100.0),  # falls through the stop, moved to 104 - 4 = 100
+}
+
+
+def test_a_position_adds_units_and_keeps_its_one_slot(engine):
+    frames = {"A": _ticker(fire=(20,), overrides=RISING), "B": _ticker(fire=(21,))}
+    result = _run(engine, frames, PortfolioConfig(max_positions=1), rules=STOP_ONLY, config=PYRAMID)
+    (item,) = result.trades
+    assert item.ticker == "A"
+    assert [fill.price for fill in item.trade.adds] == [102.0, 104.0]
+    assert (item.trade.size, item.trade.exit_reason, item.trade.exit_price) == (750, ExitReason.STOP, 100.0)
+    assert item.trade.pnl == pytest.approx(250 * (0 - 2 - 4))  # the units filled at 100, 102 and 104 exit at 100
+    assert (result.no_slot, result.no_room_adds) == (1, 0)
+
+
+def test_adds_wait_for_room_under_the_exposure_cap(engine):
+    frames = {"A": _ticker(fire=(20,), overrides=RISING)}
+    capped = _run(engine, frames, PortfolioConfig(max_exposure_pct=40.0), rules=STOP_ONLY, config=PYRAMID)
+    (item,) = capped.trades
+    assert item.trade.adds == ()
+    assert capped.no_room_adds > 0
+    room = _run(engine, frames, PortfolioConfig(max_exposure_pct=100.0), rules=STOP_ONLY, config=PYRAMID)
+    assert len(room.trades[0].trade.adds) == 2
+    assert room.no_room_adds == 0
+
+
+def test_adds_take_the_room_before_new_signals(engine):
+    # At the close of bar 21 the cap holds A (25_000) and its add (25_500) but not B's entry: the add goes first.
+    frames = {"A": _ticker(fire=(20,), overrides=RISING), "B": _ticker(fire=(21,))}
+    result = _run(engine, frames, PortfolioConfig(max_exposure_pct=50.55), rules=STOP_ONLY, config=PYRAMID)
+    assert [len(item.trade.adds) for item in result.trades if item.ticker == "A"] == [1]
+    assert result.no_room == 1

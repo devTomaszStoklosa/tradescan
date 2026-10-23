@@ -71,7 +71,7 @@ the built UI. The screens:
   spread of a metric you pick across the tickers (worst, quartiles, median, best and the share above
   break-even) in-sample and out-of-sample, every ticker's trades pooled in R, and a sortable table of
   each ticker's metrics, where a ticker opens its own backtest.
-- **Portfolio**: the same setup as Watchlist, without pyramiding, with one shared equity, on either or
+- **Portfolio**: the same setup as Watchlist, with one shared equity, on either or
   both engines: the max positions, the max exposure and the priority rule with its parameters are editable (the scan score
   priority also offers the scanner's scoring, trend and fresh-signal settings and each signal's
   parameters and score weight, the traded signal's parameters coming from the setup); key metrics against
@@ -182,7 +182,7 @@ tradescan update-universes
 | `sweep` | The `backtest` setup over one or two `--axis` parameters (`target[.owner].name=FROM:TO:STEP` or `=V1,V2,...`), as in-sample and out-of-sample grids of `--metric`; `--export` saves every combination. |
 | `walk-forward` | The `backtest` setup with one or two `--axis` parameters as in `sweep`, re-tuned on `--windows` in-sample windows `--in-sample-ratio` times as long as the out-of-sample windows after them (`--scheme rolling` or `anchored`), each window picking the highest in-sample `--metric` with at least `--min-trades` trades: every window with its pick, the stitched out-of-sample metrics next to the unchanged setup, the walk-forward efficiency and the next setting; `--export` saves every window with both periods' metrics. |
 | `watchlist-backtest` | The `backtest` setup (without the ticker) on every ticker of `-w`/`-t` with the vectorized engine: the best `--top` tickers by `--metric` with their in-sample and out-of-sample values, the spread of `--metric` across tickers and all trades pooled; `--export` saves every ticker with every period's metrics. |
-| `portfolio-backtest` | The `backtest` setup (without the ticker and without pyramiding) on every ticker of `-w`/`-t` with one shared equity: `--max-positions` and `--max-exposure` (% of equity) cap it, `--priority` ranks the signals when more fire than fit (`score` reads `[scoring]`, `[trend]` and `[scan] fresh_bars` from the settings file), `--engine` picks the engine (or `both`). Prints every engine's metrics and portfolio stats for the full history and both periods and the `--top` tickers by P&L; `--export` saves every engine's trades. |
+| `portfolio-backtest` | The `backtest` setup (without the ticker) on every ticker of `-w`/`-t` with one shared equity: `--max-positions` and `--max-exposure` (% of equity) cap it, `--priority` ranks the signals when more fire than fit (`score` reads `[scoring]`, `[trend]` and `[scan] fresh_bars` from the settings file), `--engine` picks the engine (or `both`). Prints every engine's metrics and portfolio stats for the full history and both periods and the `--top` tickers by P&L; `--export` saves every engine's trades. |
 | `rotation-backtest` | A momentum rotation over every ticker of `-w`/`-t`: `--rank` ranks them (default `momentum`), `--holdings` picks the top N, `--rebalance` is `weekly` or `monthly` (default), `--weighting` is `equal` (default) or `inverse_volatility`, `--absolute-lookback` sets the absolute momentum check (0 turns it off) and `--safe-asset` takes the slots of the picks that fail it (default cash). `--engine` is `vectorized` (default), `cerebro` or `both`. Prints each engine's metrics and rotation stats for the full run and both periods, what a rebalance at the last close would pick and the `--top` tickers by P&L; `--export` saves every engine's trades. |
 | `rotation-sweep` | The `rotation-backtest` setup (without `--engine`) over one or two `--axis` parameters: `ranking.<name>`, `weighting.<name>`, `settings.rotation.<name>` or `settings.backtest.<name>` with values as in `sweep`, as in-sample and out-of-sample grids of `--metric`; `--export` saves every combination with both periods' metrics and rotation stats. |
 | `list-signals` | All signals with family, direction, scoring weight and rule. |
@@ -311,8 +311,7 @@ favour adds units, Turtle style:
 
 Both engines pyramid the same way. Neither refuses a fill for lack of cash (Cerebro's broker is set up as
 in the portfolio backtest), so several units can be worth more than the equity. Sweeps, walk-forwards and
-watchlist backtests pyramid too; the portfolio backtest and the rotation do not, and a portfolio backtest with
-`max_units` above 1 is refused.
+watchlist and portfolio backtests pyramid too (see the portfolio rules below); the rotation does not.
 
 Metrics: total return, CAGR, Sharpe, Sortino, max drawdown, win rate, profit factor, expectancy in R,
 SQN, exposure, buy & hold.
@@ -404,7 +403,7 @@ A setting that works on one or two tickers and not on the rest is fitted to them
 
 **Portfolio backtests.** One setup runs on every ticker of a watchlist with one shared equity, on the
 pandas engine, Cerebro or both, which produce the same trades. Every ticker trades by the rules above,
-without pyramiding, on its own bars; the portfolio decides at each close of the shared calendar (every date on which a ticker has
+on its own bars; the portfolio decides at each close of the shared calendar (every date on which a ticker has
 a bar):
 
 - a ticker whose entry order waits or whose position is open ignores its signals, as in a single backtest;
@@ -418,7 +417,11 @@ a bar):
   `portfolio.max_exposure_pct` of equity (default 100%; above it is leverage), it is cut to fit, and
   skipped when less than one lot fits. A gap can fill a position above its value at the reference, so
   exposure can end slightly above the cap;
-- signals skipped for want of a slot or of exposure room are counted.
+- with `pyramid.max_units` above 1, an add takes no slot. Its stop order counts against the exposure cap like a
+  waiting entry order, at its value at the add level. At each close the adds are decided before the new
+  signals, in watchlist order, each all or nothing (the units stay equal): without room there is no add order
+  until the next close;
+- signals skipped for want of a slot or of exposure room, and closes at which an add found no room, are counted.
 
 | Priority | Score, the highest first |
 | --- | --- |

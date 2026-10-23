@@ -29,6 +29,7 @@ from tradescan.backtest.base import BacktestConfig
 from tradescan.backtest.cerebro import LEVERAGE, MultiFeedBroker, TickerOrders
 from tradescan.backtest.portfolio import PortfolioResult, PortfolioSetup, PortfolioTrade, prepare
 from tradescan.backtest.priority import PriorityRule
+from tradescan.backtest.pyramid import Pyramiding
 from tradescan.backtest.trade_rules import TradeRules
 from tradescan.data.schema import OHLCV_COLUMNS
 from tradescan.signals.base import Signal
@@ -40,7 +41,7 @@ class _PortfolioStrategy(bt.Strategy):
     def __init__(self) -> None:
         setup: PortfolioSetup = self.p.setup
         self._tickers = [
-            TickerOrders(self, data, ticker.rules, setup.direction)
+            TickerOrders(self, data, ticker.rules, setup.direction, Pyramiding.of(self.p.config))
             for data, ticker in zip(self.datas, setup.tickers, strict=True)
         ]
         self._by_name = {data._name: orders for data, orders in zip(self.datas, self._tickers, strict=True)}
@@ -49,7 +50,7 @@ class _PortfolioStrategy(bt.Strategy):
         self.equity_values: list[float] = []
         self.open_positions: list[int] = []
         self.exposure: list[float] = []
-        self.orders = self.no_slot = self.no_room = 0
+        self.orders = self.no_slot = self.no_room = self.no_room_adds = 0
 
     def prenext(self) -> None:
         self.next()  # tickers whose bars start later have none yet
@@ -64,19 +65,38 @@ class _PortfolioStrategy(bt.Strategy):
         equity = self.broker.getvalue()
         self.equity_values.append(equity)
         for position in moved:
-            self._tickers[position].update(self._lengths[position] - 1)
+            if not self._tickers[position].position:
+                self._tickers[position].update(self._lengths[position] - 1)  # an expired entry order
 
-        open_value = waiting_value = 0.0
+        open_value = waiting_value = reserved = 0.0
         open_positions = busy = 0
-        for data, orders in zip(self.datas, self._tickers, strict=True):
+        for position, (data, orders) in enumerate(zip(self.datas, self._tickers, strict=True)):
             if orders.position:
                 open_value += abs(orders.position.size) * data.close[0]
                 open_positions += 1
+                if position not in moved:
+                    reserved += orders.add_value
             elif (plan := orders.waiting) is not None:
                 waiting_value += plan.size * plan.reference
             busy += not orders.free
         self.open_positions.append(open_positions)
         self.exposure.append(open_value / equity * 100.0 if equity > 0 else np.nan)
+
+        # Adds go before new signals: the room goes first to the positions that are already working.
+        used = open_value + waiting_value + reserved
+        limit = equity * self.p.portfolio.max_exposure_pct / 100.0
+
+        def add_fits(value: float) -> bool:
+            nonlocal used
+            if used + value > limit:
+                self.no_room_adds += 1
+                return False
+            used += value
+            return True
+
+        for position in moved:
+            if self._tickers[position].position:
+                self._tickers[position].update(self._lengths[position] - 1, add_fits)
 
         setup: PortfolioSetup = self.p.setup
         config: BacktestConfig = self.p.config
@@ -88,7 +108,7 @@ class _PortfolioStrategy(bt.Strategy):
             plan = ticker.rules.plan(index, equity, config)
             if plan is not None:
                 candidates.append(Candidate(position, index, float(ticker.scores[index]), plan))
-        allocation = allocate(candidates, busy, open_value + waiting_value, equity, self.p.portfolio, config.lot_size)
+        allocation = allocate(candidates, busy, used, equity, self.p.portfolio, config.lot_size)
         self.orders += len(allocation.accepted)
         self.no_slot += allocation.no_slot
         self.no_room += allocation.no_room
@@ -143,4 +163,5 @@ class CerebroPortfolioEngine:
             orders=strategy.orders,
             no_slot=strategy.no_slot,
             no_room=strategy.no_room,
+            no_room_adds=strategy.no_room_adds,
         )

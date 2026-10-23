@@ -1540,6 +1540,11 @@ export interface components {
              * @description Signals skipped because less than one lot fitted under the exposure cap
              */
             skipped_no_room: number;
+            /**
+             * Skipped No Room Adds
+             * @description Closes at which a position's next unit was not ordered for want of room under the exposure cap
+             */
+            skipped_no_room_adds: number;
         };
         /** PortfolioTradeOut */
         PortfolioTradeOut: {

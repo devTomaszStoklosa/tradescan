@@ -451,7 +451,7 @@ Filtr „rynek” porównuje benchmark z setupu, a jeśli go nie ma, benchmark l
 
 **Po co.** W Watchlist każdy instrument ma osobne, wyimaginowane konto. W prawdziwym życiu masz **jedno konto i ograniczoną liczbę pozycji**. Portfolio symuluje to: sygnały z całej listy konkurują o te same miejsca i te same pieniądze.
 
-**Jak użyć.** Setup jak w Watchlist (bez pyramidingu), plus parametry portfela:
+**Jak użyć.** Setup jak w Watchlist (z pyramidingiem), plus parametry portfela:
 
 | Pole | Znaczenie | Domyślnie |
 | --- | --- | --- |
@@ -469,6 +469,8 @@ Filtr „rynek” porównuje benchmark z setupu, a jeśli go nie ma, benchmark l
 | `score` | Wynik zbieżności ze Scannera w dniu sygnału. Ma dodatkowe pola: ustawienia punktacji, trendu i świeżości, oraz parametry i wagę każdego sygnału. Wyniki zmieniają się skokowo, więc remisy są częste (remis rozstrzyga kolejność listy). Liczy się wolniej (ok. 0,1 s na instrument z 10 lat). |
 
 **Jak decyduje portfel w każdym dniu:** sygnały instrumentów z już otwartą pozycją są ignorowane; reszta jest szeregowana; sygnał dostaje zlecenie, dopóki pozycje + czekające zlecenia są poniżej limitu; wielkość liczona jest ze wspólnego kapitału, a gdy przekroczyłaby limit ekspozycji, jest zmniejszana (a przy mniej niż jednym lot-cie pomijana). Pominięte sygnały są liczone.
+
+**Pyramiding w portfelu.** Przy `max_units` > 1 pozycja dokupuje jednostki jak w Backtest, a portfel pilnuje limitów: (1) dokupienie **nie zajmuje** miejsca, bo pozycja ma już swoje, więc `max positions` liczy instrumenty, nie jednostki; (2) zlecenie dokupienia liczy się do limitu ekspozycji jak czekające zlecenie wejścia, w wartości po cenie swojego zlecenia stop; (3) dokupienie jest „wszystko albo nic” (jednostki zostają równe, więc R się zgadza): gdy limit nie zostawia miejsca, zlecenia nie ma w tym dniu, a próba powtarza się na następnym zamknięciu, każda nieudana liczy się w **Adds skipped**; (4) tego samego dnia dokupienia dostają miejsce **przed** nowymi sygnałami (w kolejności listy), bo kapitał trafia najpierw do pozycji, które już pracują.
 
 **Co zobaczysz.** Metryki konta wobec buy & hold benchmarku, liczbę **pominiętych sygnałów**, kapitał i liczbę otwartych pozycji w czasie, metryki in-sample/out-of-sample, **wkład każdego instrumentu** (klik otwiera jego backtest) i wszystkie transakcje. Przycisk **Pin run** zapisuje przebieg pokazanego silnika do porównania.
 
@@ -856,7 +858,7 @@ Domyślnie wyłączony (`max_units` = 1). Gdy ustawisz `max_units` > 1, pozycja,
 - „transakcja” to cała pozycja: data wejścia = pierwsza jednostka, cena wejścia = średnia, a R liczone jest w jednostkach ryzyka **jednej** jednostki, więc 1R to ta sama strata z pyramidingiem i bez niego;
 - na świecy, na której pozycja wychodzi, nic się nie dokupuje.
 
-Oba silniki dokupują tak samo. **Uwaga:** żaden nie odmówi wypełnienia z braku gotówki, więc kilka jednostek może być warte więcej niż konto. Pyramiding działa w Backtest, Sweep, Walk-forward i Watchlist, **nie działa** w Portfolio ani w Rotation (backtest portfela z `max_units` > 1 jest odrzucany; patrz [rozdział 16](#16-planowane-i-w-przygotowaniu)).
+Oba silniki dokupują tak samo. **Uwaga:** żaden nie odmówi wypełnienia z braku gotówki, więc kilka jednostek może być warte więcej niż konto. Pyramiding działa w Backtest, Sweep, Walk-forward, Watchlist i Portfolio (zasady w portfelu opisuje [rozdział 5.6](#56-portfolio--jedno-konto-wiele-pozycji)); **nie działa** w Rotation.
 
 **Przykład.** `donchian_breakout` na `QQQ`, wyjście `trailing`, `--max-units 4 --add-every-atr 0.5`. W trendzie wzrostowym pozycja rośnie do czterech jednostek, a stop całości podąża za ostatnim dokupieniem. W trendzie bocznym zostaje przy jednej jednostce i strata jest taka sama jak bez pyramidingu. Pyramiding **zwiększa** zarówno zyski w trendach, jak i obsunięcia przy zwrotach, a Compare pokaże ten kompromis.
 
@@ -1156,7 +1158,7 @@ Ten sam setup na każdym ETF-ie; wyświetla `--top` najlepszych instrumentów wg
 ```bash
 tradescan portfolio-backtest donchian_breakout -w sp500 --filters trend --max-positions 10 --priority momentum
 ```
-Portfel na S&P 500: filtr trendu, maksymalnie 10 pozycji, priorytet momentum. Opcje: `--max-exposure` (% kapitału), `--priority` (`relative_strength`, `momentum`, `score`; `score` czyta `[scoring]`, `[trend]` i `[scan] fresh_bars` z ustawień), `--engine` (`vectorized`, `cerebro`, `both`), `--top`, `--export`. Bez pyramidingu.
+Portfel na S&P 500: filtr trendu, maksymalnie 10 pozycji, priorytet momentum. Opcje: `--max-exposure` (% kapitału), `--priority` (`relative_strength`, `momentum`, `score`; `score` czyta `[scoring]`, `[trend]` i `[scan] fresh_bars` z ustawień), `--engine` (`vectorized`, `cerebro`, `both`), `--top`, `--export`, `--max-units` i `--add-every-atr` (pyramiding).
 
 **Rotation-backtest**
 
@@ -1232,7 +1234,7 @@ Przypięte przebiegi i dziennik transakcji trafiają do **jednego pliku SQLite**
 3. **Dzienne świece nie pokazują kolejności zdarzeń wewnątrz dnia.** Jeśli jedna świeca dotknęła i stopu, i celu, program zakłada, że wygrał **stop**. To założenie pesymistyczne, ale bezpieczne.
 4. **Yahoo to nieoficjalne źródło.** Limity i zmiany formatu mogą zakłócić pobieranie. Indeks WIG20 nie ma historii na Yahoo.
 5. **backtrader (Cerebro) nie jest już rozwijany** (ostatnie wydanie 2023). Działa tu z Pythonem 3.13, pandas 3 i numpy 2, ale jego własne wykresy nie są używane. Cerebro jest silnikiem referencyjnym i bywa wolny (ok. minuty na 20 instrumentów z 10 lat w portfelu i rotacji).
-6. **Portfel i rotacja nie dokupują (brak pyramidingu).**
+6. **Rotacja nie dokupuje (brak pyramidingu).**
 7. **Broker w symulacji nigdy nie odmawia z braku gotówki** (w portfelu limit ekspozycji jest jedynym ograniczeniem); luka może więc wypełnić pozycję nieco ponad limit.
 8. **Gotówka nie jest oprocentowana** (rotacja).
 9. **Przeszłość nie gwarantuje przyszłości.** Każdy wynik to statystyka historyczna.
@@ -1307,14 +1309,6 @@ Poniżej to, co jest **zgłoszone jako następne kroki** (otwarte tickety w repo
 **Co będzie:** możliwość rankingu rotacji wg wyniku zbieżności: świeże sygnały long, premie za trend i siłę względną. Rotacja trzymałaby wtedy instrumenty, które Scanner ocenia najwyżej. Na ekranie Rotation pojawią się odpowiednie ustawienia punktacji i parametry sygnałów, tak jak na ekranie Portfolio.
 
 **Jak radzić sobie teraz:** ranking `momentum` lub `relative_strength`; wynik zbieżności możesz sprawdzać ręcznie w Scannerze.
-
-### 16.3 Pyramiding w portfelu (zgłoszenie #50)
-
-**Czego brakuje dziś:** backtest portfela odrzuca `max_units` > 1, a formularz Portfolio chowa pola pyramidingu.
-
-**Dlaczego to nie jest proste:** dokupowanie w portfelu wymaga osobnego projektu zasad: czy dokupienie zajmuje „miejsce” w limicie pozycji, jak liczy się do limitu ekspozycji, co robić, gdy limit nie zostawia miejsca, i które zlecenia (dokupienia czy nowe sygnały) mają pierwszeństwo tego samego dnia. Oba silniki portfelowe (vectorized i Cerebro) musiałyby to robić tak samo.
-
-**Jak radzić sobie teraz:** pyramiding sprawdzaj w Backtest, Sweep, Walk-forward i Watchlist (każdy instrument osobno).
 
 ### 16.4 Ponowne otwieranie przypiętego przebiegu a zmieniony `settings.toml` (zgłoszenie #66)
 

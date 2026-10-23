@@ -14,7 +14,7 @@ import pandas as pd
 
 from tradescan.backtest.base import BacktestConfig, BacktestResult, ExitReason, Fill, Trade
 from tradescan.backtest.entries import OrderType
-from tradescan.backtest.exits import ExitTracker, OpenTrade
+from tradescan.backtest.exits import ExitOrders, ExitTracker, OpenTrade
 from tradescan.backtest.pyramid import Pyramiding, Units
 from tradescan.backtest.rules import Bars
 from tradescan.backtest.trade_rules import EntryPlan, TradeRules
@@ -143,26 +143,38 @@ def find_entry(
     return None
 
 
+def fill_on_bar(
+    bars: Bars, orders: ExitOrders, add: float | None, bar: int, fills: FillModel, sign: float
+) -> tuple[TradeExit | None, float | None]:
+    """What the orders placed at the close before `bar` do on it, the way backtrader's broker tries them: an exit at
+    the open first, then the stop, then the target. The stop order for the next unit (`add`) comes last, so it fills
+    only on a bar where the position does not exit. Returns the exit, or the add's fill price, or neither."""
+    side = -sign
+    open_, high, low = bars.open[bar], bars.high[bar], bars.low[bar]
+    if orders.at_open is not None:
+        return TradeExit(bar, fills.market(side, open_, high, low), orders.at_open), None
+    if orders.stop is not None and (price := fills.stop(side, orders.stop, open_, high, low)) is not None:
+        return TradeExit(bar, price, orders.stop_reason), None
+    if orders.target is not None and (price := fills.limit(side, orders.target, open_, high, low)) is not None:
+        return TradeExit(bar, price, orders.target_reason), None
+    if add is not None:
+        return None, fills.stop(sign, add, open_, high, low)
+    return None, None
+
+
 def find_exit(
     bars: Bars, tracker: ExitTracker, entry_index: int, fills: FillModel, sign: float, units: Units | None = None
 ) -> TradeExit:
-    """Executes the orders the tracker names at each close on the next bar, the way backtrader's broker does:
-    an exit at the open first, then the stop, then the target. With `units`, the stop order for the next unit
-    comes last, so it fills only on a bar where the position does not exit; its fills are reported to `units`."""
-    side = -sign
+    """Executes the orders the tracker names at each close on the next bar (see `fill_on_bar`); with `units`, the
+    adds that fill are reported to it."""
     for index in range(entry_index, len(bars) - 1):
         orders = tracker.orders(index)
         add = units.add_level() if units is not None else None
-        bar = index + 1
-        open_, high, low = bars.open[bar], bars.high[bar], bars.low[bar]
-        if orders.at_open is not None:
-            return TradeExit(bar, fills.market(side, open_, high, low), orders.at_open)
-        if orders.stop is not None and (price := fills.stop(side, orders.stop, open_, high, low)) is not None:
-            return TradeExit(bar, price, orders.stop_reason)
-        if orders.target is not None and (price := fills.limit(side, orders.target, open_, high, low)) is not None:
-            return TradeExit(bar, price, orders.target_reason)
-        if add is not None and units is not None and (price := fills.stop(sign, add, open_, high, low)) is not None:
-            units.add(bar, price)
+        exit_, add_price = fill_on_bar(bars, orders, add, index + 1, fills, sign)
+        if exit_ is not None:
+            return exit_
+        if add_price is not None and units is not None:
+            units.add(index + 1, add_price)
     return TradeExit(len(bars) - 1, float(bars.close[-1]), ExitReason.OPEN)
 
 
