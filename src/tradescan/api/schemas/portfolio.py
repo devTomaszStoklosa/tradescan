@@ -48,6 +48,9 @@ class PortfolioStatsOut(BaseModel):
     orders: int = Field(description="Entry orders placed")
     skipped_no_slot: int = Field(description="Signals skipped because every slot was taken")
     skipped_no_room: int = Field(description="Signals skipped because less than one lot fitted under the exposure cap")
+    skipped_no_room_adds: int = Field(
+        description="Closes at which a position's next unit was not ordered for want of room under the exposure cap"
+    )
 
 
 class PortfolioPeriodOut(BaseModel):

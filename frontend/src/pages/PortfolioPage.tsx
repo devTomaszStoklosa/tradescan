@@ -119,7 +119,6 @@ function PortfolioFormPanel({
           config={config}
           signals={signals}
           defaultBenchmark={watchlistBenchmark ?? config.benchmark}
-          pyramiding={false}
         />
         <section className="space-y-3">
           <h2 className="text-sm font-semibold">Portfolio</h2>

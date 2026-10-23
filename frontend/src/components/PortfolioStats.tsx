@@ -19,6 +19,11 @@ const STATS: PortfolioStat[] = [
   { key: "orders", label: "Entry orders", format: (s) => String(s.orders) },
   { key: "skipped_no_slot", label: "Signals skipped: no free slot", format: (s) => String(s.skipped_no_slot) },
   { key: "skipped_no_room", label: "Signals skipped: no exposure room", format: (s) => String(s.skipped_no_room) },
+  {
+    key: "skipped_no_room_adds",
+    label: "Adds skipped: no exposure room",
+    format: (s) => String(s.skipped_no_room_adds),
+  },
 ];
 
 export interface StatsColumn {

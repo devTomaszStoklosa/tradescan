@@ -30,6 +30,7 @@ def portfolio_period_out(period: PortfolioMetrics) -> PortfolioPeriodOut:
             orders=stats.orders,
             skipped_no_slot=stats.skipped_no_slot,
             skipped_no_room=stats.skipped_no_room,
+            skipped_no_room_adds=stats.skipped_no_room_adds,
         ),
     )
 
