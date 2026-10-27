@@ -10,14 +10,14 @@ can change comes from the server's parameter declarations (see
 
 ## Run, build, test
 
-```bash
+```powershell
 npm --prefix frontend install
 npm --prefix frontend run build        # tsc --noEmit && vite build, writes frontend/dist
-tradescan serve                        # serves the API and frontend/dist on :8000
+.venv\Scripts\tradescan serve          # serves the API and frontend/dist on :8000
 
-# development: API and Vite side by side; Vite proxies /api to 127.0.0.1:8000
-tradescan serve
-npm --prefix frontend run dev
+# development: API and Vite side by side, each in its own terminal; Vite proxies /api to 127.0.0.1:8000
+.venv\Scripts\tradescan serve          # terminal 1
+npm --prefix frontend run dev          # terminal 2, then open http://localhost:5173
 
 npm --prefix frontend test             # vitest run
 npm --prefix frontend run typecheck

@@ -158,9 +158,9 @@ Poniższe pojęcia wracają w całym dokumencie. Wróć tu, gdy czegoś nie rozu
 
 ### Krok 1: środowisko Pythona i instalacja
 
-Otwórz terminal w folderze projektu i wpisz:
+Otwórz terminal PowerShell w folderze projektu i wpisz:
 
-```bash
+```powershell
 python -m venv .venv
 .venv\Scripts\python -m pip install -e ".[cerebro,api,dev]"
 ```
@@ -171,9 +171,11 @@ Co to robi: pierwsze polecenie tworzy odizolowane środowisko Pythona (`.venv`),
 - `api`: serwer WWW (FastAPI, uvicorn). Potrzebny do interfejsu w przeglądarce.
 - `dev`: narzędzia testowe. Zwykły użytkownik może je pominąć.
 
+Polecenia w tej instrukcji wywołują programy z `.venv` bezpośrednio (`.venv\Scripts\...`), więc działają w każdym nowym oknie terminala bez aktywowania środowiska. Jeśli wolisz krócej, po `.venv\Scripts\Activate.ps1` możesz w tym oknie pisać samo `tradescan`.
+
 ### Krok 2: zbudowanie interfejsu
 
-```bash
+```powershell
 npm --prefix frontend install
 npm --prefix frontend run build
 ```
@@ -182,8 +184,8 @@ Pierwsze polecenie pobiera biblioteki interfejsu, drugie buduje gotową stronę.
 
 ### Krok 3: start
 
-```bash
-tradescan serve
+```powershell
+.venv\Scripts\tradescan serve
 ```
 
 Otwórz w przeglądarce adres **http://127.0.0.1:8000**. Jeden serwer dostarcza i interfejs, i API (dokumentacja API pod `/docs`).
@@ -668,8 +670,8 @@ Każdy kolejny krok jest droższy i bardziej wymagający, więc najpierw odrzuca
 
 Skład indeksów zmienia się co kwartał. Raz na jakiś czas wpisz:
 
-```bash
-tradescan update-universes
+```powershell
+.venv\Scripts\tradescan update-universes
 ```
 
 Program pobierze aktualne składy S&P 500 i Nasdaq-100 z Wikipedii, pokaże, które tickery doszły, a które odpadły, przeliczy format (`BRK.B` → `BRK-B`) i zapisze pliki. Jeśli pobieranie lub sprawdzenie poprawności się nie powiedzie, **stary plik zostaje**.
@@ -1016,7 +1018,7 @@ Listy `sp500` i `nasdaq100` są generowane z Wikipedii; nagłówek pliku podaje 
 
 ## 11. Wiersz poleceń (CLI)
 
-Interfejs w przeglądarce to nakładka. Wszystko to samo da się zrobić z terminala, np. do automatyzacji czy skryptów. **Uruchamiaj polecenia z folderu projektu** (albo podaj `--config` i `--watchlists-dir`).
+Interfejs w przeglądarce to nakładka. Wszystko to samo da się zrobić z terminala, np. do automatyzacji czy skryptów. **Uruchamiaj polecenia z folderu projektu** (albo podaj `--config` i `--watchlists-dir`). Przykłady wywołują program z `.venv` (`.venv\Scripts\tradescan`), jak w rozdziale 3.
 
 ### 11.1 Przegląd poleceń
 
@@ -1052,23 +1054,23 @@ Pomoc do każdego polecenia: `tradescan <polecenie> --help`.
 
 **Scan**
 
-```bash
-tradescan scan -w sp500 --min-score 4
+```powershell
+.venv\Scripts\tradescan scan -w sp500 --min-score 4
 ```
 Skan S&P 500, pokaż tylko propozycje z wynikiem co najmniej 4.
 
-```bash
-tradescan scan -w wig20 --direction long --top 10
+```powershell
+.venv\Scripts\tradescan scan -w wig20 --direction long --top 10
 ```
 Spółki WIG20, tylko long, 10 najlepszych.
 
-```bash
-tradescan scan -t AAPL,MSFT,PKO.WA --fresh 1 --export exports/hits.csv
+```powershell
+.venv\Scripts\tradescan scan -t AAPL,MSFT,PKO.WA --fresh 1 --export exports/hits.csv
 ```
 Trzy wskazane tickery, tylko sygnały z ostatniej świecy, wynik zapisany do CSV.
 
-```bash
-tradescan scan -w crypto --lot-size 0.0001
+```powershell
+.venv\Scripts\tradescan scan -w crypto --lot-size 0.0001
 ```
 Krypto z ułamkowymi wielkościami zleceń.
 
@@ -1076,57 +1078,57 @@ Dodatkowe opcje: `--signals` (które sygnały), `--family` (rodziny: `trend, mom
 
 **Market**
 
-```bash
-tradescan market -w us_large
+```powershell
+.venv\Scripts\tradescan market -w us_large
 ```
 Ocena reżimu na podstawie benchmarku i szerokości listy.
 
 **Edge**
 
-```bash
-tradescan edge -w etf --family breakout,trend --min-events 30
+```powershell
+.venv\Scripts\tradescan edge -w etf --family breakout,trend --min-events 30
 ```
 Przewaga sygnałów z rodzin breakout i trend na ETF-ach; ukryj sygnały z mniej niż 30 zdarzeniami. Opcje: `--horizons 5,10,20` (po ilu świecach mierzyć).
 
 **Backtest**
 
-```bash
-tradescan backtest SPY donchian_breakout --engine both
+```powershell
+.venv\Scripts\tradescan backtest SPY donchian_breakout --engine both
 ```
 Wybicie Donchiana na SPY w obu silnikach.
 
-```bash
-tradescan backtest SPY connors_rsi2_long --entry limit --exits time --max-hold 5
+```powershell
+.venv\Scripts\tradescan backtest SPY connors_rsi2_long --entry limit --exits time --max-hold 5
 ```
 Wejście zleceniem z limitem, wyjście tylko czasowe po 5 świecach (plus stop początkowy).
 
-```bash
-tradescan backtest QQQ donchian_breakout --exits trailing,breakeven
+```powershell
+.venv\Scripts\tradescan backtest QQQ donchian_breakout --exits trailing,breakeven
 ```
 Wyjścia: trailing stop i przesunięcie na breakeven.
 
-```bash
-tradescan backtest QQQ donchian_breakout --exits trailing --max-units 4 --add-every-atr 0.5 --engine both
+```powershell
+.venv\Scripts\tradescan backtest QQQ donchian_breakout --exits trailing --max-units 4 --add-every-atr 0.5 --engine both
 ```
 Pyramiding do 4 jednostek.
 
-```bash
-tradescan backtest SPY connors_rsi2_long --exits rsi,time --engine both
+```powershell
+.venv\Scripts\tradescan backtest SPY connors_rsi2_long --exits rsi,time --engine both
 ```
 Wyjścia na RSI i po czasie.
 
-```bash
-tradescan backtest QQQ donchian_breakout --entry stop --exits failed_breakout,no_progress,trailing
+```powershell
+.venv\Scripts\tradescan backtest QQQ donchian_breakout --entry stop --exits failed_breakout,no_progress,trailing
 ```
 Wejście zleceniem stop plus wyjścia „nieudane wybicie”, „brak postępu” i trailing.
 
-```bash
-tradescan backtest AAPL donchian_breakout --filters trend,market,volume --benchmark QQQ
+```powershell
+.venv\Scripts\tradescan backtest AAPL donchian_breakout --filters trend,market,volume --benchmark QQQ
 ```
 Trzy filtry wejścia; filtr rynku porównuje QQQ.
 
-```bash
-tradescan backtest SPY connors_rsi2_long --oos 20
+```powershell
+.venv\Scripts\tradescan backtest SPY connors_rsi2_long --oos 20
 ```
 Out-of-sample = ostatnie 20% historii (dozwolone 10–50).
 
@@ -1134,45 +1136,45 @@ Pozostałe opcje: `--atr-mult`, `--target-r`, `--max-hold`, `--commission-pct`, 
 
 **Sweep**
 
-```bash
-tradescan sweep SPY connors_rsi2_long --axis signal.oversold=4:16:2 --axis exit.target.target_r=1,2,3 --metric expectancy_r
+```powershell
+.venv\Scripts\tradescan sweep SPY connors_rsi2_long --axis signal.oversold=4:16:2 --axis exit.target.target_r=1,2,3 --metric expectancy_r
 ```
 Siatka: `oversold` od 4 do 16 co 2 (7 wartości) razy 3 cele (1R, 2R, 3R) = 21 kombinacji. Opcja `--axis` ma postać `cel[.właściciel].nazwa=OD:DO:KROK` lub `=W1,W2,…`; cel to `signal`, `entry`, `exit` (właściciel: reguła wyjścia), `filter` (właściciel: filtr) albo `settings` (właściciel: `account`, `risk`, `backtest` lub `pyramid`). Podaj ją dwa razy, by dostać siatkę. `--metric` wybiera metrykę kolorującą mapy: `total_return_pct`, `cagr_pct`, `sharpe`, `sortino`, `max_drawdown_pct`, `trades`, `win_rate_pct`, `profit_factor`, `expectancy_r`, `sqn`, `exposure_pct`, `buy_hold_pct`. `--export` zapisuje każdą kombinację.
 
 **Walk-forward**
 
-```bash
-tradescan walk-forward SPY connors_rsi2_long --axis signal.oversold=5:25:2.5 --axis exit.target.target_r=1:3:0.5 --windows 5
+```powershell
+.venv\Scripts\tradescan walk-forward SPY connors_rsi2_long --axis signal.oversold=5:25:2.5 --axis exit.target.target_r=1:3:0.5 --windows 5
 ```
 Strojenie dwóch parametrów na 5 oknach. Dodatkowe opcje: `--in-sample-ratio` (domyślnie 3), `--scheme rolling|anchored`, `--min-trades` (domyślnie 10), `--metric` (wg czego okno wybiera), `--trades`, `--export`.
 
 **Watchlist-backtest**
 
-```bash
-tradescan watchlist-backtest connors_rsi2_long -w etf --filters market --metric expectancy_r
+```powershell
+.venv\Scripts\tradescan watchlist-backtest connors_rsi2_long -w etf --filters market --metric expectancy_r
 ```
 Ten sam setup na każdym ETF-ie; wyświetla `--top` najlepszych instrumentów wg metryki, rozrzut metryki i zebrane transakcje.
 
 **Portfolio-backtest**
 
-```bash
-tradescan portfolio-backtest donchian_breakout -w sp500 --filters trend --max-positions 10 --priority momentum
+```powershell
+.venv\Scripts\tradescan portfolio-backtest donchian_breakout -w sp500 --filters trend --max-positions 10 --priority momentum
 ```
 Portfel na S&P 500: filtr trendu, maksymalnie 10 pozycji, priorytet momentum. Opcje: `--max-exposure` (% kapitału), `--priority` (`relative_strength`, `momentum`, `score`; `score` czyta `[scoring]`, `[trend]` i `[scan] fresh_bars` z ustawień), `--engine` (`vectorized`, `cerebro`, `both`), `--top`, `--export`, `--max-units` i `--add-every-atr` (pyramiding).
 
 **Rotation-backtest**
 
-```bash
-tradescan rotation-backtest -w etf --holdings 3 --weighting inverse_volatility --safe-asset TLT
+```powershell
+.venv\Scripts\tradescan rotation-backtest -w etf --holdings 3 --weighting inverse_volatility --safe-asset TLT
 ```
 Rotacja na ETF-ach: 3 pozycje, wagi odwrotnie do zmienności, `TLT` jako bezpieczne aktywo. Opcje: `--rank momentum|relative_strength`, `--rebalance weekly|monthly`, `--weighting equal|inverse_volatility`, `--absolute-lookback` (0 wyłącza), `--benchmark`, `--engine`, `--top` (0: wszystkie), `--oos`, `--export`. Wypisuje też, co wybrałby rebalans na ostatnim zamknięciu.
 
 **List-signals / update-universes / serve**
 
-```bash
-tradescan list-signals
-tradescan update-universes --only sp500
-tradescan serve --port 9000 --db moje.db
+```powershell
+.venv\Scripts\tradescan list-signals
+.venv\Scripts\tradescan update-universes --only sp500
+.venv\Scripts\tradescan serve --port 9000 --db moje.db
 ```
 
 ### 11.4 Kiedy CLI, a kiedy przeglądarka
@@ -1355,7 +1357,7 @@ Przypadki użycia (`services/`, po jednym module na funkcję) trzymają logikę;
 
 ### Testy i jakość
 
-```bash
+```powershell
 .venv\Scripts\python -m pytest
 npm --prefix frontend test
 npm --prefix frontend run typecheck
@@ -1365,17 +1367,20 @@ Testy Pythona działają na deterministycznych danych syntetycznych i **nigdy ni
 
 ### Rozwój interfejsu
 
-Uruchom równolegle API i serwer deweloperski Vite (przekazuje `/api` do API):
+Uruchom równolegle API i serwer deweloperski Vite (przekazuje `/api` do API), każdy w osobnym terminalu, bo oba działają do `Ctrl+C`:
 
-```bash
-tradescan serve
+```powershell
+# terminal 1
+.venv\Scripts\tradescan serve
+
+# terminal 2, potem otwórz adres wypisany przez Vite (domyślnie http://localhost:5173)
 npm --prefix frontend run dev
 ```
 
 Po zmianie modeli API wygeneruj ponownie typy TypeScript:
 
-```bash
-python scripts/export_openapi.py frontend/openapi.json
+```powershell
+.venv\Scripts\python scripts\export_openapi.py frontend\openapi.json
 npm --prefix frontend run gen:api
 ```
 
