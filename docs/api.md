@@ -136,8 +136,8 @@ curl -s -X POST http://127.0.0.1:8000/api/sweep \
 
 After changing a model in `api/schemas/`:
 
-```bash
-python scripts/export_openapi.py frontend/openapi.json
+```powershell
+.venv\Scripts\python scripts\export_openapi.py frontend\openapi.json
 npm --prefix frontend run gen:api
 ```
 

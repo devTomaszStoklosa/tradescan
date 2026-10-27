@@ -13,7 +13,7 @@ Runtime dependencies: `lxml`, `numpy`, `pandas`, `pyarrow`, `rich`, `yfinance`.
 
 ## Setup
 
-```bash
+```powershell
 python -m venv .venv
 .venv\Scripts\python -m pip install -e ".[cerebro,api,dev]"      # Windows
 npm --prefix frontend install
@@ -21,25 +21,28 @@ npm --prefix frontend run build
 ```
 
 `pip install -e` registers the `tradescan` console script (`tradescan.cli:main`; `python -m tradescan.cli`
-also works). Run commands from the project folder so `config/settings.toml` and `config/watchlists/` are found,
-or pass `--config` and `--watchlists-dir`.
+also works) in `.venv\Scripts`, which is not on `PATH` until the environment is activated, so the commands here
+call it as `.venv\Scripts\tradescan` and work in any new PowerShell terminal (after `.venv\Scripts\Activate.ps1`
+plain `tradescan` works in that terminal). Run commands from the project folder so `config/settings.toml` and
+`config/watchlists/` are found, or pass `--config` and `--watchlists-dir`.
 
 ## Running
 
-```bash
-tradescan list-signals
-tradescan scan -w sp500 --min-score 4
-tradescan backtest SPY donchian_breakout --engine both
-tradescan serve                          # UI + API on http://127.0.0.1:8000
+```powershell
+.venv\Scripts\tradescan list-signals
+.venv\Scripts\tradescan scan -w sp500 --min-score 4
+.venv\Scripts\tradescan backtest SPY donchian_breakout --engine both
+.venv\Scripts\tradescan serve            # UI + API on http://127.0.0.1:8000
 ```
 
-Every command and flag is documented in the README's "Usage" section. For UI work run `tradescan serve` and
-`npm --prefix frontend run dev` side by side (see [frontend.md](frontend.md)). `.claude/launch.json` defines a
+Every command and flag is documented in the README's "Usage" section. For UI work run
+`.venv\Scripts\tradescan serve` and `npm --prefix frontend run dev` side by side, each in its own terminal (see
+[frontend.md](frontend.md)). `.claude/launch.json` defines a
 preview configuration for the server on port 8765 (the `.claude/` folder is git-ignored).
 
 ## Testing and quality
 
-```bash
+```powershell
 .venv\Scripts\python -m pytest                      # Python tests, no network
 npm --prefix frontend test                          # Vitest
 npm --prefix frontend run typecheck
@@ -145,8 +148,9 @@ verified, and `Closes #<issue>`.
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `The cerebro engine needs backtrader` (HTTP 501 from the API) | Install the extra: `pip install -e .[cerebro]`. |
-| `The web server needs the api extra` | `pip install -e .[api]`. |
+| `The term 'tradescan' is not recognized as the name of a cmdlet` | The console script is in `.venv\Scripts`, which is not on `PATH`: call `.venv\Scripts\tradescan`, or run `.venv\Scripts\Activate.ps1` in that terminal first. |
+| `The cerebro engine needs backtrader` (HTTP 501 from the API) | Install the extra: `.venv\Scripts\python -m pip install -e ".[cerebro]"`. |
+| `The web server needs the api extra` | `.venv\Scripts\python -m pip install -e ".[api]"`. |
 | `serve` runs but shows only JSON | `frontend/dist` is missing: `npm --prefix frontend run build`, or pass `--static`. |
 | `Watchlist 'x' not found` | Run from the project folder or pass `--watchlists-dir`. |
 | `... is not a tradescan database` / `written by a newer tradescan` | The `--db` file is not ours or comes from a newer version; point `--db` elsewhere. |
