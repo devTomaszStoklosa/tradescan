@@ -29,20 +29,24 @@ Trading signal scanner for daily bars: **vectorized pandas signals on yfinance d
 
 ## Install
 
-```bash
+```powershell
 python -m venv .venv
 .venv\Scripts\python -m pip install -e ".[cerebro,api,dev]"
 ```
+
+The commands in this README are for PowerShell on Windows, run from the project folder. They call the programs
+inside `.venv` directly, so they work in every new terminal without activating it; after
+`.venv\Scripts\Activate.ps1` you can drop the `.venv\Scripts\` prefix in that terminal.
 
 `cerebro` (backtrader) is optional; without it everything except `--engine cerebro` works.
 `api` (FastAPI, uvicorn) is only needed for the web UI.
 
 ## Web UI
 
-```bash
+```powershell
 npm --prefix frontend install
 npm --prefix frontend run build
-tradescan serve
+.venv\Scripts\tradescan serve
 ```
 
 Open http://127.0.0.1:8000. One server delivers both the API (`/api/...`, docs at `/docs`) and
@@ -129,17 +133,21 @@ copy of the run that suggested it, so unpinning the run leaves the trade as it w
 > as the journal holds your real trades. It answers only requests addressed to `localhost`, `127.0.0.1`, `[::1]`
 > or the `--host` it was given, and refuses others with 400, so a web page cannot reach it through DNS rebinding.
 
-For frontend development run the API and Vite's dev server side by side (Vite proxies `/api`):
+For frontend development run the API and Vite's dev server side by side, each in its own terminal, since both
+keep running (Vite proxies `/api`):
 
-```bash
-tradescan serve
+```powershell
+# terminal 1
+.venv\Scripts\tradescan serve
+
+# terminal 2, then open the address Vite prints (http://localhost:5173 by default)
 npm --prefix frontend run dev
 ```
 
 After changing API models, regenerate the TypeScript types:
 
-```bash
-python scripts/export_openapi.py frontend/openapi.json
+```powershell
+.venv\Scripts\python scripts\export_openapi.py frontend\openapi.json
 npm --prefix frontend run gen:api
 ```
 
@@ -148,29 +156,29 @@ npm --prefix frontend run gen:api
 Run commands from the project folder, so `config/settings.toml` and `config/watchlists/` are found
 (or pass `--config` / `--watchlists-dir`).
 
-```bash
-tradescan list-signals
-tradescan market -w us_large
-tradescan scan -w sp500 --min-score 4
-tradescan scan -w wig20 --direction long --top 10
-tradescan scan -t AAPL,MSFT,PKO.WA --fresh 1 --export exports/hits.csv
-tradescan edge -w etf --family breakout,trend --min-events 30
-tradescan backtest SPY donchian_breakout --engine both
-tradescan backtest SPY connors_rsi2_long --entry limit --exits time --max-hold 5
-tradescan backtest QQQ donchian_breakout --exits trailing,breakeven
-tradescan backtest QQQ donchian_breakout --exits trailing --max-units 4 --add-every-atr 0.5 --engine both
-tradescan backtest SPY connors_rsi2_long --exits rsi,time --engine both
-tradescan backtest QQQ donchian_breakout --entry stop --exits failed_breakout,no_progress,trailing
-tradescan backtest AAPL donchian_breakout --filters trend,market,volume --benchmark QQQ
-tradescan backtest SPY connors_rsi2_long --oos 20
-tradescan sweep SPY connors_rsi2_long --axis signal.oversold=4:16:2 --axis exit.target.target_r=1,2,3 --metric expectancy_r
-tradescan walk-forward SPY connors_rsi2_long --axis signal.oversold=5:25:2.5 --axis exit.target.target_r=1:3:0.5 --windows 5
-tradescan watchlist-backtest connors_rsi2_long -w etf --filters market --metric expectancy_r
-tradescan portfolio-backtest donchian_breakout -w sp500 --filters trend --max-positions 10 --priority momentum
-tradescan rotation-backtest -w etf --holdings 3 --weighting inverse_volatility --safe-asset TLT
-tradescan rotation-sweep -w etf --safe-asset TLT --axis settings.rotation.holdings=2:6:1 --axis ranking.lookback=126:252:42
-tradescan scan -w crypto --lot-size 0.0001
-tradescan update-universes
+```powershell
+.venv\Scripts\tradescan list-signals
+.venv\Scripts\tradescan market -w us_large
+.venv\Scripts\tradescan scan -w sp500 --min-score 4
+.venv\Scripts\tradescan scan -w wig20 --direction long --top 10
+.venv\Scripts\tradescan scan -t AAPL,MSFT,PKO.WA --fresh 1 --export exports/hits.csv
+.venv\Scripts\tradescan edge -w etf --family breakout,trend --min-events 30
+.venv\Scripts\tradescan backtest SPY donchian_breakout --engine both
+.venv\Scripts\tradescan backtest SPY connors_rsi2_long --entry limit --exits time --max-hold 5
+.venv\Scripts\tradescan backtest QQQ donchian_breakout --exits trailing,breakeven
+.venv\Scripts\tradescan backtest QQQ donchian_breakout --exits trailing --max-units 4 --add-every-atr 0.5 --engine both
+.venv\Scripts\tradescan backtest SPY connors_rsi2_long --exits rsi,time --engine both
+.venv\Scripts\tradescan backtest QQQ donchian_breakout --entry stop --exits failed_breakout,no_progress,trailing
+.venv\Scripts\tradescan backtest AAPL donchian_breakout --filters trend,market,volume --benchmark QQQ
+.venv\Scripts\tradescan backtest SPY connors_rsi2_long --oos 20
+.venv\Scripts\tradescan sweep SPY connors_rsi2_long --axis signal.oversold=4:16:2 --axis exit.target.target_r=1,2,3 --metric expectancy_r
+.venv\Scripts\tradescan walk-forward SPY connors_rsi2_long --axis signal.oversold=5:25:2.5 --axis exit.target.target_r=1:3:0.5 --windows 5
+.venv\Scripts\tradescan watchlist-backtest connors_rsi2_long -w etf --filters market --metric expectancy_r
+.venv\Scripts\tradescan portfolio-backtest donchian_breakout -w sp500 --filters trend --max-positions 10 --priority momentum
+.venv\Scripts\tradescan rotation-backtest -w etf --holdings 3 --weighting inverse_volatility --safe-asset TLT
+.venv\Scripts\tradescan rotation-sweep -w etf --safe-asset TLT --axis settings.rotation.holdings=2:6:1 --axis ranking.lookback=126:252:42
+.venv\Scripts\tradescan scan -w crypto --lot-size 0.0001
+.venv\Scripts\tradescan update-universes
 ```
 
 | Command | What it does |
@@ -619,7 +627,7 @@ backtest, portfolio, rotation, rotation sweep, chart), hold the workflow; `cli/`
 
 ## Development
 
-```bash
+```powershell
 .venv\Scripts\python -m pytest
 npm --prefix frontend test
 npm --prefix frontend run typecheck
@@ -631,7 +639,7 @@ the API.
 Linting, formatting and type checking, configured in `pyproject.toml` (Ruff, mypy in strict mode) and in
 `frontend/` (ESLint, Prettier):
 
-```bash
+```powershell
 .venv\Scripts\python -m ruff check .
 .venv\Scripts\python -m ruff format --check .
 .venv\Scripts\python -m mypy
